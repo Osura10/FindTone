@@ -1,0 +1,32 @@
+# Virtual Environment
+.venv/
+venv/
+env/
+
+# Python Cache
+__pycache__/
+*.py[cod]
+*.class
+
+# Secrets & Environment
+.env
+.env.*
+!.env.example
+
+# Vector DB & SQLite
+chroma_data/
+*.chroma/
+chroma.sqlite3
+*.sqlite
+*.sqlite3
+*.db
+
+# Testing & Notebooks
+.pytest_cache/
+.ipynb_checkpoints/
+
+# OS & IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -1,0 +1,32 @@
+# MusicMarket — Agentic AI Service Requirements
+# Compatible with Python 3.11+ and SE3090 Lab 05/06 specifications.
+# Framework: LangGraph + LangChain + Google Gemini (Free Tier) + FastAPI
+
+# Core Agentic AI Framework & Orchestration (State, Graphs, Human-in-the-Loop)
+langchain>=1.0,<2.0
+langchain-google-genai>=4.0,<5.0       # ChatGoogleGenerativeAI (Gemini via AI Studio free tier)
+langgraph>=1.0,<2.0                    # Multi-agent state orchestration, workflow transitions, interrupts
+langgraph-checkpoint-sqlite>=2.0       # Durable state persistence & checkpointing for human approval
+
+# Vector Storage & Hybrid Search (Catalog & Instrument Specs Retrieval)
+langchain-chroma>=0.2                  # Local vector database (disk-based, no external cost)
+chromadb>=1.0
+langchain-community>=0.4               # BM25Retriever & document loaders
+rank-bm25>=0.2                         # Keyword search component for hybrid retrieval
+
+# Schema Validation & Deterministic Guardrails
+pydantic>=2.7.0                        # Structured tool input/output validation & agent contracts
+
+# HTTP Microservice Layer (Internal service called strictly by ASP.NET Core)
+fastapi>=0.115
+uvicorn[standard]>=0.30
+requests>=2.32
+httpx>=0.27.0                          # Async HTTP client for inter-service communication
+
+# Environment Configuration & Utilities
+python-dotenv>=1.0                     # Secure environment variable handling (.env)
+
+# Interactive Development & Testing
+jupyterlab>=4.0
+ipykernel>=6.29
+pytest>=8.0.0                          # Unit and integration testing for agent workflows
