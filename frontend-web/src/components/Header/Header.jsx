@@ -1,8 +1,11 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Guitar, Search, Menu, User, LogIn } from 'lucide-react';
 import './Header.css';
 
 const Header = () => {
+  const navigate = useNavigate();
+
   return (
     <header className="header glass-panel">
       <div className="header-content container">
@@ -20,11 +23,11 @@ const Header = () => {
 
         <div className="header-actions">
           <div className="auth-buttons">
-            <button className="btn btn-outline">
+            <button className="btn btn-outline" onClick={() => navigate('/login')}>
               <LogIn size={18} />
               Login
             </button>
-            <button className="btn btn-primary">
+            <button className="btn btn-primary" onClick={() => navigate('/register')}>
               <User size={18} />
               Sign Up
             </button>
