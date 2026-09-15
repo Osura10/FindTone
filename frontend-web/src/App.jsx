@@ -7,6 +7,7 @@ import BuyerRegistration from './pages/Register/BuyerRegistration';
 import SellerRegistration from './pages/Register/SellerRegistration';
 import ShopRegistration from './pages/Register/ShopRegistration';
 import AdminRegistration from './pages/Register/AdminRegistration';
+import Dashboard from './pages/Dashboard';
 
 function App() {
   return (
@@ -19,6 +20,7 @@ function App() {
         <Route path="/register/seller" element={<SellerRegistration />} />
         <Route path="/register/shop" element={<ShopRegistration />} />
         <Route path="/register/admin" element={<AdminRegistration />} />
+        <Route path="/dashboard" element={<Dashboard />} />
       </Routes>
     </Router>
   );
