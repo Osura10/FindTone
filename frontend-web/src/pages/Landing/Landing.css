@@ -1,0 +1,16 @@
+.landing-page {
+  position: relative;
+  min-height: 100vh;
+}
+
+.footer {
+  margin-top: 4rem;
+  padding: 2rem 0;
+  text-align: center;
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  border-bottom: none;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
