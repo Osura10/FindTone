@@ -2,11 +2,11 @@
   --primary-color: #7b2cbf;
   --primary-hover: #9d4edd;
   --secondary-color: #3a0ca3;
-  --bg-color: #0b090a;
+  --bg-color: #121018;
   --text-primary: #ffffff;
-  --text-secondary: #b1b1b1;
-  --glass-bg: rgba(255, 255, 255, 0.03);
-  --glass-border: rgba(255, 255, 255, 0.1);
+  --text-secondary: #dcdcdc;
+  --glass-bg: rgba(255, 255, 255, 0.07);
+  --glass-border: rgba(255, 255, 255, 0.2);
   --accent-color: #ff006e;
 }
 

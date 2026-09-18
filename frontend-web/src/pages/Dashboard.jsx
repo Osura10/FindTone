@@ -15,6 +15,10 @@ const Dashboard = () => {
         navigate('/login');
         return;
       }
+      if (role === 'seller') {
+        navigate('/seller/items');
+        return;
+      }
 
       try {
         const response = await apiCall(`/dashboard/${role}`);

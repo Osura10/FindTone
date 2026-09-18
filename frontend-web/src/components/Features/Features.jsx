@@ -1,30 +1,30 @@
 import React from 'react';
-import { Camera, DollarSign, Store, ShieldCheck } from 'lucide-react';
+import { FileCheck, Search, MessageSquare, Sparkles } from 'lucide-react';
 import './Features.css';
 
 const features = [
   {
-    icon: <Camera className="feature-icon" />,
-    title: 'Listing Quality Agent',
-    description: 'Auto-detects instrument models from photos and ensures descriptions meet high standards.',
+    icon: <FileCheck className="feature-icon" />,
+    title: 'Listing Creation & Verification Agent',
+    description: 'Helps sellers create complete and accurate instrument listings from the details they provide. It verifies the information using available tools, identifies missing or incorrect details, and prepares the listing for human approval before publishing.',
     delay: 'delay-100'
   },
   {
-    icon: <DollarSign className="feature-icon" />,
-    title: 'Fair Price Agent',
-    description: 'Analyzes market trends to flag suspiciously cheap or overpriced listings in real-time.',
+    icon: <Search className="feature-icon" />,
+    title: 'Smart Item Search & Matching Agent',
+    description: 'Helps buyers find suitable instruments based on their search or requirements. It understands the buyer\'s request and searches the MusicMarket database to find relevant items based on category, price, condition, location, and other requirements.',
     delay: 'delay-200'
   },
   {
-    icon: <Store className="feature-icon" />,
-    title: 'Trade Matching',
-    description: 'Intelligently connects buyers with local sellers and shops based on their specific needs.',
+    icon: <MessageSquare className="feature-icon" />,
+    title: 'MusicMarket Information & RAG Agent',
+    description: 'Acts as an AI assistant for the website. It uses RAG to answer questions about MusicMarket and its features, and web search to provide useful information about musical instruments, brands, models, and other music-related topics.',
     delay: 'delay-300'
   },
   {
-    icon: <ShieldCheck className="feature-icon" />,
-    title: 'Trust & Fraud Check',
-    description: 'Scans for stolen serial numbers, duplicate photos, and issues trust scores for all sellers.',
+    icon: <Sparkles className="feature-icon" />,
+    title: 'User Interest & Personalized Recommendation Agent',
+    description: 'Learns from users\' searches and interactions to understand their interests. It stores and updates these interests and recommends relevant instrument listings to each user based on their interests and previous activity.',
     delay: 'delay-400'
   }
 ];

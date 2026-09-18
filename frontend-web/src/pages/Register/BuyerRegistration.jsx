@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { apiCall } from '../../services/api';
 import './Register.css';
 
@@ -10,6 +10,8 @@ const BuyerRegistration = () => {
   });
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const navigate = useNavigate();
 
   const handleChange = (e) => {
@@ -65,6 +67,11 @@ const BuyerRegistration = () => {
       navigate('/login');
     } catch (err) {
       console.error(err);
+      if (err.response && err.response.status === 400) {
+        setErrors({ email: 'This email is already registered. Please try logging in.' });
+      } else {
+        setErrors({ email: 'Email already registered or registration failed.' });
+      }
     } finally {
       setLoading(false);
     }
@@ -111,12 +118,22 @@ const BuyerRegistration = () => {
             </div>
             <div className="form-group">
               <label>Password</label>
-              <input type="password" name="password" value={formData.password} onChange={handleChange} className="form-control" placeholder="Create a password" minLength="8" />
+              <div className="password-input-wrapper">
+                <input type={showPassword ? "text" : "password"} name="password" value={formData.password} onChange={handleChange} className="form-control" placeholder="Create a password" minLength="8" />
+                <button type="button" className="password-toggle-btn" onClick={() => setShowPassword(!showPassword)}>
+                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                </button>
+              </div>
               {errors.password && <small style={{ color: 'red' }}>{errors.password}</small>}
             </div>
             <div className="form-group">
               <label>Confirm Password</label>
-              <input type="password" name="confirmPassword" value={formData.confirmPassword} onChange={handleChange} className="form-control" placeholder="Confirm your password" minLength="8" />
+              <div className="password-input-wrapper">
+                <input type={showConfirmPassword ? "text" : "password"} name="confirmPassword" value={formData.confirmPassword} onChange={handleChange} className="form-control" placeholder="Confirm your password" minLength="8" />
+                <button type="button" className="password-toggle-btn" onClick={() => setShowConfirmPassword(!showConfirmPassword)}>
+                  {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                </button>
+              </div>
               {errors.confirmPassword && <small style={{ color: 'red' }}>{errors.confirmPassword}</small>}
             </div>
             

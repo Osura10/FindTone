@@ -9,6 +9,11 @@ import ShopRegistration from './pages/Register/ShopRegistration';
 import AdminRegistration from './pages/Register/AdminRegistration';
 import Dashboard from './pages/Dashboard';
 
+import SellerDashboardLayout from './pages/Seller/SellerDashboardLayout';
+import AllItems from './pages/Seller/AllItems';
+import CreatePost from './pages/Seller/CreatePost';
+import Profile from './pages/Seller/Profile';
+
 function App() {
   return (
     <Router>
@@ -21,6 +26,13 @@ function App() {
         <Route path="/register/shop" element={<ShopRegistration />} />
         <Route path="/register/admin" element={<AdminRegistration />} />
         <Route path="/dashboard" element={<Dashboard />} />
+        
+        {/* Seller Dashboard Routes */}
+        <Route path="/seller" element={<SellerDashboardLayout />}>
+          <Route path="items" element={<AllItems />} />
+          <Route path="create" element={<CreatePost />} />
+          <Route path="profile" element={<Profile />} />
+        </Route>
       </Routes>
     </Router>
   );
