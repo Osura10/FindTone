@@ -8,21 +8,46 @@ const AdminRegistration = () => {
   const [formData, setFormData] = useState({
     name: '', email: '', phone: '', nic: '', password: '', confirmPassword: ''
   });
-  const [error, setError] = useState('');
+  const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
+    setErrors((current) => ({ ...current, [e.target.name]: '' }));
+  };
+
+  const isValidEmail = (email) => email.includes('@') && email.includes('.');
+  const isValidPhone = (phone) => /^[0-9]{10}$/.test(phone);
+  const isValidNIC = (nic) => /^(\d{9}[vV]|\d{12})$/.test(nic);
+
+  const validate = () => {
+    const values = Object.fromEntries(Object.entries(formData).map(([key, value]) => [key, value.trim()]));
+    const validationErrors = {};
+
+    if (!values.name) validationErrors.name = 'Name is required';
+    else if (values.name.length < 3) validationErrors.name = 'Name must be at least 3 characters';
+    if (!values.email) validationErrors.email = 'Email is required';
+    else if (!isValidEmail(values.email)) validationErrors.email = 'Enter a valid email';
+    if (!values.phone) validationErrors.phone = 'Phone number is required';
+    else if (!isValidPhone(values.phone)) validationErrors.phone = 'Phone number must be 10 digits';
+    if (!values.nic) validationErrors.nic = 'NIC is required';
+    else if (!isValidNIC(values.nic)) validationErrors.nic = 'Enter a valid NIC';
+    if (!values.password) validationErrors.password = 'Password is required';
+    else if (values.password.length < 8) validationErrors.password = 'Password must be at least 8 characters';
+    if (values.password !== values.confirmPassword) validationErrors.confirmPassword = 'Passwords do not match';
+
+    return validationErrors;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
-
-    if (formData.password !== formData.confirmPassword) {
-      return setError("Passwords do not match");
+    const validationErrors = validate();
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(validationErrors);
+      return;
     }
+    setErrors({});
 
     setLoading(true);
     try {
@@ -39,7 +64,7 @@ const AdminRegistration = () => {
       });
       navigate('/login');
     } catch (err) {
-      setError(err.message || 'Registration failed');
+      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -63,35 +88,39 @@ const AdminRegistration = () => {
             <p className="register-subtitle mt-2">Create your administrator account.</p>
           </div>
           
-          {error && <div className="alert alert-danger" style={{ backgroundColor: 'rgba(255, 0, 0, 0.1)', color: '#ff4d4d', padding: '1rem', borderRadius: '8px', border: '1px solid #ff4d4d', marginBottom: '1rem' }}>{error}</div>}
-
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmit} noValidate>
             <div className="form-group">
               <label>Name</label>
-              <input type="text" name="name" value={formData.name} onChange={handleChange} required className="form-control" placeholder="Enter your full name" />
+              <input type="text" name="name" value={formData.name} onChange={handleChange} className="form-control" placeholder="Enter your full name" />
+              {errors.name && <small style={{ color: 'red' }}>{errors.name}</small>}
             </div>
             <div className="form-group">
               <label>Email</label>
-              <input type="email" name="email" value={formData.email} onChange={handleChange} required className="form-control" placeholder="Enter your admin email" />
+              <input type="email" name="email" value={formData.email} onChange={handleChange} className="form-control" placeholder="Enter your admin email" />
+              {errors.email && <small style={{ color: 'red' }}>{errors.email}</small>}
             </div>
             <div className="form-group">
               <label>Phone Number</label>
-              <input type="tel" name="phone" value={formData.phone} onChange={handleChange} required className="form-control" placeholder="Enter your phone number" />
+              <input type="tel" name="phone" value={formData.phone} onChange={handleChange} className="form-control" placeholder="Enter your phone number" />
+              {errors.phone && <small style={{ color: 'red' }}>{errors.phone}</small>}
             </div>
             <div className="form-group">
               <label>NIC Card Number</label>
-              <input type="text" name="nic" value={formData.nic} onChange={handleChange} required className="form-control" placeholder="Enter your NIC" />
+              <input type="text" name="nic" value={formData.nic} onChange={handleChange} className="form-control" placeholder="Enter your NIC" />
+              {errors.nic && <small style={{ color: 'red' }}>{errors.nic}</small>}
             </div>
             <div className="form-group">
               <label>Password</label>
-              <input type="password" name="password" value={formData.password} onChange={handleChange} required className="form-control" placeholder="Create a password" minLength="8" />
+              <input type="password" name="password" value={formData.password} onChange={handleChange} className="form-control" placeholder="Create a password" minLength="8" />
+              {errors.password && <small style={{ color: 'red' }}>{errors.password}</small>}
             </div>
             <div className="form-group">
               <label>Confirm Password</label>
-              <input type="password" name="confirmPassword" value={formData.confirmPassword} onChange={handleChange} required className="form-control" placeholder="Confirm your password" minLength="8" />
+              <input type="password" name="confirmPassword" value={formData.confirmPassword} onChange={handleChange} className="form-control" placeholder="Confirm your password" minLength="8" />
+              {errors.confirmPassword && <small style={{ color: 'red' }}>{errors.confirmPassword}</small>}
             </div>
             
-            <button type="submit" className="btn btn-primary w-100 mt-3" disabled={loading}>
+            <button type="submit" className="btn btn-primary w-100 mt-3" disabled={loading || Object.keys(errors).some((field) => errors[field])}>
               {loading ? 'Registering...' : 'Register Admin'}
             </button>
           </form>

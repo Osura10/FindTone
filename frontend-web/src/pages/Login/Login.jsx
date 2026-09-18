@@ -7,13 +7,29 @@ import '../Register/Register.css'; // Reusing the premium form styles
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
+  const isValidEmail = (value) => value.includes('@') && value.includes('.');
+
   const handleLogin = async (e) => {
     e.preventDefault();
-    setError('');
+    const validationErrors = {};
+    const trimmedEmail = email.trim();
+    const trimmedPassword = password.trim();
+
+    if (!trimmedEmail) validationErrors.email = 'Email is required';
+    else if (!isValidEmail(trimmedEmail)) validationErrors.email = 'Enter a valid email';
+    if (!trimmedPassword) validationErrors.password = 'Password is required';
+    else if (trimmedPassword.length < 6) validationErrors.password = 'Password must be at least 6 characters';
+
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(validationErrors);
+      return;
+    }
+
+    setErrors({});
     setLoading(true);
 
     try {
@@ -28,7 +44,7 @@ const Login = () => {
       // Redirect to dashboard
       navigate('/dashboard');
     } catch (err) {
-      setError(err.message || 'Login failed. Please check your credentials.');
+      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -52,9 +68,7 @@ const Login = () => {
             <p className="register-subtitle mt-2">Sign in to your MusicMarket account.</p>
           </div>
           
-          {error && <div className="alert alert-danger" style={{ backgroundColor: 'rgba(255, 0, 0, 0.1)', color: '#ff4d4d', padding: '1rem', borderRadius: '8px', border: '1px solid #ff4d4d', marginBottom: '1rem' }}>{error}</div>}
-
-          <form onSubmit={handleLogin}>
+          <form onSubmit={handleLogin} noValidate>
             <div className="form-group">
               <label>Email</label>
               <input 
@@ -62,9 +76,12 @@ const Login = () => {
                 className="form-control" 
                 placeholder="Enter your email" 
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setErrors((current) => ({ ...current, email: '' }));
+                }}
               />
+              {errors.email && <small style={{ color: 'red' }}>{errors.email}</small>}
             </div>
             <div className="form-group">
               <label>Password</label>
@@ -73,12 +90,15 @@ const Login = () => {
                 className="form-control" 
                 placeholder="Enter your password" 
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setErrors((current) => ({ ...current, password: '' }));
+                }}
               />
+              {errors.password && <small style={{ color: 'red' }}>{errors.password}</small>}
             </div>
             
-            <button type="submit" className="btn btn-primary w-100 mt-4 d-flex justify-content-center gap-2" disabled={loading}>
+            <button type="submit" className="btn btn-primary w-100 mt-4 d-flex justify-content-center gap-2" disabled={loading || Object.keys(errors).some((field) => errors[field])}>
               <LogIn size={20} />
               {loading ? 'Logging in...' : 'Login'}
             </button>
