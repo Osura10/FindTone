@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, LogIn } from 'lucide-react';
+import { ArrowLeft, LogIn, Eye, EyeOff } from 'lucide-react';
 import { apiCall } from '../../services/api';
 import '../Register/Register.css'; // Reusing the premium form styles
 
@@ -9,6 +9,7 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
 
   const isValidEmail = (value) => value.includes('@') && value.includes('.');
@@ -85,16 +86,21 @@ const Login = () => {
             </div>
             <div className="form-group">
               <label>Password</label>
-              <input 
-                type="password" 
-                className="form-control" 
-                placeholder="Enter your password" 
-                value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  setErrors((current) => ({ ...current, password: '' }));
-                }}
-              />
+              <div className="password-input-wrapper">
+                <input 
+                  type={showPassword ? "text" : "password"} 
+                  className="form-control" 
+                  placeholder="Enter your password" 
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    setErrors((current) => ({ ...current, password: '' }));
+                  }}
+                />
+                <button type="button" className="password-toggle-btn" onClick={() => setShowPassword(!showPassword)}>
+                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                </button>
+              </div>
               {errors.password && <small style={{ color: 'red' }}>{errors.password}</small>}
             </div>
             
