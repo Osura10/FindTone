@@ -46,6 +46,7 @@ const Login = () => {
       navigate('/dashboard');
     } catch (err) {
       console.error(err);
+      setErrors({ global: 'Invalid email or password. Please try again.' });
     } finally {
       setLoading(false);
     }
@@ -68,6 +69,12 @@ const Login = () => {
             <h2>Welcome Back</h2>
             <p className="register-subtitle mt-2">Sign in to your MusicMarket account.</p>
           </div>
+          
+          {errors.global && (
+            <div style={{ backgroundColor: 'rgba(255,0,0,0.1)', color: '#ff4d4d', padding: '0.8rem', borderRadius: '8px', marginBottom: '1.5rem', textAlign: 'center', border: '1px solid rgba(255,0,0,0.3)' }}>
+              {errors.global}
+            </div>
+          )}
           
           <form onSubmit={handleLogin} noValidate>
             <div className="form-group">
