@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http;
 using System.ComponentModel.DataAnnotations;
 
 namespace MusicMarket.Api.Dtos;
@@ -13,7 +14,8 @@ public record RegisterDto(
     string? NicCardNumber,
     string? OwnerName,
     string? Address,
-    string? ShopRegisterId
+    string? ShopRegisterId,
+    IFormFile? ProfileImage
 );
 
 public record LoginDto(

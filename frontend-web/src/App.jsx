@@ -7,9 +7,7 @@ import BuyerRegistration from './pages/Register/BuyerRegistration';
 import SellerRegistration from './pages/Register/SellerRegistration';
 import ShopRegistration from './pages/Register/ShopRegistration';
 import AdminRegistration from './pages/Register/AdminRegistration';
-import Dashboard from './pages/Dashboard';
-
-import SellerDashboardLayout from './pages/Seller/SellerDashboardLayout';
+import DashboardLayout from './components/DashboardLayout';
 import AllItems from './pages/Seller/AllItems';
 import CreatePost from './pages/Seller/CreatePost';
 import Profile from './pages/Seller/Profile';
@@ -25,10 +23,9 @@ function App() {
         <Route path="/register/seller" element={<SellerRegistration />} />
         <Route path="/register/shop" element={<ShopRegistration />} />
         <Route path="/register/admin" element={<AdminRegistration />} />
-        <Route path="/dashboard" element={<Dashboard />} />
         
-        {/* Seller Dashboard Routes */}
-        <Route path="/seller" element={<SellerDashboardLayout />}>
+        {/* Universal Dashboard Routes */}
+        <Route path="/dashboard" element={<DashboardLayout />}>
           <Route path="items" element={<AllItems />} />
           <Route path="create" element={<CreatePost />} />
           <Route path="profile" element={<Profile />} />

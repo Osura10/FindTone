@@ -16,6 +16,9 @@ public class User
     public string? OwnerName { get; set; }
     public string? Address { get; set; }
     public string? ShopRegisterId { get; set; }
+    
+    // Profile Image
+    public string? ProfileImageUrl { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

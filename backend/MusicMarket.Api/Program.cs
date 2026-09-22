@@ -11,6 +11,13 @@ var builder = WebApplication.CreateBuilder(args);
 // Load .env file
 Env.Load();
 
+// Cloudinary
+var cloudinaryUrl = Environment.GetEnvironmentVariable("CLOUDINARY_URL") 
+                    ?? throw new InvalidOperationException("CLOUDINARY_URL is not configured in .env");
+CloudinaryDotNet.Cloudinary cloudinary = new CloudinaryDotNet.Cloudinary(cloudinaryUrl);
+cloudinary.Api.Secure = true;
+builder.Services.AddSingleton(cloudinary);
+
 // Add services to the container.
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();

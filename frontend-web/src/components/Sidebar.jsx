@@ -2,8 +2,9 @@ import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, PlusCircle, User, LogOut } from 'lucide-react';
 
-const SellerSidebar = () => {
+const Sidebar = () => {
   const navigate = useNavigate();
+  const role = localStorage.getItem('role') || 'buyer'; // fallback to buyer
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -11,26 +12,36 @@ const SellerSidebar = () => {
     navigate('/login');
   };
 
-  const navItems = [
-    { name: 'All Items', path: '/seller/items', icon: LayoutDashboard },
-    { name: 'Create Post', path: '/seller/create', icon: PlusCircle },
-    { name: 'Profile', path: '/seller/profile', icon: User },
+  // Base items for everyone (Buyer, Admin, Shop, Seller)
+  let navItems = [
+    { name: 'All Items', path: '/dashboard/items', icon: LayoutDashboard },
   ];
 
+  // Shop and Seller get the 'Create Post' option
+  if (role === 'shop' || role === 'seller') {
+    navItems.push({ name: 'Create Post', path: '/dashboard/create', icon: PlusCircle });
+  }
+
+  // Everyone gets a profile
+  navItems.push({ name: 'Profile', path: '/dashboard/profile', icon: User });
+
+  // Format the role for display (e.g., 'shop' -> 'Shop')
+  const displayRole = role.charAt(0).toUpperCase() + role.slice(1);
+
   return (
-    <div className="glass-panel sidebar-container" style={{
-      width: '260px',
-      height: 'calc(100vh - 2rem)',
-      margin: '1rem 0 1rem 1rem',
-      display: 'flex',
-      flexDirection: 'column',
-      padding: '2.5rem 1.5rem',
-      position: 'sticky',
-      top: '1rem'
-    }}>
-      <div style={{ marginBottom: '3rem', textAlign: 'center' }}>
-        <h2 className="text-gradient-accent" style={{ fontSize: '2.2rem', fontWeight: '900', letterSpacing: '-1px', margin: 0 }}>MusicMarket</h2>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '0.5rem', fontWeight: '500' }}>Seller Dashboard</p>
+      <div className="glass-panel sidebar-container" style={{
+        width: '280px',
+        height: 'calc(100vh - 2rem)',
+        margin: '1rem 0 1rem 1rem',
+        display: 'flex',
+        flexDirection: 'column',
+        padding: '2.5rem 1.5rem',
+        position: 'sticky',
+        top: '1rem'
+      }}>
+        <div style={{ marginBottom: '3rem', textAlign: 'center' }}>
+          <h2 className="text-gradient-accent" style={{ fontSize: '1.8rem', fontWeight: '900', letterSpacing: '-1px', margin: 0 }}>MusicMarket</h2>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '0.5rem', fontWeight: '500' }}>{displayRole} Dashboard</p>
       </div>
 
       <nav style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -70,4 +81,4 @@ const SellerSidebar = () => {
   );
 };
 
-export default SellerSidebar;
+export default Sidebar;

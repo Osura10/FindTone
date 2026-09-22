@@ -43,7 +43,7 @@ const Login = () => {
       localStorage.setItem('role', data.role);
       
       // Redirect to dashboard
-      navigate('/dashboard');
+      navigate('/dashboard/items');
     } catch (err) {
       console.error(err);
       setErrors({ global: 'Invalid email or password. Please try again.' });

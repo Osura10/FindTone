@@ -1,8 +1,8 @@
 import React from 'react';
 import { Outlet } from 'react-router-dom';
-import SellerSidebar from '../../components/SellerSidebar';
+import Sidebar from './Sidebar';
 
-const SellerDashboardLayout = () => {
+const DashboardLayout = () => {
   return (
     <>
       {/* Background gradients for the modern look */}
@@ -13,7 +13,7 @@ const SellerDashboardLayout = () => {
       </div>
       
       <div style={{ display: 'flex', minHeight: '100vh', width: '100%', margin: 0 }}>
-        <SellerSidebar />
+        <Sidebar />
         
         <div style={{ flex: 1, padding: '2rem 3rem', overflowY: 'auto', height: '100vh' }}>
           <Outlet />
@@ -23,4 +23,4 @@ const SellerDashboardLayout = () => {
   );
 };
 
-export default SellerDashboardLayout;
+export default DashboardLayout;

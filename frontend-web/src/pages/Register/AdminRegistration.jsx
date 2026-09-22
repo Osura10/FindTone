@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Eye, EyeOff } from 'lucide-react';
+import { ArrowLeft, Eye, EyeOff, Camera } from 'lucide-react';
 import { apiCall } from '../../services/api';
 import './Register.css';
 
 const AdminRegistration = () => {
   const [formData, setFormData] = useState({
-    name: '', email: '', phone: '', nic: '', password: '', confirmPassword: ''
+    name: '', email: '', phone: '', nic: '', password: '', confirmPassword: '', profileImage: null
   });
+  const [imagePreview, setImagePreview] = useState(null);
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -15,8 +16,19 @@ const AdminRegistration = () => {
   const navigate = useNavigate();
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-    setErrors((current) => ({ ...current, [e.target.name]: '' }));
+    const { name, value, type, files } = e.target;
+    if (type === 'file') {
+      const file = files[0];
+      setFormData({ ...formData, [name]: file });
+      if (file) {
+        setImagePreview(URL.createObjectURL(file));
+      } else {
+        setImagePreview(null);
+      }
+    } else {
+      setFormData({ ...formData, [name]: value });
+    }
+    setErrors((current) => ({ ...current, [name]: '' }));
   };
 
   const isValidEmail = (email) => email.includes('@') && email.includes('.');
@@ -24,20 +36,24 @@ const AdminRegistration = () => {
   const isValidNIC = (nic) => /^(\d{9}[vV]|\d{12})$/.test(nic);
 
   const validate = () => {
-    const values = Object.fromEntries(Object.entries(formData).map(([key, value]) => [key, value.trim()]));
     const validationErrors = {};
+    const name = formData.name?.trim();
+    const email = formData.email?.trim();
+    const phone = formData.phone?.trim();
+    const nic = formData.nic?.trim();
+    const password = formData.password;
 
-    if (!values.name) validationErrors.name = 'Name is required';
-    else if (values.name.length < 3) validationErrors.name = 'Name must be at least 3 characters';
-    if (!values.email) validationErrors.email = 'Email is required';
-    else if (!isValidEmail(values.email)) validationErrors.email = 'Enter a valid email';
-    if (!values.phone) validationErrors.phone = 'Phone number is required';
-    else if (!isValidPhone(values.phone)) validationErrors.phone = 'Phone number must be 10 digits';
-    if (!values.nic) validationErrors.nic = 'NIC is required';
-    else if (!isValidNIC(values.nic)) validationErrors.nic = 'Enter a valid NIC';
-    if (!values.password) validationErrors.password = 'Password is required';
-    else if (values.password.length < 8) validationErrors.password = 'Password must be at least 8 characters';
-    if (values.password !== values.confirmPassword) validationErrors.confirmPassword = 'Passwords do not match';
+    if (!name) validationErrors.name = 'Name is required';
+    else if (name.length < 3) validationErrors.name = 'Name must be at least 3 characters';
+    if (!email) validationErrors.email = 'Email is required';
+    else if (!isValidEmail(email)) validationErrors.email = 'Enter a valid email';
+    if (!phone) validationErrors.phone = 'Phone number is required';
+    else if (!isValidPhone(phone)) validationErrors.phone = 'Phone number must be 10 digits';
+    if (!nic) validationErrors.nic = 'NIC is required';
+    else if (!isValidNIC(nic)) validationErrors.nic = 'Enter a valid NIC';
+    if (!password) validationErrors.password = 'Password is required';
+    else if (password.length < 8) validationErrors.password = 'Password must be at least 8 characters';
+    if (password !== formData.confirmPassword) validationErrors.confirmPassword = 'Passwords do not match';
 
     return validationErrors;
   };
@@ -50,27 +66,32 @@ const AdminRegistration = () => {
       return;
     }
     setErrors({});
-
     setLoading(true);
+
     try {
+      const payload = new FormData();
+      payload.append('name', formData.name.trim());
+      payload.append('email', formData.email.trim());
+      payload.append('password', formData.password);
+      payload.append('role', 'admin');
+      payload.append('phoneNumber', formData.phone.trim());
+      payload.append('nicCardNumber', formData.nic.trim());
+      
+      if (formData.profileImage) {
+        payload.append('ProfileImage', formData.profileImage);
+      }
+
       await apiCall('/auth/register', {
         method: 'POST',
-        body: JSON.stringify({
-          name: formData.name,
-          email: formData.email,
-          password: formData.password,
-          role: 'admin',
-          phoneNumber: formData.phone,
-          nicCardNumber: formData.nic
-        })
+        body: payload
       });
       navigate('/login');
     } catch (err) {
       console.error(err);
-      if (err.response && err.response.status === 400) {
+      if (err.message && err.message.includes('already used')) {
         setErrors({ email: 'This email is already registered. Please try logging in.' });
       } else {
-        setErrors({ email: 'Email already registered or registration failed.' });
+        setErrors({ email: err.message || 'Registration failed.' });
       }
     } finally {
       setLoading(false);
@@ -96,6 +117,41 @@ const AdminRegistration = () => {
           </div>
           
           <form onSubmit={handleSubmit} noValidate>
+            <div className="form-group" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '3rem', marginBottom: '2rem' }}>
+              <label>Profile Picture (Optional)</label>
+              <div 
+                className="profile-upload-circle mt-2" 
+                onClick={() => document.getElementById('profileImageInput').click()}
+                style={{
+                  width: '140px', height: '140px', borderRadius: '50%', border: '2px dashed var(--primary-color)',
+                  display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'pointer',
+                  overflow: 'hidden', position: 'relative', background: 'rgba(255,255,255,0.05)'
+                }}
+              >
+                {imagePreview ? (
+                  <img src={imagePreview} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  <Camera size={48} color="var(--primary-color)" />
+                )}
+              </div>
+              {imagePreview && (
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    setImagePreview(null);
+                    setFormData({ ...formData, profileImage: null });
+                    document.getElementById('profileImageInput').value = '';
+                  }}
+                  style={{
+                    background: 'transparent', border: 'none', color: '#ff4d4f', marginTop: '1rem', cursor: 'pointer', fontSize: '0.9rem', fontWeight: '500'
+                  }}
+                >
+                  Remove Picture
+                </button>
+              )}
+              <input id="profileImageInput" type="file" name="profileImage" accept="image/*" onChange={handleChange} style={{ display: 'none' }} />
+            </div>
+
             <div className="form-group">
               <label>Name</label>
               <input type="text" name="name" value={formData.name} onChange={handleChange} className="form-control" placeholder="Enter your full name" />
@@ -137,7 +193,7 @@ const AdminRegistration = () => {
               {errors.confirmPassword && <small style={{ color: 'red' }}>{errors.confirmPassword}</small>}
             </div>
             
-            <button type="submit" className="btn btn-primary w-100 mt-3" disabled={loading || Object.keys(errors).some((field) => errors[field])}>
+            <button type="submit" className="btn btn-primary w-100 mt-4" disabled={loading || Object.keys(errors).some((field) => errors[field])}>
               {loading ? 'Registering...' : 'Register Admin'}
             </button>
           </form>

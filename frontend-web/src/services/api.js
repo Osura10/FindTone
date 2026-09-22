@@ -4,10 +4,13 @@ export const apiCall = async (endpoint, options = {}) => {
   const token = localStorage.getItem('token');
   
   const headers = {
-    'Content-Type': 'application/json',
     ...(token && { 'Authorization': `Bearer ${token}` }),
     ...options.headers,
   };
+
+  if (!(options.body instanceof FormData) && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json';
+  }
 
   const response = await fetch(`${BASE_URL}${endpoint}`, {
     ...options,
@@ -17,8 +20,13 @@ export const apiCall = async (endpoint, options = {}) => {
   if (!response.ok) {
     let errorMessage = 'API error';
     try {
-      const errorData = await response.json();
-      errorMessage = errorData.message || errorData.title || JSON.stringify(errorData);
+      const text = await response.text();
+      try {
+        const errorData = JSON.parse(text);
+        errorMessage = errorData.message || errorData.title || JSON.stringify(errorData);
+      } catch {
+        errorMessage = text || response.statusText;
+      }
     } catch (e) {
       errorMessage = response.statusText;
     }
