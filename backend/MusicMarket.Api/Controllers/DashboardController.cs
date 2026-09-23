@@ -17,14 +17,6 @@ public class DashboardController : ControllerBase
         return Ok(new { Message = $"Welcome Buyer: {name} ({email})", Role = "buyer" });
     }
 
-    [HttpGet("seller")]
-    [Authorize(Roles = "seller")]
-    public IActionResult GetSellerDashboard()
-    {
-        var name = User.FindFirstValue(ClaimTypes.Name);
-        var email = User.FindFirstValue(ClaimTypes.Email);
-        return Ok(new { Message = $"Welcome Seller: {name} ({email})", Role = "seller" });
-    }
 
     [HttpGet("shop")]
     [Authorize(Roles = "shop")]

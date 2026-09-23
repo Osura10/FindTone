@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, LogIn, Eye, EyeOff } from 'lucide-react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { ArrowLeft, LogIn, Eye, EyeOff, Clock, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { apiCall } from '../../services/api';
 import '../Register/Register.css'; // Reusing the premium form styles
 
@@ -8,9 +8,14 @@ const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState({});
+  const [pendingApprovalMsg, setPendingApprovalMsg] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const infoMessage = location.state?.infoMessage;
+  const successMessage = location.state?.successMessage;
 
   const isValidEmail = (value) => value.includes('@') && value.includes('.');
 
@@ -31,22 +36,35 @@ const Login = () => {
     }
 
     setErrors({});
+    setPendingApprovalMsg('');
     setLoading(true);
 
     try {
       const data = await apiCall('/auth/login', {
         method: 'POST',
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: trimmedEmail, password: trimmedPassword }),
       });
       
+      sessionStorage.setItem('token', data.token);
+      sessionStorage.setItem('role', (data.role || '').toLowerCase());
       localStorage.setItem('token', data.token);
-      localStorage.setItem('role', data.role);
+      localStorage.setItem('role', (data.role || '').toLowerCase());
       
-      // Redirect to dashboard
-      navigate('/dashboard');
+      // Redirect based on role
+      const userRole = (data.role || '').toLowerCase();
+      if (userRole === 'admin') {
+        navigate('/dashboard/admin');
+      } else {
+        navigate('/dashboard/items');
+      }
     } catch (err) {
       console.error(err);
-      setErrors({ global: 'Invalid email or password. Please try again.' });
+      const msg = err.message || '';
+      if (msg.toLowerCase().includes('verified') || msg.toLowerCase().includes('pending') || msg.toLowerCase().includes('approval')) {
+        setPendingApprovalMsg(msg || 'Please wait until your account is verified by an administrator.');
+      } else {
+        setErrors({ global: msg || 'Invalid email or password. Please try again.' });
+      }
     } finally {
       setLoading(false);
     }
@@ -70,9 +88,86 @@ const Login = () => {
             <p className="register-subtitle mt-2">Sign in to your MusicMarket account.</p>
           </div>
           
+          {/* Info banner from registration (e.g. Shop/Admin pending approval) */}
+          {infoMessage && !pendingApprovalMsg && !errors.global && (
+            <div style={{
+              backgroundColor: 'rgba(254, 228, 64, 0.12)',
+              color: '#fee440',
+              padding: '1rem',
+              borderRadius: '10px',
+              marginBottom: '1.5rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.75rem',
+              border: '1px solid rgba(254, 228, 64, 0.35)',
+              fontSize: '0.9rem'
+            }}>
+              <Clock size={20} style={{ flexShrink: 0 }} />
+              <span>{infoMessage}</span>
+            </div>
+          )}
+
+          {/* Success banner from registration (e.g. Buyer success) */}
+          {successMessage && !errors.global && !pendingApprovalMsg && (
+            <div style={{
+              backgroundColor: 'rgba(0, 245, 212, 0.12)',
+              color: '#00f5d4',
+              padding: '1rem',
+              borderRadius: '10px',
+              marginBottom: '1.5rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.75rem',
+              border: '1px solid rgba(0, 245, 212, 0.35)',
+              fontSize: '0.9rem'
+            }}>
+              <CheckCircle2 size={20} style={{ flexShrink: 0 }} />
+              <span>{successMessage}</span>
+            </div>
+          )}
+
+          {/* Pending Approval / Verification Error Banner */}
+          {pendingApprovalMsg && (
+            <div style={{
+              backgroundColor: 'rgba(254, 228, 64, 0.15)',
+              color: '#fff',
+              padding: '1.1rem',
+              borderRadius: '10px',
+              marginBottom: '1.5rem',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '0.85rem',
+              border: '1px solid rgba(254, 228, 64, 0.5)',
+              boxShadow: '0 4px 20px rgba(254, 228, 64, 0.15)'
+            }}>
+              <Clock size={24} color="#fee440" style={{ flexShrink: 0, marginTop: '2px' }} />
+              <div>
+                <strong style={{ color: '#fee440', display: 'block', marginBottom: '0.25rem', fontSize: '0.95rem' }}>
+                  Account Pending Verification
+                </strong>
+                <p style={{ margin: 0, fontSize: '0.88rem', color: 'rgba(255, 255, 255, 0.9)', lineHeight: 1.4 }}>
+                  {pendingApprovalMsg}
+                </p>
+              </div>
+            </div>
+          )}
+          
+          {/* General Login Error */}
           {errors.global && (
-            <div style={{ backgroundColor: 'rgba(255,0,0,0.1)', color: '#ff4d4d', padding: '0.8rem', borderRadius: '8px', marginBottom: '1.5rem', textAlign: 'center', border: '1px solid rgba(255,0,0,0.3)' }}>
-              {errors.global}
+            <div style={{
+              backgroundColor: 'rgba(255, 77, 79, 0.15)',
+              color: '#ff4d4f',
+              padding: '1rem',
+              borderRadius: '10px',
+              marginBottom: '1.5rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.75rem',
+              border: '1px solid rgba(255, 77, 79, 0.35)',
+              fontSize: '0.9rem'
+            }}>
+              <AlertTriangle size={20} style={{ flexShrink: 0 }} />
+              <span>{errors.global}</span>
             </div>
           )}
           

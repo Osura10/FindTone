@@ -1,8 +1,7 @@
 import os
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_ollama import OllamaEmbeddings
-from langchain_ollama import ChatOllama
+from llm_config import get_chat_llm, get_embeddings, vector_db_dir
 from langchain_chroma import Chroma
 from langchain_core.tools import create_retriever_tool, tool
 from langchain.agents import create_agent
@@ -12,10 +11,9 @@ from duckduckgo_search import DDGS
 
 # --- 1. Configuration Settings --- #
 # Note: Paths are relative to where main.py will run (ai-service folder)
-PDF_PATH = "Agent_01/Doc/MusicMarket_Information_RAG_Knowledge_Document.pdf"
-VECTOR_DB_DIR = "Agent_01/chroma_db"
-OLLAMA_MODEL = "llama3.1:8b"
-OLLAMA_EMBEDDING_MODEL = "nomic-embed-text" # Best local embedding model
+PDF_PATH = "ChatBot/Doc/MusicMarket_Information_RAG_Knowledge_Document.pdf"
+# Separate DB folder per provider (chroma_db_ollama / chroma_db_gemini)
+VECTOR_DB_DIR = vector_db_dir("ChatBot/chroma_db")
 
 # --- 2. RAG Pipeline Setup (Retrieval-Augmented Generation) --- #
 def initialize_rag():
@@ -24,14 +22,14 @@ def initialize_rag():
     Otherwise, it reads the PDF, chunks the text, and creates new embeddings.
     """
     # Initialize the embedding model
-    embeddings = OllamaEmbeddings(model=OLLAMA_EMBEDDING_MODEL)
+    embeddings = get_embeddings()
     
     # Check if the database already exists to avoid re-creating it every time
     if os.path.exists(VECTOR_DB_DIR) and os.listdir(VECTOR_DB_DIR):
-        print("[Agent_01] Loading existing Vector Database...")
+        print("[ChatBot] Loading existing Vector Database...")
         vectorstore = Chroma(persist_directory=VECTOR_DB_DIR, embedding_function=embeddings)
     else:
-        print("[Agent_01] Creating new Vector Database from PDF...")
+        print("[ChatBot] Creating new Vector Database from PDF...")
         # Step A: Load the PDF file
         loader = PyPDFLoader(PDF_PATH)
         docs = loader.load()
@@ -78,7 +76,7 @@ def create_music_agent():
     tools = [rag_tool, web_search_tool]
 
     # 4. Set up the Language Model
-    llm = ChatOllama(model=OLLAMA_MODEL, temperature=0.1)
+    llm = get_chat_llm(temperature=0.1)
 
     # 5. Define the strict rules for the agent
     system_prompt = """You are a helpful AI assistant specialized ONLY in music.

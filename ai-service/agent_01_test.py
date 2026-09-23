@@ -1,6 +1,6 @@
 import uuid
 from langchain_core.messages import HumanMessage
-from Agent_01.agent_01 import create_music_agent
+from ChatBot.agent_01 import create_music_agent
 
 def main():
     print("Initializing AI Service...")

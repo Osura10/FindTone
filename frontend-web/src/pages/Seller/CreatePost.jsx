@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Upload, Plus, X, Image as ImageIcon, CheckCircle } from 'lucide-react';
 import { apiCall } from '../../services/api';
@@ -47,6 +47,17 @@ const CreatePost = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  useEffect(() => {
+    // Guard: Only Shops can access Create Post
+    apiCall('/auth/me').then(user => {
+      if (user && user.role !== 'shop') {
+        navigate('/dashboard/items');
+      }
+    }).catch(() => {
+      navigate('/login');
+    });
+  }, [navigate]);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -152,14 +163,14 @@ const CreatePost = () => {
         data.append('Images', file);
       });
 
-      const response = await apiCall('/listings', {
+      await apiCall('/listings', {
         method: 'POST',
         body: data
       });
 
       setSuccess('Listing created successfully! Your item is now pending review.');
       setTimeout(() => {
-        navigate('/seller/listings');
+        navigate('/dashboard/items');
       }, 1500);
     } catch (err) {
       console.error('Create listing error:', err);

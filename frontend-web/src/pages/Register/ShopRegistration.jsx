@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Eye, EyeOff } from 'lucide-react';
+import { ArrowLeft, Eye, EyeOff, Camera } from 'lucide-react';
 import { apiCall } from '../../services/api';
 import './Register.css';
 
 const ShopRegistration = () => {
   const [formData, setFormData] = useState({
-    shopName: '', ownerName: '', email: '', phone: '', address: '', shopRegisterId: '', nic: '', password: '', confirmPassword: ''
+    shopName: '', ownerName: '', email: '', phone: '', address: '', shopRegisterId: '', nic: '', password: '', confirmPassword: '', profileImage: null
   });
+  const [imagePreview, setImagePreview] = useState(null);
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -15,8 +16,19 @@ const ShopRegistration = () => {
   const navigate = useNavigate();
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-    setErrors((current) => ({ ...current, [e.target.name]: '' }));
+    const { name, value, type, files } = e.target;
+    if (type === 'file') {
+      const file = files[0];
+      setFormData({ ...formData, [name]: file });
+      if (file) {
+        setImagePreview(URL.createObjectURL(file));
+      } else {
+        setImagePreview(null);
+      }
+    } else {
+      setFormData({ ...formData, [name]: value });
+    }
+    setErrors((current) => ({ ...current, [name]: '' }));
   };
 
   const isValidEmail = (email) => email.includes('@') && email.includes('.');
@@ -24,23 +36,30 @@ const ShopRegistration = () => {
   const isValidNIC = (nic) => /^(\d{9}[vV]|\d{12})$/.test(nic);
 
   const validate = () => {
-    const values = Object.fromEntries(Object.entries(formData).map(([key, value]) => [key, value.trim()]));
     const validationErrors = {};
+    const shopName = formData.shopName?.trim();
+    const ownerName = formData.ownerName?.trim();
+    const email = formData.email?.trim();
+    const phone = formData.phone?.trim();
+    const address = formData.address?.trim();
+    const shopRegisterId = formData.shopRegisterId?.trim();
+    const nic = formData.nic?.trim();
+    const password = formData.password;
 
-    if (!values.shopName) validationErrors.shopName = 'Shop name is required';
-    else if (values.shopName.length < 3) validationErrors.shopName = 'Shop name must be at least 3 characters';
-    if (!values.ownerName) validationErrors.ownerName = 'Owner name is required';
-    if (!values.email) validationErrors.email = 'Email is required';
-    else if (!isValidEmail(values.email)) validationErrors.email = 'Enter a valid email';
-    if (!values.phone) validationErrors.phone = 'Phone number is required';
-    else if (!isValidPhone(values.phone)) validationErrors.phone = 'Phone number must be 10 digits';
-    if (!values.address) validationErrors.address = 'Address is required';
-    if (!values.shopRegisterId) validationErrors.shopRegisterId = 'Shop registration ID is required';
-    if (!values.nic) validationErrors.nic = 'NIC is required';
-    else if (!isValidNIC(values.nic)) validationErrors.nic = 'Enter a valid NIC';
-    if (!values.password) validationErrors.password = 'Password is required';
-    else if (values.password.length < 8) validationErrors.password = 'Password must be at least 8 characters';
-    if (values.password !== values.confirmPassword) validationErrors.confirmPassword = 'Passwords do not match';
+    if (!shopName) validationErrors.shopName = 'Shop name is required';
+    else if (shopName.length < 3) validationErrors.shopName = 'Shop name must be at least 3 characters';
+    if (!ownerName) validationErrors.ownerName = 'Owner name is required';
+    if (!email) validationErrors.email = 'Email is required';
+    else if (!isValidEmail(email)) validationErrors.email = 'Enter a valid email';
+    if (!phone) validationErrors.phone = 'Phone number is required';
+    else if (!isValidPhone(phone)) validationErrors.phone = 'Phone number must be 10 digits';
+    if (!address) validationErrors.address = 'Address is required';
+    if (!shopRegisterId) validationErrors.shopRegisterId = 'Shop registration ID is required';
+    if (!nic) validationErrors.nic = 'NIC is required';
+    else if (!isValidNIC(nic)) validationErrors.nic = 'Enter a valid NIC';
+    if (!password) validationErrors.password = 'Password is required';
+    else if (password.length < 8) validationErrors.password = 'Password must be at least 8 characters';
+    if (password !== formData.confirmPassword) validationErrors.confirmPassword = 'Passwords do not match';
 
     return validationErrors;
   };
@@ -53,27 +72,37 @@ const ShopRegistration = () => {
       return;
     }
     setErrors({});
-
     setLoading(true);
+
     try {
+      const payload = new FormData();
+      payload.append('name', formData.shopName.trim());
+      payload.append('email', formData.email.trim());
+      payload.append('password', formData.password);
+      payload.append('role', 'shop');
+      payload.append('phoneNumber', formData.phone.trim());
+      payload.append('ownerName', formData.ownerName.trim());
+      payload.append('address', formData.address.trim());
+      payload.append('shopRegisterId', formData.shopRegisterId.trim());
+      payload.append('nicCardNumber', formData.nic.trim());
+      
+      if (formData.profileImage) {
+        payload.append('ProfileImage', formData.profileImage);
+      }
+
       await apiCall('/auth/register', {
         method: 'POST',
-        body: JSON.stringify({
-          name: formData.shopName,
-          email: formData.email,
-          password: formData.password,
-          role: 'shop',
-          phoneNumber: formData.phone,
-          ownerName: formData.ownerName,
-          address: formData.address,
-          shopRegisterId: formData.shopRegisterId,
-          nicCardNumber: formData.nic
-        })
+        body: payload
       });
-      navigate('/login');
+      navigate('/login', {
+        state: {
+          infoMessage: 'Shop registration submitted successfully! Please wait until your account is verified by an administrator before logging in.'
+        }
+      });
     } catch (err) {
       console.error(err);
-      if (err.status === 409 || err.message?.toLowerCase().includes('email')) {
+      const msg = err.message?.toLowerCase() || '';
+      if (err.status === 409 || msg.includes('already used') || msg.includes('email')) {
         setErrors({ email: 'This email is already registered. Please try logging in.' });
       } else {
         setErrors({ form: err.message || 'Registration failed. Please try again.' });
@@ -108,6 +137,40 @@ const ShopRegistration = () => {
           )}
 
           <form onSubmit={handleSubmit} noValidate>
+            <div className="form-group" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '3rem', marginBottom: '2rem' }}>
+              <label>Profile Picture (Optional)</label>
+              <div 
+                className="profile-upload-circle mt-2" 
+                onClick={() => document.getElementById('profileImageInput').click()}
+                style={{
+                  width: '140px', height: '140px', borderRadius: '50%', border: '2px dashed var(--primary-color)',
+                  display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'pointer',
+                  overflow: 'hidden', position: 'relative', background: 'rgba(255,255,255,0.05)'
+                }}
+              >
+                {imagePreview ? (
+                  <img src={imagePreview} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  <Camera size={48} color="var(--primary-color)" />
+                )}
+              </div>
+              {imagePreview && (
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    setImagePreview(null);
+                    setFormData({ ...formData, profileImage: null });
+                    document.getElementById('profileImageInput').value = '';
+                  }}
+                  style={{
+                    background: 'transparent', border: 'none', color: '#ff4d4f', marginTop: '1rem', cursor: 'pointer', fontSize: '0.9rem', fontWeight: '500'
+                  }}
+                >
+                  Remove Picture
+                </button>
+              )}
+              <input id="profileImageInput" type="file" name="profileImage" accept="image/*" onChange={handleChange} style={{ display: 'none' }} />
+            </div>
 
             <div className="form-group">
               <label>Shop Name</label>
@@ -165,7 +228,7 @@ const ShopRegistration = () => {
               {errors.confirmPassword && <small style={{ color: 'red' }}>{errors.confirmPassword}</small>}
             </div>
             
-            <button type="submit" className="btn btn-primary w-100 mt-3" disabled={loading || Object.keys(errors).some((field) => errors[field])}>
+            <button type="submit" className="btn btn-primary w-100 mt-4" disabled={loading || Object.keys(errors).some((field) => errors[field])}>
               {loading ? 'Registering...' : 'Register'}
             </button>
           </form>

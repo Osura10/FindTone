@@ -9,15 +9,21 @@ const AllItems = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  // Shops see their own listings; buyers and admins browse the live marketplace
+  const role = (sessionStorage.getItem('role') || localStorage.getItem('role') || 'buyer').toLowerCase();
+  const isShop = role === 'shop';
+
   const fetchItems = async () => {
     setLoading(true);
     setError('');
     try {
-      const data = await apiCall('/listings/mine');
+      const data = await apiCall(isShop ? '/listings/mine' : '/listings');
       setItems(Array.isArray(data) ? data : (data.items || []));
     } catch (err) {
       console.error('Failed to fetch user listings:', err);
-      setError('Unable to load your listings. Please make sure you are logged in.');
+      setError(isShop
+        ? 'Unable to load your listings. Please make sure you are logged in.'
+        : 'Unable to load marketplace listings. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -57,8 +63,14 @@ const AllItems = () => {
   return (
     <div className="animate-fade-in-up" style={{ padding: '1rem 0' }}>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '2.5rem', gap: '1.25rem' }}>
-        <h1 className="text-gradient" style={{ fontSize: '2.5rem', margin: 0 }}>Your Items</h1>
-        <p style={{ color: 'var(--text-secondary)', margin: 0 }}>Manage your listed instruments and check evaluation status</p>
+        <h1 className="text-gradient" style={{ fontSize: '2.5rem', margin: 0, fontWeight: '800' }}>
+          {isShop ? 'Your Items' : 'Marketplace Items'}
+        </h1>
+        <p style={{ color: 'var(--text-secondary)', margin: 0, maxWidth: '600px', textAlign: 'center' }}>
+          {isShop
+            ? 'Manage your listed instruments and check evaluation status'
+            : 'Explore all musical instruments, gear, and equipment available across MusicMarket.'}
+        </p>
         
         {/* Search Bar & Refresh */}
         <div style={{ display: 'flex', gap: '12px', width: '100%', maxWidth: '600px' }}>
@@ -66,7 +78,7 @@ const AllItems = () => {
             <Search size={22} style={{ color: 'var(--text-secondary)', marginRight: '1rem' }} />
             <input
               type="text"
-              placeholder="Search your inventory..."
+              placeholder={isShop ? "Search your inventory..." : "Search instruments, gear, brands..."}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               style={{ 
@@ -110,7 +122,7 @@ const AllItems = () => {
       {loading ? (
         <div style={{ textAlign: 'center', padding: '4rem 0', color: 'var(--text-secondary)' }}>
           <div className="spinner" style={{ margin: '0 auto 1rem auto' }}></div>
-          <p>Loading your inventory...</p>
+          <p>{isShop ? 'Loading your inventory...' : 'Loading marketplace...'}</p>
         </div>
       ) : (
         /* Items Grid */
@@ -203,14 +215,20 @@ const AllItems = () => {
             <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '4rem 1rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
               <Package size={48} style={{ color: 'var(--text-secondary)', opacity: 0.6 }} />
               <h3 style={{ margin: 0, color: '#eaeaea' }}>
-                {searchTerm ? `No listings match "${searchTerm}"` : "You haven't posted any instruments yet"}
+                {searchTerm
+                  ? `No listings match "${searchTerm}"`
+                  : isShop ? "You haven't posted any instruments yet" : 'No instruments are listed yet'}
               </h3>
-              <p style={{ color: 'var(--text-secondary)', margin: 0, maxWidth: '400px' }}>
-                Start selling by creating your first post. Upload photos and provide instrument details.
-              </p>
-              <Link to="/seller/create" className="btn btn-primary" style={{ marginTop: '0.5rem', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-                <PlusCircle size={18} /> Create a Post
-              </Link>
+              {isShop && (
+                <>
+                  <p style={{ color: 'var(--text-secondary)', margin: 0, maxWidth: '400px' }}>
+                    Start selling by creating your first post. Upload photos and provide instrument details.
+                  </p>
+                  <Link to="/dashboard/create" className="btn btn-primary" style={{ marginTop: '0.5rem', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                    <PlusCircle size={18} /> Create a Post
+                  </Link>
+                </>
+              )}
             </div>
           )}
         </div>

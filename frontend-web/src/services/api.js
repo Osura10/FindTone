@@ -1,15 +1,18 @@
 const BASE_URL = 'http://localhost:5036/api';
 
 export const apiCall = async (endpoint, options = {}) => {
-  const token = localStorage.getItem('token');
-  const isFormData = options.body instanceof FormData;
+  // Check sessionStorage first (per-tab isolation) then fallback to localStorage
+  const token = sessionStorage.getItem('token') || localStorage.getItem('token');
   
   const headers = {
-    ...(!isFormData && { 'Content-Type': 'application/json' }),
     ...(token && { 'Authorization': `Bearer ${token}` }),
     ...options.headers,
   };
 
+  // Let the browser set the multipart boundary for FormData uploads
+  if (!(options.body instanceof FormData) && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json';
+  }
 
   let response;
   try {
@@ -26,15 +29,15 @@ export const apiCall = async (endpoint, options = {}) => {
   if (!response.ok) {
     let errorMessage = 'API error';
     try {
-      const errorData = await response.json();
-      errorMessage = errorData.message || errorData.title || (typeof errorData === 'string' ? errorData : JSON.stringify(errorData));
-    } catch (e) {
+      const text = await response.text();
       try {
-        const text = await response.text();
-        errorMessage = text || response.statusText;
+        const errorData = JSON.parse(text);
+        errorMessage = errorData.message || errorData.title || (typeof errorData === 'string' ? errorData : JSON.stringify(errorData));
       } catch {
-        errorMessage = response.statusText;
+        errorMessage = text || response.statusText;
       }
+    } catch (e) {
+      errorMessage = response.statusText;
     }
     const err = new Error(errorMessage);
     err.status = response.status;
