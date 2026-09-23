@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search } from 'lucide-react';
+import { Search, Music, ShoppingBag, Sparkles } from 'lucide-react';
 
 const dummyItems = [
   { id: 1, name: 'Fender Stratocaster', price: '$850', condition: 'Used', image: 'https://images.unsplash.com/photo-1564186763535-ebb55ef3d1db?auto=format&fit=crop&q=80&w=300' },
@@ -19,15 +19,28 @@ const AllItems = () => {
 
   return (
     <div className="animate-fade-in-up" style={{ padding: '1rem 0' }}>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '3.5rem', gap: '1.5rem' }}>
-        <h1 className="text-gradient" style={{ fontSize: '2.5rem', margin: 0 }}>Your Items</h1>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '3rem', gap: '1rem', textAlign: 'center' }}>
+        <h1 className="text-gradient" style={{ fontSize: '2.5rem', margin: 0, fontWeight: '800' }}>Marketplace Items</h1>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '1rem', margin: 0, maxWidth: '600px' }}>
+          Explore all musical instruments, gear, and equipment available across MusicMarket.
+        </p>
         
         {/* Search Bar */}
-        <div className="glass-panel" style={{ display: 'flex', alignItems: 'center', padding: '0.75rem 1.5rem', width: '100%', maxWidth: '600px', borderRadius: '30px', boxShadow: '0 8px 32px rgba(0,0,0,0.15)' }}>
+        <div className="glass-panel" style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          padding: '0.85rem 1.5rem', 
+          width: '100%', 
+          maxWidth: '620px', 
+          borderRadius: '30px', 
+          boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+          border: '1px solid rgba(255, 255, 255, 0.15)',
+          marginTop: '0.5rem'
+        }}>
           <Search size={22} style={{ color: 'var(--text-secondary)', marginRight: '1rem' }} />
           <input
             type="text"
-            placeholder="Search your inventory..."
+            placeholder="Search instruments, gear, brands..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             style={{ 
@@ -36,7 +49,7 @@ const AllItems = () => {
               color: 'white', 
               outline: 'none', 
               width: '100%',
-              fontSize: '1.1rem'
+              fontSize: '1rem'
             }}
           />
         </div>
@@ -45,36 +58,60 @@ const AllItems = () => {
       {/* Items Grid */}
       <div style={{ 
         display: 'grid', 
-        gridTemplateColumns: 'repeat(4, 1fr)', 
+        gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', 
         gap: '2rem' 
       }}>
         {filteredItems.map(item => (
-          <div key={item.id} className="glass-panel" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', transition: 'transform 0.3s ease', cursor: 'pointer' }} onMouseOver={(e) => e.currentTarget.style.transform = 'translateY(-5px)'} onMouseOut={(e) => e.currentTarget.style.transform = 'translateY(0)'}>
+          <div 
+            key={item.id} 
+            className="glass-panel" 
+            style={{ 
+              overflow: 'hidden', 
+              display: 'flex', 
+              flexDirection: 'column', 
+              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)', 
+              cursor: 'pointer',
+              borderRadius: '16px',
+              border: '1px solid rgba(255, 255, 255, 0.08)'
+            }} 
+            onMouseOver={(e) => {
+              e.currentTarget.style.transform = 'translateY(-6px)';
+              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.25)';
+              e.currentTarget.style.boxShadow = '0 12px 30px rgba(0,0,0,0.4)';
+            }} 
+            onMouseOut={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)';
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+          >
             <div style={{ height: '200px', width: '100%', overflow: 'hidden', position: 'relative' }}>
               <img src={item.image} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               <div style={{ 
                 position: 'absolute', 
-                top: '10px', 
-                right: '10px', 
-                background: 'rgba(0,0,0,0.7)',
-                padding: '0.3rem 0.8rem',
+                top: '12px', 
+                right: '12px', 
+                background: 'rgba(18, 16, 24, 0.85)',
+                backdropFilter: 'blur(8px)',
+                padding: '0.35rem 0.8rem',
                 borderRadius: '20px',
-                fontSize: '0.8rem',
-                fontWeight: 'bold',
-                color: item.condition === 'Brand New' ? '#00f5d4' : item.condition === 'Rent' ? '#fee440' : '#f15bb5'
+                fontSize: '0.75rem',
+                fontWeight: '700',
+                color: item.condition === 'Brand New' ? '#00f5d4' : item.condition === 'Rent' ? '#fee440' : '#f15bb5',
+                border: '1px solid rgba(255,255,255,0.1)'
               }}>
                 {item.condition}
               </div>
             </div>
             <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              <h3 style={{ fontSize: '1.2rem', margin: 0 }}>{item.name}</h3>
-              <p style={{ color: 'var(--primary-hover)', fontSize: '1.25rem', fontWeight: 'bold', margin: 0 }}>{item.price}</p>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: '600', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</h3>
+              <p style={{ color: 'var(--primary-hover)', fontSize: '1.25rem', fontWeight: '800', margin: 0 }}>{item.price}</p>
             </div>
           </div>
         ))}
         {filteredItems.length === 0 && (
-          <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '3rem', color: 'var(--text-secondary)' }}>
-            No items found matching "{searchTerm}"
+          <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '4rem 2rem', color: 'var(--text-secondary)' }}>
+            <p style={{ fontSize: '1.1rem' }}>No items found matching "{searchTerm}"</p>
           </div>
         )}
       </div>

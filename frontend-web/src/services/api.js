@@ -1,7 +1,8 @@
 const BASE_URL = 'http://localhost:5036/api';
 
 export const apiCall = async (endpoint, options = {}) => {
-  const token = localStorage.getItem('token');
+  // Check sessionStorage first (per-tab isolation) then fallback to localStorage
+  const token = sessionStorage.getItem('token') || localStorage.getItem('token');
   
   const headers = {
     ...(token && { 'Authorization': `Bearer ${token}` }),

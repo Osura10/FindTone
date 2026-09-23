@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from langchain_core.messages import HumanMessage
-from Agent_01.agent_01 import create_music_agent
+from ChatBot.agent_01 import create_music_agent
 
 app = FastAPI(title="MusicMarket AI Service")
 

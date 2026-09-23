@@ -6,7 +6,7 @@ const features = [
   {
     icon: <FileCheck className="feature-icon" />,
     title: 'Listing Creation & Verification Agent',
-    description: 'Helps sellers create complete and accurate instrument listings from the details they provide. It verifies the information using available tools, identifies missing or incorrect details, and prepares the listing for human approval before publishing.',
+    description: 'Helps shops create complete and accurate instrument listings from the details they provide. It verifies the information using available tools, identifies missing or incorrect details, and prepares the listing for human approval before publishing.',
     delay: 'delay-100'
   },
   {

@@ -6,7 +6,10 @@ public class User
     public string Name { get; set; } = ""; // Also acts as Shop Name for shop role
     public string Email { get; set; } = "";
     public string PasswordHash { get; set; } = "";
-    public string Role { get; set; } = "buyer"; 
+    public string Role { get; set; } = "buyer"; // buyer, shop, admin
+    
+    // Approval Status: true for buyer, false for shop and admin
+    public bool Approval { get; set; } = false;
     
     // Additional fields
     public string? PhoneNumber { get; set; }

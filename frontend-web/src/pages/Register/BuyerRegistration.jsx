@@ -85,7 +85,11 @@ const BuyerRegistration = () => {
         method: 'POST',
         body: payload
       });
-      navigate('/login');
+      navigate('/login', {
+        state: {
+          successMessage: 'Registration successful! You can now log in to your account.'
+        }
+      });
     } catch (err) {
       console.error(err);
       if (err.message && err.message.includes('already used')) {

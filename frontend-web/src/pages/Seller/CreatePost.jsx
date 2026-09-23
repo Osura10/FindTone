@@ -1,7 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Upload, Plus } from 'lucide-react';
+import { apiCall } from '../../services/api';
 
 const CreatePost = () => {
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({
     name: '',
     category: '',
@@ -14,6 +17,17 @@ const CreatePost = () => {
     location: '',
     description: '',
   });
+
+  useEffect(() => {
+    // Guard: Only Shops can access Create Post
+    apiCall('/auth/me').then(user => {
+      if (user && user.role !== 'shop') {
+        navigate('/dashboard/items');
+      }
+    }).catch(() => {
+      navigate('/login');
+    });
+  }, [navigate]);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });

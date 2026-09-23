@@ -94,7 +94,11 @@ const ShopRegistration = () => {
         method: 'POST',
         body: payload
       });
-      navigate('/login');
+      navigate('/login', {
+        state: {
+          infoMessage: 'Shop registration submitted successfully! Please wait until your account is verified by an administrator before logging in.'
+        }
+      });
     } catch (err) {
       console.error(err);
       if (err.message && err.message.includes('already used')) {

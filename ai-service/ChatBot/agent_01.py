@@ -12,8 +12,8 @@ from duckduckgo_search import DDGS
 
 # --- 1. Configuration Settings --- #
 # Note: Paths are relative to where main.py will run (ai-service folder)
-PDF_PATH = "Agent_01/Doc/MusicMarket_Information_RAG_Knowledge_Document.pdf"
-VECTOR_DB_DIR = "Agent_01/chroma_db"
+PDF_PATH = "ChatBot/Doc/MusicMarket_Information_RAG_Knowledge_Document.pdf"
+VECTOR_DB_DIR = "ChatBot/chroma_db"
 OLLAMA_MODEL = "llama3.1:8b"
 OLLAMA_EMBEDDING_MODEL = "nomic-embed-text" # Best local embedding model
 
@@ -28,10 +28,10 @@ def initialize_rag():
     
     # Check if the database already exists to avoid re-creating it every time
     if os.path.exists(VECTOR_DB_DIR) and os.listdir(VECTOR_DB_DIR):
-        print("[Agent_01] Loading existing Vector Database...")
+        print("[ChatBot] Loading existing Vector Database...")
         vectorstore = Chroma(persist_directory=VECTOR_DB_DIR, embedding_function=embeddings)
     else:
-        print("[Agent_01] Creating new Vector Database from PDF...")
+        print("[ChatBot] Creating new Vector Database from PDF...")
         # Step A: Load the PDF file
         loader = PyPDFLoader(PDF_PATH)
         docs = loader.load()

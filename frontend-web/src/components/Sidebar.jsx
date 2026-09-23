@@ -1,47 +1,88 @@
-import React from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, PlusCircle, User, LogOut } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { LayoutDashboard, PlusCircle, User, LogOut, ShieldCheck, Store, Users, ShoppingBag } from 'lucide-react';
+import { apiCall } from '../services/api';
 
 const Sidebar = () => {
   const navigate = useNavigate();
-  const role = localStorage.getItem('role') || 'buyer'; // fallback to buyer
+  const location = useLocation();
+  const [role, setRole] = useState(() => (sessionStorage.getItem('role') || localStorage.getItem('role') || 'buyer').toLowerCase());
+
+  useEffect(() => {
+    const fetchUserRole = async () => {
+      try {
+        const token = sessionStorage.getItem('token') || localStorage.getItem('token');
+        if (!token) {
+          navigate('/login');
+          return;
+        }
+        const data = await apiCall('/auth/me');
+        if (data && data.role) {
+          const userRole = data.role.toLowerCase();
+          setRole(userRole);
+          sessionStorage.setItem('role', userRole);
+          localStorage.setItem('role', userRole);
+        }
+      } catch (err) {
+        console.error('Failed to sync role in sidebar', err);
+      }
+    };
+
+    fetchUserRole();
+  }, [location.pathname, navigate]);
 
   const handleLogout = () => {
+    sessionStorage.removeItem('token');
+    sessionStorage.removeItem('role');
     localStorage.removeItem('token');
     localStorage.removeItem('role');
     navigate('/login');
   };
 
-  // Base items for everyone (Buyer, Admin, Shop, Seller)
-  let navItems = [
-    { name: 'All Items', path: '/dashboard/items', icon: LayoutDashboard },
-  ];
+  // Navigation items based on role
+  let navItems = [];
 
-  // Shop and Seller get the 'Create Post' option
-  if (role === 'shop' || role === 'seller') {
-    navItems.push({ name: 'Create Post', path: '/dashboard/create', icon: PlusCircle });
+  if (role === 'admin') {
+    // Admin specific top menu: Dashboard, Admins, Shops, Buyers
+    navItems.push(
+      { name: 'Dashboard', path: '/dashboard/admin', icon: LayoutDashboard },
+      { name: 'Admins', path: '/dashboard/admin/admins', icon: ShieldCheck },
+      { name: 'Shops', path: '/dashboard/admin/shops', icon: Store },
+      { name: 'Buyers', path: '/dashboard/admin/buyers', icon: Users },
+      { name: 'All Items', path: '/dashboard/items', icon: ShoppingBag }
+    );
+  } else {
+    // Non-admin items
+    navItems.push({ name: 'All Items', path: '/dashboard/items', icon: LayoutDashboard });
+
+    // ONLY Shop gets the 'Create Post' option
+    if (role === 'shop') {
+      navItems.push({ name: 'Create Post', path: '/dashboard/create', icon: PlusCircle });
+    }
   }
 
-  // Everyone gets a profile
+  // Everyone gets their own Profile
   navItems.push({ name: 'Profile', path: '/dashboard/profile', icon: User });
 
-  // Format the role for display (e.g., 'shop' -> 'Shop')
+  // Format role for display
   const displayRole = role.charAt(0).toUpperCase() + role.slice(1);
 
   return (
-      <div className="glass-panel sidebar-container" style={{
-        width: '280px',
-        height: 'calc(100vh - 2rem)',
-        margin: '1rem 0 1rem 1rem',
-        display: 'flex',
-        flexDirection: 'column',
-        padding: '2.5rem 1.5rem',
-        position: 'sticky',
-        top: '1rem'
-      }}>
-        <div style={{ marginBottom: '3rem', textAlign: 'center' }}>
-          <h2 className="text-gradient-accent" style={{ fontSize: '1.8rem', fontWeight: '900', letterSpacing: '-1px', margin: 0 }}>MusicMarket</h2>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '0.5rem', fontWeight: '500' }}>{displayRole} Dashboard</p>
+    <div className="glass-panel sidebar-container" style={{
+      width: '280px',
+      height: 'calc(100vh - 2rem)',
+      margin: '1rem 0 1rem 1rem',
+      display: 'flex',
+      flexDirection: 'column',
+      padding: '2.5rem 1.5rem',
+      position: 'sticky',
+      top: '1rem'
+    }}>
+      <div style={{ marginBottom: '3rem', textAlign: 'center' }}>
+        <h2 className="text-gradient-accent" style={{ fontSize: '1.8rem', fontWeight: '900', letterSpacing: '-1px', margin: 0 }}>MusicMarket</h2>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '0.5rem', fontWeight: '500' }}>
+          {displayRole} Portal
+        </p>
       </div>
 
       <nav style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -49,6 +90,7 @@ const Sidebar = () => {
           <NavLink
             key={item.name}
             to={item.path}
+            end
             style={({ isActive }) => ({
               display: 'flex',
               alignItems: 'center',

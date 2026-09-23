@@ -23,7 +23,7 @@ const RegisterSelection = () => {
           <p className="register-subtitle">Choose how you want to use the platform.</p>
         </div>
 
-        <div className="register-options">
+        <div className="register-options" style={{ maxWidth: '750px', margin: '0 auto', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
           <div className="register-card glass-panel" onClick={() => navigate('/register/buyer')}>
             <div className="register-icon-wrapper" style={{ background: 'linear-gradient(135deg, rgba(123, 44, 191, 0.2), rgba(255, 0, 110, 0.2))' }}>
               <ShoppingBag size={32} className="register-icon" />
@@ -33,15 +33,6 @@ const RegisterSelection = () => {
             <button className="btn btn-outline w-100 mt-3">Select Buyer</button>
           </div>
 
-          <div className="register-card glass-panel" onClick={() => navigate('/register/seller')}>
-            <div className="register-icon-wrapper" style={{ background: 'linear-gradient(135deg, rgba(58, 12, 163, 0.2), rgba(123, 44, 191, 0.2))' }}>
-              <User size={32} className="register-icon" />
-            </div>
-            <h3>Seller Registration</h3>
-            <p>I want to sell my personal musical instruments safely.</p>
-            <button className="btn btn-outline w-100 mt-3">Select Seller</button>
-          </div>
-
           <div className="register-card glass-panel" onClick={() => navigate('/register/shop')}>
             <div className="register-icon-wrapper" style={{ background: 'linear-gradient(135deg, rgba(255, 0, 110, 0.2), rgba(58, 12, 163, 0.2))' }}>
               <Store size={32} className="register-icon" />
@@ -49,15 +40,6 @@ const RegisterSelection = () => {
             <h3>Shop Registration</h3>
             <p>I represent a local shop and want to list inventory.</p>
             <button className="btn btn-outline w-100 mt-3">Select Shop</button>
-          </div>
-
-          <div className="register-card glass-panel" onClick={() => navigate('/register/admin')}>
-            <div className="register-icon-wrapper" style={{ background: 'linear-gradient(135deg, rgba(10, 150, 200, 0.2), rgba(10, 50, 255, 0.2))' }}>
-              <ShieldCheck size={32} className="register-icon" />
-            </div>
-            <h3>Admin Registration</h3>
-            <p>I am a platform administrator.</p>
-            <button className="btn btn-outline w-100 mt-3">Select Admin</button>
           </div>
         </div>
       </div>
