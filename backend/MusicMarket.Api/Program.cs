@@ -5,6 +5,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using MusicMarket.Api.Data;
 using DotNetEnv;
+using CloudinaryDotNet;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -15,12 +16,22 @@ Env.Load();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
+// Cloudinary
+var cloudinaryUrl = Environment.GetEnvironmentVariable("CLOUDINARY_URL");
+if (!string.IsNullOrEmpty(cloudinaryUrl))
+{
+    var cloudinary = new Cloudinary(cloudinaryUrl);
+    cloudinary.Api.Secure = true;
+    builder.Services.AddSingleton(cloudinary);
+}
+
 // Database
 var connectionString = Environment.GetEnvironmentVariable("DATABASE_URI") 
                        ?? builder.Configuration.GetConnectionString("Default");
 
 builder.Services.AddDbContext<AppDbContext>(opt =>
     opt.UseNpgsql(connectionString));
+
 
 // JWT Authentication
 var jwt = builder.Configuration.GetSection("Jwt");

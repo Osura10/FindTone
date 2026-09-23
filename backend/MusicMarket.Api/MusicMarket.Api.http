@@ -1,6 +1,101 @@
 @MusicMarket.Api_HostAddress = http://localhost:5036
+@authToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
-GET {{MusicMarket.Api_HostAddress}}/weatherforecast/
+### 1. Register a Seller User
+POST {{MusicMarket.Api_HostAddress}}/api/auth/register
+Content-Type: application/json
+
+{
+  "name": "Kasun Perera",
+  "email": "kasun@musicmarket.lk",
+  "password": "Password123!",
+  "role": "seller",
+  "phoneNumber": "+94771234567"
+}
+
+### 2. Login to obtain JWT Token
+POST {{MusicMarket.Api_HostAddress}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "kasun@musicmarket.lk",
+  "password": "Password123!"
+}
+
+### 3. Create Listing [Authorize, multipart/form-data]
+# Note: When using VS Code REST Client or Swagger UI, upload real image files
+POST {{MusicMarket.Api_HostAddress}}/api/listings
+Authorization: Bearer {{authToken}}
+Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="Title"
+
+Fender Player Stratocaster - Polar White (Mint Condition)
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="Category"
+
+Electric Guitar
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="Brand"
+
+Fender
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="Model"
+
+Player Stratocaster
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="Condition"
+
+excellent
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="Year"
+
+2022
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="ListingType"
+
+Sell
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="Price"
+
+240000
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="Location"
+
+Colombo 07
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="Description"
+
+Bought brand new, barely used at home. Includes Fender gig bag and whammy bar.
+------WebKitFormBoundary7MA4YWxkTrZu0gW--
+
+### 4. Get Public Listings with Filters and Pagination
+GET {{MusicMarket.Api_HostAddress}}/api/listings?category=Electric%20Guitar&status=LIVE&page=1&pageSize=12
 Accept: application/json
 
-###
+### 5. Get Listing by ID (Public Full Details)
+GET {{MusicMarket.Api_HostAddress}}/api/listings/1
+Accept: application/json
+
+### 6. Get Current User's Listings [Authorize]
+GET {{MusicMarket.Api_HostAddress}}/api/listings/mine
+Authorization: Bearer {{authToken}}
+Accept: application/json
+
+### 7. Update Listing Price [Authorize, Owner Only]
+PUT {{MusicMarket.Api_HostAddress}}/api/listings/1/price
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "newPrice": 225000
+}
+
+### 8. Get Instrument Catalog (All Models)
+GET {{MusicMarket.Api_HostAddress}}/api/catalog
+Accept: application/json
+
+### 9. Get Instrument Catalog Filtered by Category
+GET {{MusicMarket.Api_HostAddress}}/api/catalog?category=Acoustic%20Guitar
+Accept: application/json
