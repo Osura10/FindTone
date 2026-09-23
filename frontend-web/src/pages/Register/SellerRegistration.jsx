@@ -67,10 +67,10 @@ const SellerRegistration = () => {
       navigate('/login');
     } catch (err) {
       console.error(err);
-      if (err.response && err.response.status === 400) {
+      if (err.status === 409 || err.message?.toLowerCase().includes('email')) {
         setErrors({ email: 'This email is already registered. Please try logging in.' });
       } else {
-        setErrors({ email: 'Email already registered or registration failed.' });
+        setErrors({ form: err.message || 'Registration failed. Please try again.' });
       }
     } finally {
       setLoading(false);
@@ -95,7 +95,14 @@ const SellerRegistration = () => {
             <p className="register-subtitle mt-2">Create your account to start selling instruments.</p>
           </div>
           
+          {errors.form && (
+            <div style={{ color: '#ff6b6b', background: 'rgba(255, 107, 107, 0.15)', border: '1px solid rgba(255, 107, 107, 0.3)', padding: '12px', borderRadius: '8px', marginBottom: '16px', fontSize: '14px', textAlign: 'center' }}>
+              {errors.form}
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} noValidate>
+
             <div className="form-group">
               <label>Name</label>
               <input type="text" name="name" value={formData.name} onChange={handleChange} className="form-control" placeholder="Enter your full name" />
