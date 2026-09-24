@@ -1,18 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, Plus, X, Image as ImageIcon, CheckCircle } from 'lucide-react';
+import { Upload, Plus, X, CheckCircle, TrendingUp, Loader } from 'lucide-react';
 import { apiCall } from '../../services/api';
-
-const CATEGORIES = [
-  'Acoustic Guitar',
-  'Electric Guitar',
-  'Bass Guitar',
-  'Keyboard',
-  'Drum Kit',
-  'Microphone',
-  'Amplifier',
-  'Other'
-];
 
 const CONDITIONS = [
   { value: 'new', label: 'Brand New (Unopened)' },
@@ -24,13 +13,24 @@ const CONDITIONS = [
   { value: 'for_parts', label: 'For Parts / Not Working' }
 ];
 
+const VERDICT_STYLES = {
+  SUSPICIOUSLY_LOW: { bg: 'rgba(255,107,107,0.2)', color: '#ff6b6b', border: 'rgba(255,107,107,0.4)', label: 'Suspiciously Low' },
+  GREAT_DEAL:       { bg: 'rgba(81,207,102,0.2)',  color: '#51cf66', border: 'rgba(81,207,102,0.4)',  label: 'Great Deal' },
+  FAIR:             { bg: 'rgba(81,207,102,0.2)',  color: '#51cf66', border: 'rgba(81,207,102,0.4)',  label: 'Fair Price' },
+  SLIGHTLY_HIGH:    { bg: 'rgba(255,212,59,0.2)',  color: '#ffd43b', border: 'rgba(255,212,59,0.4)',  label: 'Slightly High' },
+  OVERPRICED:       { bg: 'rgba(255,107,107,0.2)', color: '#ff6b6b', border: 'rgba(255,107,107,0.4)', label: 'Overpriced' },
+  UNKNOWN:          { bg: 'rgba(134,142,150,0.2)', color: '#adb5bd', border: 'rgba(134,142,150,0.4)', label: 'Unknown' },
+};
+
+const fmt = (n) => Math.round(n).toLocaleString('en-LK');
+
 const CreatePost = () => {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
 
   const [formData, setFormData] = useState({
     title: '',
-    category: 'Electric Guitar',
+    category: '',
     brand: '',
     model: '',
     condition: 'good',
@@ -41,6 +41,7 @@ const CreatePost = () => {
     description: '',
   });
 
+  const [categories, setCategories] = useState([]);
   const [selectedImages, setSelectedImages] = useState([]);
   const [imagePreviews, setImagePreviews] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
@@ -48,27 +49,46 @@ const CreatePost = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  // Price-check state
+  const [priceChecking, setPriceChecking] = useState(false);
+  const [priceCheckResult, setPriceCheckResult] = useState(null);
+  const [priceCheckError, setPriceCheckError] = useState('');
+
   useEffect(() => {
-    // Guard: Only Shops can access Create Post
+    // Guard: Both Shops and Buyers can access Create Post
     apiCall('/auth/me').then(user => {
-      if (user && user.role !== 'shop') {
+      if (user && !['shop', 'buyer'].includes(user.role)) {
         navigate('/dashboard/items');
       }
     }).catch(() => {
       navigate('/login');
     });
+
+    // Fetch categories
+    apiCall('/catalog').then(data => {
+      if (Array.isArray(data)) {
+        const uniqueCategories = [...new Set(data.map(item => item.category))].filter(Boolean);
+        setCategories(uniqueCategories);
+        if (uniqueCategories.length > 0) {
+          setFormData(prev => ({ ...prev, category: uniqueCategories[0] }));
+        }
+      }
+    }).catch(err => console.error('Failed to fetch catalog categories', err));
   }, [navigate]);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
     setError('');
+    // Clear price check when relevant fields change
+    if (['brand', 'model', 'category', 'condition', 'price', 'year', 'description'].includes(e.target.name)) {
+      setPriceCheckResult(null);
+      setPriceCheckError('');
+    }
   };
 
   const handleFiles = (files) => {
     setError('');
     const newFiles = Array.from(files);
-    
-    // Filter valid image types and size (< 5MB)
     const validExtensions = ['image/jpeg', 'image/png', 'image/webp'];
     const validFiles = [];
 
@@ -91,8 +111,6 @@ const CreatePost = () => {
 
     const updatedImages = [...selectedImages, ...validFiles];
     setSelectedImages(updatedImages);
-
-    // Create object URLs for previews
     const newPreviews = validFiles.map(file => URL.createObjectURL(file));
     setImagePreviews([...imagePreviews, ...newPreviews]);
   };
@@ -111,20 +129,41 @@ const CreatePost = () => {
     setImagePreviews(updatedPreviews);
   };
 
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = () => {
-    setIsDragging(false);
-  };
-
+  const handleDragOver = (e) => { e.preventDefault(); setIsDragging(true); };
+  const handleDragLeave = () => setIsDragging(false);
   const handleDrop = (e) => {
     e.preventDefault();
     setIsDragging(false);
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleFiles(e.dataTransfer.files);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) handleFiles(e.dataTransfer.files);
+  };
+
+  const handlePriceCheck = async () => {
+    const { brand, model, category, condition } = formData;
+    if (!brand.trim() || !model.trim() || !category || !condition) {
+      setPriceCheckError('Please fill in Brand, Model, Category, and Condition before checking the price.');
+      return;
+    }
+    setPriceCheckError('');
+    setPriceCheckResult(null);
+    setPriceChecking(true);
+    try {
+      const result = await apiCall('/listings/price-check', {
+        method: 'POST',
+        body: JSON.stringify({
+          brand: formData.brand.trim(),
+          model: formData.model.trim(),
+          category: formData.category,
+          condition: formData.condition,
+          year: formData.year ? parseInt(formData.year, 10) : null,
+          price: formData.price ? parseFloat(formData.price) : 0,
+          description: formData.description.trim(),
+        }),
+      });
+      setPriceCheckResult(result);
+    } catch (err) {
+      setPriceCheckError(err.message || 'Price check failed. Please try again.');
+    } finally {
+      setPriceChecking(false);
     }
   };
 
@@ -158,7 +197,6 @@ const CreatePost = () => {
       data.append('Location', formData.location.trim());
       data.append('Description', formData.description.trim());
 
-      // Append image files
       selectedImages.forEach((file) => {
         data.append('Images', file);
       });
@@ -200,6 +238,10 @@ const CreatePost = () => {
   };
 
   const labelStyle = { fontSize: '0.95rem', color: '#eaeaea', fontWeight: '500' };
+
+  const verdictStyle = priceCheckResult
+    ? (VERDICT_STYLES[priceCheckResult.verdict] || VERDICT_STYLES.UNKNOWN)
+    : VERDICT_STYLES.UNKNOWN;
 
   return (
     <div className="animate-fade-in-up" style={{ padding: '1rem 0', maxWidth: '800px', margin: '0 auto' }}>
@@ -256,7 +298,7 @@ const CreatePost = () => {
           {selectedImages.length === 0 ? (
             <>
               <Upload size={42} style={{ color: 'var(--text-secondary)', marginBottom: '0.75rem' }} />
-              <p style={{ color: '#fff', fontSize: '1rem', fontWeight: '500', margin: 0 }}>Click to browse or drag & drop photos here</p>
+              <p style={{ color: '#fff', fontSize: '1rem', fontWeight: '500', margin: 0 }}>Click to browse or drag &amp; drop photos here</p>
               <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '0.35rem' }}>Upload 1 to 6 photos (JPG, PNG, WebP up to 5MB each)</p>
             </>
           ) : (
@@ -324,8 +366,9 @@ const CreatePost = () => {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             <label style={labelStyle}>Category *</label>
-            <select name="category" value={formData.category} onChange={handleChange} style={selectStyle}>
-              {CATEGORIES.map(cat => (
+            <select name="category" value={formData.category} onChange={handleChange} style={selectStyle} required>
+              <option value="" disabled>Select a category</option>
+              {categories.map(cat => (
                 <option key={cat} value={cat}>{cat}</option>
               ))}
             </select>
@@ -389,20 +432,65 @@ const CreatePost = () => {
             </select>
           </div>
 
+          {/* Price field + Check Price button */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             <label style={labelStyle}>Price (LKR) *</label>
-            <input
-              type="number"
-              name="price"
-              value={formData.price}
-              onChange={handleChange}
-              placeholder="e.g. 185000"
-              min="1"
-              required
-              style={inputStyle}
-            />
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch' }}>
+              <input
+                type="number"
+                name="price"
+                value={formData.price}
+                onChange={handleChange}
+                placeholder="e.g. 185000"
+                min="1"
+                required
+                style={{ ...inputStyle, flex: 1 }}
+              />
+              <button
+                type="button"
+                id="btn-price-check"
+                onClick={handlePriceCheck}
+                disabled={priceChecking}
+                title="Check fair market price with AI"
+                style={{
+                  background: 'linear-gradient(135deg, #7c3aed, #a855f7)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  color: '#fff',
+                  padding: '0 14px',
+                  cursor: priceChecking ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontSize: '0.85rem',
+                  fontWeight: '600',
+                  whiteSpace: 'nowrap',
+                  opacity: priceChecking ? 0.7 : 1,
+                  transition: 'opacity 0.2s'
+                }}
+              >
+                {priceChecking
+                  ? <><Loader size={15} style={{ animation: 'spin 1s linear infinite' }} /> Checking...</>
+                  : <><TrendingUp size={15} /> Check Price</>
+                }
+              </button>
+            </div>
+
+            {/* Spinner hint */}
+            {priceChecking && (
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', margin: '4px 0 0 0' }}>
+                Checking market price… this can take up to 30 s.
+              </p>
+            )}
+
+            {/* Price-check inline error */}
+            {priceCheckError && (
+              <div style={{ color: '#ffd43b', background: 'rgba(255,212,59,0.12)', border: '1px solid rgba(255,212,59,0.3)', borderRadius: '8px', padding: '8px 12px', fontSize: '0.85rem', marginTop: '4px' }}>
+                {priceCheckError}
+              </div>
+            )}
           </div>
-          
+
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             <label style={labelStyle}>Location *</label>
             <input
@@ -416,6 +504,87 @@ const CreatePost = () => {
             />
           </div>
         </div>
+
+        {/* Price-check result card */}
+        {priceCheckResult && (
+          <div style={{
+            background: 'rgba(255,255,255,0.05)',
+            border: `1px solid ${verdictStyle.border}`,
+            borderRadius: '12px',
+            padding: '1.25rem 1.5rem',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.75rem',
+            animation: 'fadeIn 0.4s ease'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+              <span style={{ fontWeight: '700', fontSize: '1rem', color: '#fff' }}>AI Price Analysis</span>
+              <span style={{
+                background: verdictStyle.bg,
+                color: verdictStyle.color,
+                border: `1px solid ${verdictStyle.border}`,
+                padding: '4px 14px',
+                borderRadius: '20px',
+                fontSize: '0.8rem',
+                fontWeight: '700',
+                letterSpacing: '0.5px'
+              }}>
+                {verdictStyle.label}
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', marginBottom: '2px' }}>Fair Range</div>
+                <div style={{ color: '#fff', fontWeight: '700', fontSize: '1rem' }}>
+                  LKR {fmt(priceCheckResult.fair_range.min)} – {fmt(priceCheckResult.fair_range.max)}
+                </div>
+              </div>
+              <div>
+                <div style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', marginBottom: '2px' }}>Suggested Price</div>
+                <div style={{ color: '#a855f7', fontWeight: '700', fontSize: '1rem' }}>
+                  LKR {fmt(priceCheckResult.fair_price)}
+                </div>
+              </div>
+              {priceCheckResult.deviation_percent !== undefined && priceCheckResult.verdict !== 'UNKNOWN' && (
+                <div>
+                  <div style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', marginBottom: '2px' }}>Deviation</div>
+                  <div style={{ color: verdictStyle.color, fontWeight: '700', fontSize: '1rem' }}>
+                    {priceCheckResult.deviation_percent > 0 ? '+' : ''}{priceCheckResult.deviation_percent.toFixed(1)}%
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {priceCheckResult.explanation && (
+              <p style={{ color: '#c8c8c8', fontSize: '0.88rem', margin: 0, lineHeight: 1.6 }}>
+                {priceCheckResult.explanation}
+              </p>
+            )}
+
+            {priceCheckResult.verdict !== 'UNKNOWN' && priceCheckResult.fair_price > 0 && (
+              <button
+                type="button"
+                id="btn-use-suggested-price"
+                onClick={() => setFormData(prev => ({ ...prev, price: String(Math.round(priceCheckResult.fair_price)) }))}
+                style={{
+                  alignSelf: 'flex-start',
+                  background: 'rgba(168,85,247,0.2)',
+                  border: '1px solid rgba(168,85,247,0.5)',
+                  color: '#c084fc',
+                  borderRadius: '8px',
+                  padding: '6px 14px',
+                  cursor: 'pointer',
+                  fontSize: '0.85rem',
+                  fontWeight: '600',
+                  transition: 'background 0.2s'
+                }}
+              >
+                Use suggested price (LKR {fmt(priceCheckResult.fair_price)})
+              </button>
+            )}
+          </div>
+        )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           <label style={labelStyle}>Description *</label>

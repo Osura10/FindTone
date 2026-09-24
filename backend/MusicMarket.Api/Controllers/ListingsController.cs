@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using MusicMarket.Api.Data;
 using MusicMarket.Api.Dtos;
 using MusicMarket.Api.Models;
+using MusicMarket.Api.Services;
 
 namespace MusicMarket.Api.Controllers;
 
@@ -16,6 +17,7 @@ public class ListingsController : ControllerBase
 {
     private readonly AppDbContext _db;
     private readonly Cloudinary? _cloudinary;
+    private readonly AiServiceClient _ai;
     private static readonly HashSet<string> AllowedConditions = new(StringComparer.OrdinalIgnoreCase)
     {
         "new", "like_new", "excellent", "good", "fair", "poor", "for_parts"
@@ -25,10 +27,11 @@ public class ListingsController : ControllerBase
         ".jpg", ".jpeg", ".png", ".webp"
     };
 
-    public ListingsController(AppDbContext db, IServiceProvider serviceProvider)
+    public ListingsController(AppDbContext db, IServiceProvider serviceProvider, AiServiceClient ai)
     {
         _db = db;
         _cloudinary = serviceProvider.GetService<Cloudinary>();
+        _ai = ai;
     }
 
     /// <summary>
@@ -151,7 +154,34 @@ public class ListingsController : ControllerBase
 
         await _db.SaveChangesAsync();
 
+        // Call Fair Price Agent (fire-and-forget on failure)
+        var aiReq = new FairPriceRequest
+        {
+            ListingId = listing.Id,
+            Brand = listing.Brand,
+            Model = listing.Model,
+            Category = listing.Category,
+            Condition = listing.Condition,
+            Year = listing.Year,
+            AskingPrice = (float)listing.Price,
+            Description = listing.Description
+        };
+        var aiResult = await _ai.GetFairPriceAsync(aiReq);
+        if (aiResult != null)
+        {
+            listing.FairPrice = (decimal)aiResult.FairPrice;
+            listing.FairPriceMin = (decimal)aiResult.FairRange.Min;
+            listing.FairPriceMax = (decimal)aiResult.FairRange.Max;
+            listing.PriceVerdict = aiResult.Verdict;
+            listing.PriceDeviationPercent = aiResult.DeviationPercent;
+            listing.PriceConfidence = aiResult.Confidence;
+            listing.PriceExplanation = aiResult.Explanation;
+            listing.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+        }
+
         // Load seller info for response
+        await _db.Entry(listing).ReloadAsync();
         var sellerName = await _db.Users.Where(u => u.Id == sellerId).Select(u => u.Name).FirstOrDefaultAsync() ?? "";
 
         var responseDto = new ListingDetailDto
@@ -170,6 +200,13 @@ public class ListingsController : ControllerBase
             Location = listing.Location,
             Description = listing.Description,
             Status = listing.Status,
+            FairPrice = listing.FairPrice,
+            FairPriceMin = listing.FairPriceMin,
+            FairPriceMax = listing.FairPriceMax,
+            PriceVerdict = listing.PriceVerdict,
+            PriceDeviationPercent = listing.PriceDeviationPercent,
+            PriceConfidence = listing.PriceConfidence,
+            PriceExplanation = listing.PriceExplanation,
             CreatedAt = listing.CreatedAt,
             UpdatedAt = listing.UpdatedAt,
             Images = listing.Images.Select(img => new ListingImageDto
@@ -284,7 +321,7 @@ public class ListingsController : ControllerBase
     /// <summary>
     /// 3. Get full details of a listing by ID (public).
     /// </summary>
-    [HttpGet("{id}")]
+    [HttpGet("{id:int}")]
     public async Task<IActionResult> GetListingById(int id)
     {
         var listing = await _db.Listings
@@ -401,7 +438,7 @@ public class ListingsController : ControllerBase
     /// <summary>
     /// 5. Update listing price and log price history (owner only).
     /// </summary>
-    [HttpPut("{id}/price")]
+    [HttpPut("{id:int}/price")]
     [Authorize]
     public async Task<IActionResult> UpdatePrice(int id, [FromBody] UpdatePriceDto dto)
     {
@@ -446,6 +483,32 @@ public class ListingsController : ControllerBase
             await _db.SaveChangesAsync();
         }
 
+        // Call Fair Price Agent after price update
+        var aiReqPriceUpdate = new FairPriceRequest
+        {
+            ListingId = listing.Id,
+            Brand = listing.Brand,
+            Model = listing.Model,
+            Category = listing.Category,
+            Condition = listing.Condition,
+            Year = listing.Year,
+            AskingPrice = (float)listing.Price,
+            Description = listing.Description
+        };
+        var aiResultPriceUpdate = await _ai.GetFairPriceAsync(aiReqPriceUpdate);
+        if (aiResultPriceUpdate != null)
+        {
+            listing.FairPrice = (decimal)aiResultPriceUpdate.FairPrice;
+            listing.FairPriceMin = (decimal)aiResultPriceUpdate.FairRange.Min;
+            listing.FairPriceMax = (decimal)aiResultPriceUpdate.FairRange.Max;
+            listing.PriceVerdict = aiResultPriceUpdate.Verdict;
+            listing.PriceDeviationPercent = aiResultPriceUpdate.DeviationPercent;
+            listing.PriceConfidence = aiResultPriceUpdate.Confidence;
+            listing.PriceExplanation = aiResultPriceUpdate.Explanation;
+            listing.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+        }
+
         return Ok(new
         {
             ListingId = listing.Id,
@@ -456,7 +519,34 @@ public class ListingsController : ControllerBase
     }
 
     /// <summary>
-    /// 6. List CatalogModels with optional category filter.
+    /// 6. Price-check without saving — calls AI and returns result immediately.
+    /// </summary>
+    [HttpPost("price-check")]
+    [Authorize]
+    public async Task<IActionResult> PriceCheck([FromBody] PriceCheckDto dto)
+    {
+        var aiReq = new FairPriceRequest
+        {
+            Brand = dto.Brand,
+            Model = dto.Model,
+            Category = dto.Category,
+            Condition = dto.Condition,
+            Year = dto.Year,
+            AskingPrice = (float)dto.Price,
+            Description = dto.Description
+        };
+
+        var result = await _ai.GetFairPriceAsync(aiReq);
+        if (result == null)
+        {
+            return StatusCode(503, new { message = "Price check is unavailable right now. Please try again later." });
+        }
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// 7. List CatalogModels with optional category filter.
     /// </summary>
     [HttpGet("/api/catalog")]
     public async Task<IActionResult> GetCatalog([FromQuery] string? category)

@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using MusicMarket.Api.Data;
+using MusicMarket.Api.Services;
 using DotNetEnv;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -47,6 +48,20 @@ builder.Services
     });
 
 builder.Services.AddAuthorization();
+
+// AI Service typed HttpClient
+var aiBaseUrl = Environment.GetEnvironmentVariable("AI_SERVICE_URL") ?? "http://localhost:8000";
+var aiInternalKey = Environment.GetEnvironmentVariable("AI_INTERNAL_KEY") ?? "";
+
+builder.Services.AddHttpClient<AiServiceClient>(client =>
+{
+    client.BaseAddress = new Uri(aiBaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(60);
+    if (!string.IsNullOrEmpty(aiInternalKey))
+    {
+        client.DefaultRequestHeaders.Add("X-Internal-Key", aiInternalKey);
+    }
+});
 
 // CORS for Frontend
 builder.Services.AddCors(options =>

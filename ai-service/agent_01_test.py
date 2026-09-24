@@ -1,6 +1,7 @@
 import uuid
 from langchain_core.messages import HumanMessage
 from ChatBot.agent_01 import create_music_agent
+from llm_config import message_text
 
 def main():
     print("Initializing AI Service...")
@@ -37,7 +38,7 @@ def main():
             )
             
             # The agent returns a list of messages. The last one is the final answer.
-            final_answer = response["messages"][-1].content
+            final_answer = message_text(response["messages"][-1])
             print(f"\nAgent: {final_answer}\n")
             
         except Exception as e:

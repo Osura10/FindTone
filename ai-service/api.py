@@ -1,9 +1,13 @@
 import uuid
-from fastapi import FastAPI
+import os
+from typing import Optional, List
+from fastapi import FastAPI, Header, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from langchain_core.messages import HumanMessage
 from ChatBot.agent_01 import create_music_agent
+from llm_config import message_text
+from Agent_01.agent import run_fair_price
 
 app = FastAPI(title="MusicMarket AI Service")
 
@@ -16,10 +20,49 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize the agent once
-print("Initializing Agent 01...")
+# Initialize the agents once
+print("Initializing ChatBot Agent 01...")
 agent_01 = create_music_agent()
-print("Agent 01 is ready!")
+print("ChatBot Agent 01 is ready!")
+print("Fair Price Agent is ready!")
+
+def verify_internal_key(x_internal_key: Optional[str] = Header(None)):
+    expected_key = os.getenv("X_INTERNAL_KEY")
+    if expected_key:
+        if x_internal_key != expected_key:
+            raise HTTPException(status_code=403, detail="Invalid X-Internal-Key")
+    return True
+
+class FairRange(BaseModel):
+    min: float
+    max: float
+
+class FairPriceRequest(BaseModel):
+    listing_id: Optional[int] = None
+    brand: str
+    model: str
+    category: str
+    condition: str
+    year: Optional[int] = None
+    asking_price: float
+    description: str
+
+class FairPriceResponse(BaseModel):
+    fair_price: float
+    fair_range: FairRange
+    asking_price: float
+    deviation_percent: float
+    verdict: str
+    confidence: str
+    flag_for_trust: bool
+    extras_detected: List[str] = []
+    explanation: str
+    used_fallback: bool
+
+@app.post("/api/agents/fair-price", response_model=FairPriceResponse)
+async def api_fair_price(request: FairPriceRequest, _ = Depends(verify_internal_key)):
+    result = run_fair_price(request.model_dump() if hasattr(request, 'model_dump') else request.dict())
+    return result
 
 class ChatRequest(BaseModel):
     message: str
@@ -40,7 +83,7 @@ async def chat(request: ChatRequest):
             {"messages": [HumanMessage(content=request.message)]}, 
             config=config
         )
-        final_answer = response["messages"][-1].content
+        final_answer = message_text(response["messages"][-1])
         return ChatResponse(response=final_answer, session_id=session_id)
     except Exception as e:
         return ChatResponse(response=f"Error: {str(e)}", session_id=session_id)

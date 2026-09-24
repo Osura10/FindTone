@@ -9,21 +9,15 @@ const AllItems = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // Shops see their own listings; buyers and admins browse the live marketplace
-  const role = (sessionStorage.getItem('role') || localStorage.getItem('role') || 'buyer').toLowerCase();
-  const isShop = role === 'shop';
-
   const fetchItems = async () => {
     setLoading(true);
     setError('');
     try {
-      const data = await apiCall(isShop ? '/listings/mine' : '/listings');
+      const data = await apiCall('/listings/mine');
       setItems(Array.isArray(data) ? data : (data.items || []));
     } catch (err) {
       console.error('Failed to fetch user listings:', err);
-      setError(isShop
-        ? 'Unable to load your listings. Please make sure you are logged in.'
-        : 'Unable to load marketplace listings. Please try again.');
+      setError('Unable to load your listings. Please make sure you are logged in.');
     } finally {
       setLoading(false);
     }
@@ -60,16 +54,27 @@ const AllItems = () => {
     }
   };
 
+  const getVerdictBadge = (verdict) => {
+    switch (verdict?.toUpperCase()) {
+      case 'SUSPICIOUSLY_LOW': return { bg: 'rgba(255,107,107,0.2)', color: '#ff6b6b', border: 'rgba(255,107,107,0.4)', label: 'Suspicious' };
+      case 'GREAT_DEAL':       return { bg: 'rgba(81,207,102,0.2)',  color: '#51cf66', border: 'rgba(81,207,102,0.4)',  label: 'Great Deal' };
+      case 'FAIR':             return { bg: 'rgba(81,207,102,0.2)',  color: '#51cf66', border: 'rgba(81,207,102,0.4)',  label: 'Fair' };
+      case 'SLIGHTLY_HIGH':    return { bg: 'rgba(255,212,59,0.2)',  color: '#ffd43b', border: 'rgba(255,212,59,0.4)',  label: 'Slightly High' };
+      case 'OVERPRICED':       return { bg: 'rgba(255,107,107,0.2)', color: '#ff6b6b', border: 'rgba(255,107,107,0.4)', label: 'Overpriced' };
+      default:                 return { bg: 'rgba(134,142,150,0.2)', color: '#adb5bd', border: 'rgba(134,142,150,0.4)', label: verdict || 'UNKNOWN' };
+    }
+  };
+
+  const fmtLkr = (n) => n != null ? `LKR ${Math.round(n).toLocaleString()}` : null;
+
   return (
     <div className="animate-fade-in-up" style={{ padding: '1rem 0' }}>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '2.5rem', gap: '1.25rem' }}>
         <h1 className="text-gradient" style={{ fontSize: '2.5rem', margin: 0, fontWeight: '800' }}>
-          {isShop ? 'Your Items' : 'Marketplace Items'}
+          Your Items
         </h1>
         <p style={{ color: 'var(--text-secondary)', margin: 0, maxWidth: '600px', textAlign: 'center' }}>
-          {isShop
-            ? 'Manage your listed instruments and check evaluation status'
-            : 'Explore all musical instruments, gear, and equipment available across MusicMarket.'}
+          Manage your listed instruments and check evaluation status
         </p>
         
         {/* Search Bar & Refresh */}
@@ -78,7 +83,7 @@ const AllItems = () => {
             <Search size={22} style={{ color: 'var(--text-secondary)', marginRight: '1rem' }} />
             <input
               type="text"
-              placeholder={isShop ? "Search your inventory..." : "Search instruments, gear, brands..."}
+              placeholder="Search your inventory..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               style={{ 
@@ -118,11 +123,10 @@ const AllItems = () => {
         </div>
       )}
 
-      {/* Loading State */}
       {loading ? (
         <div style={{ textAlign: 'center', padding: '4rem 0', color: 'var(--text-secondary)' }}>
           <div className="spinner" style={{ margin: '0 auto 1rem auto' }}></div>
-          <p>{isShop ? 'Loading your inventory...' : 'Loading marketplace...'}</p>
+          <p>Loading your inventory...</p>
         </div>
       ) : (
         /* Items Grid */
@@ -134,6 +138,7 @@ const AllItems = () => {
           {filteredItems.map(item => {
             const badge = getStatusBadge(item.status);
             const displayImage = item.firstImageUrl || item.image || 'https://placehold.co/400x300?text=No+Photo';
+            const vb = item.priceVerdict ? getVerdictBadge(item.priceVerdict) : null;
             
             return (
               <div 
@@ -162,16 +167,36 @@ const AllItems = () => {
                     position: 'absolute', 
                     top: '10px', 
                     right: '10px', 
-                    background: badge.bg,
-                    color: badge.color,
-                    border: `1px solid ${badge.border}`,
-                    padding: '0.25rem 0.75rem',
-                    borderRadius: '20px',
-                    fontSize: '0.75rem',
-                    fontWeight: '700',
-                    letterSpacing: '0.5px'
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'flex-end',
+                    gap: '4px'
                   }}>
-                    {item.status || 'LIVE'}
+                    <div style={{
+                      background: badge.bg,
+                      color: badge.color,
+                      border: `1px solid ${badge.border}`,
+                      padding: '0.25rem 0.75rem',
+                      borderRadius: '20px',
+                      fontSize: '0.75rem',
+                      fontWeight: '700',
+                      letterSpacing: '0.5px'
+                    }}>
+                      {item.status || 'LIVE'}
+                    </div>
+                    {item.priceVerdict && vb && (
+                      <div style={{
+                        background: vb.bg,
+                        color: vb.color,
+                        border: `1px solid ${vb.border}`,
+                        padding: '0.25rem 0.75rem',
+                        borderRadius: '20px',
+                        fontSize: '0.75rem',
+                        fontWeight: '700'
+                      }}>
+                        {vb.label}
+                      </div>
+                    )}
                   </div>
 
                   {/* Condition Tag */}
@@ -206,6 +231,11 @@ const AllItems = () => {
                       {item.listingType || 'Sell'}
                     </span>
                   </div>
+                  {item.fairPriceMin != null && item.fairPriceMax != null && (
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                      Fair: {fmtLkr(item.fairPriceMin)} – {fmtLkr(item.fairPriceMax)}
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -217,18 +247,14 @@ const AllItems = () => {
               <h3 style={{ margin: 0, color: '#eaeaea' }}>
                 {searchTerm
                   ? `No listings match "${searchTerm}"`
-                  : isShop ? "You haven't posted any instruments yet" : 'No instruments are listed yet'}
+                  : "You haven't posted any instruments yet"}
               </h3>
-              {isShop && (
-                <>
-                  <p style={{ color: 'var(--text-secondary)', margin: 0, maxWidth: '400px' }}>
-                    Start selling by creating your first post. Upload photos and provide instrument details.
-                  </p>
-                  <Link to="/dashboard/create" className="btn btn-primary" style={{ marginTop: '0.5rem', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-                    <PlusCircle size={18} /> Create a Post
-                  </Link>
-                </>
-              )}
+              <p style={{ color: 'var(--text-secondary)', margin: 0, maxWidth: '400px' }}>
+                Start selling by creating your first post. Upload photos and provide instrument details.
+              </p>
+              <Link to="/dashboard/create" className="btn btn-primary" style={{ marginTop: '0.5rem', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                <PlusCircle size={18} /> Create a Post
+              </Link>
             </div>
           )}
         </div>
