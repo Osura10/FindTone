@@ -12,6 +12,7 @@ import AdminDashboard from './pages/Admin/AdminDashboard';
 import AdminAdmins from './pages/Admin/AdminAdmins';
 import AdminShops from './pages/Admin/AdminShops';
 import AdminBuyers from './pages/Admin/AdminBuyers';
+import AdminFlaggedListings from './pages/Admin/AdminFlaggedListings';
 
 function App() {
   return (
@@ -35,6 +36,7 @@ function App() {
           <Route path="admin/admins" element={<AdminAdmins />} />
           <Route path="admin/shops" element={<AdminShops />} />
           <Route path="admin/buyers" element={<AdminBuyers />} />
+          <Route path="admin/listings" element={<AdminFlaggedListings />} />
         </Route>
       </Routes>
     </Router>

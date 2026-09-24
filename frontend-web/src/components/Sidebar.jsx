@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, PlusCircle, User, LogOut, ShieldCheck, Store, Users, ShoppingBag } from 'lucide-react';
+import { LayoutDashboard, PlusCircle, User, LogOut, ShieldCheck, Store, Users, ShoppingBag, ShieldAlert } from 'lucide-react';
 import { apiCall } from '../services/api';
 
 const Sidebar = () => {
@@ -49,6 +49,7 @@ const Sidebar = () => {
       { name: 'Admins', path: '/dashboard/admin/admins', icon: ShieldCheck },
       { name: 'Shops', path: '/dashboard/admin/shops', icon: Store },
       { name: 'Buyers', path: '/dashboard/admin/buyers', icon: Users },
+      { name: 'Flagged Listings', path: '/dashboard/admin/listings', icon: ShieldAlert },
       { name: 'All Items', path: '/dashboard/items', icon: ShoppingBag }
     );
   } else {

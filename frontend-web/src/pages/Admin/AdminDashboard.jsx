@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Users, Store, ShieldCheck, CheckCircle2, Clock, 
-  ArrowRight, Shield, UserCheck, AlertCircle, RefreshCw, Loader2, UserPlus, Check
+  ArrowRight, Shield, UserCheck, AlertCircle, RefreshCw, Loader2, UserPlus, Check, ShieldAlert
 } from 'lucide-react';
 import { apiCall } from '../../services/api';
 import AddAdminModal from '../../components/AddAdminModal';
@@ -340,6 +340,61 @@ const AdminDashboard = () => {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* 4. FLAGGED LISTINGS CARD */}
+        <div 
+          className="glass-panel"
+          onClick={() => navigate('/dashboard/admin/listings')}
+          style={{
+            padding: '2.2rem',
+            borderRadius: '20px',
+            cursor: 'pointer',
+            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+            position: 'relative',
+            overflow: 'hidden',
+            border: '1px solid rgba(255, 107, 107, 0.25)',
+            background: 'linear-gradient(135deg, rgba(255, 107, 107, 0.06) 0%, rgba(18, 14, 28, 0.9) 100%)'
+          }}
+          onMouseOver={(e) => {
+            e.currentTarget.style.transform = 'translateY(-6px)';
+            e.currentTarget.style.boxShadow = '0 15px 35px rgba(255, 107, 107, 0.2)';
+            e.currentTarget.style.borderColor = '#ff6b6b';
+          }}
+          onMouseOut={(e) => {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = 'none';
+            e.currentTarget.style.borderColor = 'rgba(255, 107, 107, 0.25)';
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
+            <div style={{ padding: '1rem', background: 'rgba(255, 107, 107, 0.15)', borderRadius: '16px', color: '#ff6b6b' }}>
+              <ShieldAlert size={32} />
+            </div>
+            <span style={{ 
+              display: 'inline-flex', 
+              alignItems: 'center', 
+              gap: '0.4rem', 
+              fontSize: '0.85rem', 
+              fontWeight: '600', 
+              color: '#ff6b6b',
+              background: 'rgba(255, 107, 107, 0.1)',
+              padding: '0.35rem 0.85rem',
+              borderRadius: '20px'
+            }}>
+              Review <ArrowRight size={14} />
+            </span>
+          </div>
+
+          <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.15rem', color: 'var(--text-secondary)', fontWeight: '500' }}>
+            Flagged Listings
+          </h3>
+          <div style={{ fontSize: '3rem', fontWeight: '800', color: '#ffffff', letterSpacing: '-1px' }}>
+            {stats?.flaggedListings ?? 0}
+          </div>
+          <p style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.9rem', margin: '0.75rem 0 0 0' }}>
+            Listings requiring administrative review.
+          </p>
         </div>
 
       </div>

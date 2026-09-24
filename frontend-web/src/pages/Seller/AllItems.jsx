@@ -65,6 +65,24 @@ const AllItems = () => {
     }
   };
 
+  const getTrustBadge = (status, trustScore) => {
+    switch (status?.toUpperCase()) {
+      case 'LIVE':
+        if (trustScore !== null && trustScore !== undefined && trustScore < 70) {
+          return { bg: 'rgba(255, 212, 59, 0.2)', color: '#ffd43b', border: 'rgba(255, 212, 59, 0.4)', label: 'LIVE - Low Trust' };
+        }
+        return { bg: 'rgba(81, 207, 102, 0.2)', color: '#51cf66', border: 'rgba(81, 207, 102, 0.4)', label: 'LIVE' };
+      case 'FLAGGED':
+        return { bg: 'rgba(255, 146, 43, 0.2)', color: '#ff922b', border: 'rgba(255, 146, 43, 0.4)', label: 'Under Review' };
+      case 'REJECTED':
+        return { bg: 'rgba(255, 107, 107, 0.2)', color: '#ff6b6b', border: 'rgba(255, 107, 107, 0.4)', label: 'REJECTED' };
+      case 'PENDING':
+        return { bg: 'rgba(134, 142, 150, 0.2)', color: '#adb5bd', border: 'rgba(134, 142, 150, 0.4)', label: 'PENDING' };
+      default:
+        return { bg: 'rgba(134, 142, 150, 0.2)', color: '#adb5bd', border: 'rgba(134, 142, 150, 0.4)', label: status || 'UNKNOWN' };
+    }
+  };
+
   const fmtLkr = (n) => n != null ? `LKR ${Math.round(n).toLocaleString()}` : null;
 
   return (
@@ -136,7 +154,7 @@ const AllItems = () => {
           gap: '1.5rem' 
         }}>
           {filteredItems.map(item => {
-            const badge = getStatusBadge(item.status);
+            const trustBadge = getTrustBadge(item.status, item.trustScore);
             const displayImage = item.firstImageUrl || item.image || 'https://placehold.co/400x300?text=No+Photo';
             const vb = item.priceVerdict ? getVerdictBadge(item.priceVerdict) : null;
             
@@ -173,16 +191,16 @@ const AllItems = () => {
                     gap: '4px'
                   }}>
                     <div style={{
-                      background: badge.bg,
-                      color: badge.color,
-                      border: `1px solid ${badge.border}`,
+                      background: trustBadge.bg,
+                      color: trustBadge.color,
+                      border: `1px solid ${trustBadge.border}`,
                       padding: '0.25rem 0.75rem',
                       borderRadius: '20px',
                       fontSize: '0.75rem',
                       fontWeight: '700',
                       letterSpacing: '0.5px'
                     }}>
-                      {item.status || 'LIVE'}
+                      {trustBadge.label}
                     </div>
                     {item.priceVerdict && vb && (
                       <div style={{
