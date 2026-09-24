@@ -180,6 +180,43 @@ public class ListingsController : ControllerBase
             await _db.SaveChangesAsync();
         }
 
+        // Call Trust Check Agent
+        var trustResult = await _ai.GetTrustCheckAsync(listing.Id);
+        if (trustResult != null)
+        {
+            listing.TrustScore = trustResult.TrustScore;
+            
+            var detailedReason = trustResult.Reason;
+            if (trustResult.Signals.Any())
+            {
+                detailedReason += "\n\nSignals:";
+                foreach (var s in trustResult.Signals)
+                {
+                    detailedReason += $"\n- {s.Code} ({s.Points}): {s.Detail}";
+                }
+            }
+            listing.AiReason = detailedReason;
+            
+            if (trustResult.Decision == "LIVE" || trustResult.Decision == "FLAGGED")
+            {
+                listing.Status = trustResult.Decision;
+            }
+            
+            // Update image PHashes
+            var listingImages = await _db.ListingImages.Where(i => i.ListingId == listing.Id).ToListAsync();
+            foreach (var imgHash in trustResult.ImageHashes)
+            {
+                var img = listingImages.FirstOrDefault(i => i.Id == imgHash.ImageId);
+                if (img != null && !string.IsNullOrEmpty(imgHash.PHash))
+                {
+                    img.PHash = imgHash.PHash;
+                }
+            }
+            
+            listing.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+        }
+
         // Load seller info for response
         await _db.Entry(listing).ReloadAsync();
         var sellerName = await _db.Users.Where(u => u.Id == sellerId).Select(u => u.Name).FirstOrDefaultAsync() ?? "";
@@ -505,6 +542,35 @@ public class ListingsController : ControllerBase
             listing.PriceDeviationPercent = aiResultPriceUpdate.DeviationPercent;
             listing.PriceConfidence = aiResultPriceUpdate.Confidence;
             listing.PriceExplanation = aiResultPriceUpdate.Explanation;
+            listing.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+        }
+
+        // Call Trust Check Agent after price update
+        var trustResult = await _ai.GetTrustCheckAsync(listing.Id);
+        if (trustResult != null)
+        {
+            listing.TrustScore = trustResult.TrustScore;
+            
+            var detailedReason = trustResult.Reason;
+            if (trustResult.Signals.Any())
+            {
+                detailedReason += "\n\nSignals:";
+                foreach (var s in trustResult.Signals)
+                {
+                    detailedReason += $"\n- {s.Code} ({s.Points}): {s.Detail}";
+                }
+            }
+            listing.AiReason = detailedReason;
+            
+            if (listing.Status != "REJECTED" && listing.Status != "SOLD")
+            {
+                if (trustResult.Decision == "LIVE" || trustResult.Decision == "FLAGGED")
+                {
+                    listing.Status = trustResult.Decision;
+                }
+            }
+            
             listing.UpdatedAt = DateTime.UtcNow;
             await _db.SaveChangesAsync();
         }

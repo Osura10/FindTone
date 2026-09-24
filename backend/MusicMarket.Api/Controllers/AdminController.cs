@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using MusicMarket.Api.Data;
 using MusicMarket.Api.Dtos;
 using MusicMarket.Api.Models;
+using MusicMarket.Api.Services;
 
 namespace MusicMarket.Api.Controllers;
 
@@ -15,10 +16,13 @@ public class AdminController : ControllerBase
     private readonly AppDbContext _db;
     private readonly CloudinaryDotNet.Cloudinary _cloudinary;
 
-    public AdminController(AppDbContext db, CloudinaryDotNet.Cloudinary cloudinary)
+    private readonly AiServiceClient _ai;
+
+    public AdminController(AppDbContext db, CloudinaryDotNet.Cloudinary cloudinary, AiServiceClient ai)
     {
         _db = db;
         _cloudinary = cloudinary;
+        _ai = ai;
     }
 
     [HttpGet("stats")]
@@ -30,15 +34,18 @@ public class AdminController : ControllerBase
         var approvedAdmins = await _db.Users.CountAsync(u => u.Role.ToLower() == "admin" && u.Approval);
         var pendingAdmins = await _db.Users.CountAsync(u => u.Role.ToLower() == "admin" && !u.Approval);
         var totalUsers = await _db.Users.CountAsync();
+        var flaggedListings = await _db.Listings.CountAsync(l => l.Status == "FLAGGED");
 
-        return Ok(new AdminStatsDto(
-            TotalBuyers: totalBuyers,
-            ApprovedShops: approvedShops,
-            PendingShops: pendingShops,
-            ApprovedAdmins: approvedAdmins,
-            PendingAdmins: pendingAdmins,
-            TotalUsers: totalUsers
-        ));
+        return Ok(new
+        {
+            totalBuyers = totalBuyers,
+            approvedShops = approvedShops,
+            pendingShops = pendingShops,
+            approvedAdmins = approvedAdmins,
+            pendingAdmins = pendingAdmins,
+            totalUsers = totalUsers,
+            flaggedListings = flaggedListings
+        });
     }
 
     [HttpGet("users")]
@@ -163,6 +170,116 @@ public class AdminController : ControllerBase
                 admin.CreatedAt
             }
         });
+    }
+
+    public class ReviewListingDto
+    {
+        public bool Approve { get; set; }
+        public string? Note { get; set; }
+    }
+
+    [HttpGet("listings/flagged")]
+    public async Task<IActionResult> GetFlaggedListings()
+    {
+        var items = await _db.Listings
+            .AsNoTracking()
+            .Include(l => l.Seller)
+            .Include(l => l.Images)
+            .Where(l => l.Status == "FLAGGED" || l.Status == "PENDING")
+            .OrderByDescending(l => l.CreatedAt)
+            .Select(l => new
+            {
+                l.Id,
+                l.Title,
+                l.Brand,
+                l.Model,
+                l.Category,
+                l.Price,
+                FairPriceMin = l.FairPriceMin,
+                FairPriceMax = l.FairPriceMax,
+                PriceVerdict = l.PriceVerdict,
+                TrustScore = l.TrustScore,
+                AiReason = l.AiReason,
+                SellerName = l.Seller != null ? l.Seller.Name : "",
+                SellerId = l.SellerId,
+                FirstImageUrl = l.Images.OrderBy(i => i.SortOrder).Select(i => i.Url).FirstOrDefault(),
+                ImageUrls = l.Images.OrderBy(i => i.SortOrder).Select(i => i.Url).ToList(),
+                l.CreatedAt
+            })
+            .ToListAsync();
+
+        return Ok(items);
+    }
+
+    [HttpPut("listings/{id:int}/review")]
+    public async Task<IActionResult> ReviewListing(int id, [FromBody] ReviewListingDto dto)
+    {
+        var listing = await _db.Listings.FindAsync(id);
+        if (listing == null)
+            return NotFound("Listing not found");
+
+        if (listing.Status != "FLAGGED" && listing.Status != "PENDING")
+            return BadRequest("Listing is not in FLAGGED or PENDING status.");
+
+        listing.Status = dto.Approve ? "LIVE" : "REJECTED";
+        if (!string.IsNullOrWhiteSpace(dto.Note))
+        {
+            listing.AiReason = (listing.AiReason ?? "") + $"\n\nAdmin: {dto.Note}";
+        }
+        listing.UpdatedAt = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync();
+        return Ok(new { message = "Listing reviewed successfully", Status = listing.Status });
+    }
+
+    [HttpPost("listings/{id:int}/recheck")]
+    public async Task<IActionResult> RecheckListing(int id)
+    {
+        var listing = await _db.Listings.Include(l => l.Images).FirstOrDefaultAsync(l => l.Id == id);
+        if (listing == null)
+            return NotFound("Listing not found");
+
+        var trustResult = await _ai.GetTrustCheckAsync(listing.Id);
+        if (trustResult != null)
+        {
+            listing.TrustScore = trustResult.TrustScore;
+            
+            var detailedReason = trustResult.Reason;
+            if (trustResult.Signals.Any())
+            {
+                detailedReason += "\n\nSignals:";
+                foreach (var s in trustResult.Signals)
+                {
+                    detailedReason += $"\n- {s.Code} ({s.Points}): {s.Detail}";
+                }
+            }
+            listing.AiReason = detailedReason;
+            
+            if (listing.Status != "REJECTED" && listing.Status != "SOLD")
+            {
+                if (trustResult.Decision == "LIVE" || trustResult.Decision == "FLAGGED")
+                {
+                    listing.Status = trustResult.Decision;
+                }
+            }
+            
+            // Update image PHashes
+            foreach (var imgHash in trustResult.ImageHashes)
+            {
+                var img = listing.Images.FirstOrDefault(i => i.Id == imgHash.ImageId);
+                if (img != null && !string.IsNullOrEmpty(imgHash.PHash))
+                {
+                    img.PHash = imgHash.PHash;
+                }
+            }
+            
+            listing.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+
+            return Ok(new { message = "Recheck successful", trustResult });
+        }
+
+        return StatusCode(503, "AI service failed to respond");
     }
 
     private async Task DeleteCloudinaryImage(string? imageUrl)

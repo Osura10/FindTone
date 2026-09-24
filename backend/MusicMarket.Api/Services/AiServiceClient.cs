@@ -75,6 +75,57 @@ public class FairPriceResult
     public bool UsedFallback { get; set; }
 }
 
+public class TrustSignal
+{
+    [JsonPropertyName("code")]
+    public string Code { get; set; } = "";
+
+    [JsonPropertyName("points")]
+    public int Points { get; set; }
+
+    [JsonPropertyName("detail")]
+    public string Detail { get; set; } = "";
+}
+
+public class ImageHashResult
+{
+    [JsonPropertyName("image_id")]
+    public int ImageId { get; set; }
+
+    [JsonPropertyName("phash")]
+    public string PHash { get; set; } = "";
+}
+
+public class TrustCheckResult
+{
+    [JsonPropertyName("listing_id")]
+    public int ListingId { get; set; }
+
+    [JsonPropertyName("trust_score")]
+    public int TrustScore { get; set; }
+
+    [JsonPropertyName("decision")]
+    public string Decision { get; set; } = "";
+
+    [JsonPropertyName("warning")]
+    public bool Warning { get; set; }
+
+    [JsonPropertyName("signals")]
+    public List<TrustSignal> Signals { get; set; } = [];
+
+    [JsonPropertyName("reason")]
+    public string Reason { get; set; } = "";
+
+    [JsonPropertyName("image_hashes")]
+    public List<ImageHashResult> ImageHashes { get; set; } = [];
+
+    [JsonPropertyName("duplicate_listing_ids")]
+    public List<int> DuplicateListingIds { get; set; } = [];
+
+    [JsonPropertyName("used_fallback")]
+    public bool UsedFallback { get; set; }
+}
+
 // ── Typed HttpClient ─────────────────────────────────────────────────────────
 
 public class AiServiceClient
@@ -125,6 +176,49 @@ public class AiServiceClient
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unexpected error calling AI service (fair-price).");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Calls POST /api/agents/trust-check and returns the result,
+    /// or null if the AI service is unreachable or returns an error.
+    /// Never throws; errors are logged. Timeout is 120s because image checks are slow.
+    /// </summary>
+    public async Task<TrustCheckResult?> GetTrustCheckAsync(int listingId)
+    {
+        try
+        {
+            var request = new { listing_id = listingId };
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(120));
+            var response = await _http.PostAsJsonAsync("/api/agents/trust-check", request, cts.Token);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                _logger.LogWarning("AI service returned {Status} for trust-check: {Body}",
+                    response.StatusCode, body);
+                return null;
+            }
+
+            var result = await response.Content.ReadFromJsonAsync<TrustCheckResult>(
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }, cts.Token);
+
+            return result;
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "AI service is unreachable (trust-check).");
+            return null;
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogError(ex, "AI service timed out (trust-check).");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error calling AI service (trust-check).");
             return null;
         }
     }
