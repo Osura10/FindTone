@@ -202,17 +202,28 @@ public class ListingsController : ControllerBase
                 listing.Status = trustResult.Decision;
             }
             
-            // Update image PHashes
-            var listingImages = await _db.ListingImages.Where(i => i.ListingId == listing.Id).ToListAsync();
-            foreach (var imgHash in trustResult.ImageHashes)
+            // Update image PHashes for ALL returned images (even from other listings)
+            var imageIds = trustResult.ImageHashes.Select(h => h.ImageId).ToList();
+            if (imageIds.Any())
             {
-                var img = listingImages.FirstOrDefault(i => i.Id == imgHash.ImageId);
-                if (img != null && !string.IsNullOrEmpty(imgHash.PHash))
+                var imagesToUpdate = await _db.ListingImages.Where(i => imageIds.Contains(i.Id)).ToListAsync();
+                foreach (var imgHash in trustResult.ImageHashes)
                 {
-                    img.PHash = imgHash.PHash;
+                    var img = imagesToUpdate.FirstOrDefault(i => i.Id == imgHash.ImageId);
+                    if (img != null && !string.IsNullOrEmpty(imgHash.PHash))
+                    {
+                        img.PHash = imgHash.PHash;
+                    }
                 }
             }
             
+            listing.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+        }
+        else
+        {
+            listing.Status = "PENDING";
+            listing.AiReason = "AI check failed: Service unavailable or timed out. An admin can re-check this listing.";
             listing.UpdatedAt = DateTime.UtcNow;
             await _db.SaveChangesAsync();
         }
@@ -571,6 +582,31 @@ public class ListingsController : ControllerBase
                 }
             }
             
+            // Update image PHashes for ALL returned images
+            var imageIds = trustResult.ImageHashes.Select(h => h.ImageId).ToList();
+            if (imageIds.Any())
+            {
+                var imagesToUpdate = await _db.ListingImages.Where(i => imageIds.Contains(i.Id)).ToListAsync();
+                foreach (var imgHash in trustResult.ImageHashes)
+                {
+                    var img = imagesToUpdate.FirstOrDefault(i => i.Id == imgHash.ImageId);
+                    if (img != null && !string.IsNullOrEmpty(imgHash.PHash))
+                    {
+                        img.PHash = imgHash.PHash;
+                    }
+                }
+            }
+            
+            listing.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+        }
+        else
+        {
+            if (listing.Status != "REJECTED" && listing.Status != "SOLD")
+            {
+                listing.Status = "PENDING";
+            }
+            listing.AiReason = "AI check failed: Service unavailable or timed out. An admin can re-check this listing.";
             listing.UpdatedAt = DateTime.UtcNow;
             await _db.SaveChangesAsync();
         }

@@ -34,7 +34,8 @@ public class AdminController : ControllerBase
         var approvedAdmins = await _db.Users.CountAsync(u => u.Role.ToLower() == "admin" && u.Approval);
         var pendingAdmins = await _db.Users.CountAsync(u => u.Role.ToLower() == "admin" && !u.Approval);
         var totalUsers = await _db.Users.CountAsync();
-        var flaggedListings = await _db.Listings.CountAsync(l => l.Status == "FLAGGED");
+        var flaggedListings = await _db.Listings.CountAsync(l => l.Status == "FLAGGED" || l.Status == "PENDING");
+        var pendingChecks = await _db.Listings.CountAsync(l => l.Status == "PENDING");
 
         return Ok(new
         {
@@ -44,7 +45,8 @@ public class AdminController : ControllerBase
             approvedAdmins = approvedAdmins,
             pendingAdmins = pendingAdmins,
             totalUsers = totalUsers,
-            flaggedListings = flaggedListings
+            flaggedListings = flaggedListings,
+            pendingChecks = pendingChecks
         });
     }
 
@@ -280,6 +282,94 @@ public class AdminController : ControllerBase
         }
 
         return StatusCode(503, "AI service failed to respond");
+    }
+
+    [HttpPost("listings/recheck-pending")]
+    public async Task<IActionResult> RecheckPending()
+    {
+        var pendingListings = await _db.Listings.Include(l => l.Images).Where(l => l.Status == "PENDING").ToListAsync();
+        int successCount = 0;
+        
+        foreach(var listing in pendingListings)
+        {
+            // 1. Fair Price
+            var aiReqPriceUpdate = new FairPriceRequest
+            {
+                ListingId = listing.Id,
+                Brand = listing.Brand,
+                Model = listing.Model,
+                Category = listing.Category,
+                Condition = listing.Condition,
+                Year = listing.Year,
+                AskingPrice = (float)listing.Price,
+                Description = listing.Description
+            };
+            
+            var aiResultPriceUpdate = await _ai.GetFairPriceAsync(aiReqPriceUpdate);
+            if (aiResultPriceUpdate != null)
+            {
+                listing.FairPrice = (decimal)aiResultPriceUpdate.FairPrice;
+                listing.FairPriceMin = (decimal)aiResultPriceUpdate.FairRange.Min;
+                listing.FairPriceMax = (decimal)aiResultPriceUpdate.FairRange.Max;
+                listing.PriceVerdict = aiResultPriceUpdate.Verdict;
+                listing.PriceDeviationPercent = aiResultPriceUpdate.DeviationPercent;
+                listing.PriceConfidence = aiResultPriceUpdate.Confidence;
+                listing.PriceExplanation = aiResultPriceUpdate.Explanation;
+                listing.UpdatedAt = DateTime.UtcNow;
+                await _db.SaveChangesAsync();
+            }
+            
+            // 2. Trust Check
+            var trustResult = await _ai.GetTrustCheckAsync(listing.Id);
+            if (trustResult != null)
+            {
+                listing.TrustScore = trustResult.TrustScore;
+                var detailedReason = trustResult.Reason;
+                if (trustResult.Signals.Any())
+                {
+                    detailedReason += "\n\nSignals:";
+                    foreach (var s in trustResult.Signals)
+                    {
+                        detailedReason += $"\n- {s.Code} ({s.Points}): {s.Detail}";
+                    }
+                }
+                listing.AiReason = detailedReason;
+                
+                if (listing.Status != "REJECTED" && listing.Status != "SOLD")
+                {
+                    if (trustResult.Decision == "LIVE" || trustResult.Decision == "FLAGGED")
+                    {
+                        listing.Status = trustResult.Decision;
+                    }
+                }
+                
+                var imageIds = trustResult.ImageHashes.Select(h => h.ImageId).ToList();
+                if (imageIds.Any())
+                {
+                    var imagesToUpdate = await _db.ListingImages.Where(i => imageIds.Contains(i.Id)).ToListAsync();
+                    foreach (var imgHash in trustResult.ImageHashes)
+                    {
+                        var img = imagesToUpdate.FirstOrDefault(i => i.Id == imgHash.ImageId);
+                        if (img != null && !string.IsNullOrEmpty(imgHash.PHash))
+                        {
+                            img.PHash = imgHash.PHash;
+                        }
+                    }
+                }
+                
+                listing.UpdatedAt = DateTime.UtcNow;
+                await _db.SaveChangesAsync();
+                successCount++;
+            }
+            else
+            {
+                listing.AiReason = "AI check failed: Service unavailable or timed out. An admin can re-check this listing.";
+                listing.UpdatedAt = DateTime.UtcNow;
+                await _db.SaveChangesAsync();
+            }
+        }
+        
+        return Ok(new { message = $"Rechecked {successCount} out of {pendingListings.Count} pending listings." });
     }
 
     private async Task DeleteCloudinaryImage(string? imageUrl)

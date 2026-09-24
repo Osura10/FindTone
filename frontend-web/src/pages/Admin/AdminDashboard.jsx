@@ -386,15 +386,35 @@ const AdminDashboard = () => {
             </span>
           </div>
 
-          <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.15rem', color: 'var(--text-secondary)', fontWeight: '500' }}>
-            Flagged Listings
-          </h3>
-          <div style={{ fontSize: '3rem', fontWeight: '800', color: '#ffffff', letterSpacing: '-1px' }}>
-            {stats?.flaggedListings ?? 0}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '1rem' }}>
+            <div style={{
+              background: 'rgba(255, 107, 107, 0.1)',
+              border: '1px solid rgba(255, 107, 107, 0.25)',
+              padding: '1rem',
+              borderRadius: '14px'
+            }}>
+              <div style={{ color: '#ff6b6b', fontSize: '0.8rem', fontWeight: '600', marginBottom: '0.25rem' }}>
+                Flagged / Review
+              </div>
+              <div style={{ fontSize: '2rem', fontWeight: '800', color: '#fff' }}>
+                {stats?.flaggedListings ?? 0}
+              </div>
+            </div>
+
+            <div style={{
+              background: 'rgba(254, 228, 64, 0.1)',
+              border: '1px solid rgba(254, 228, 64, 0.25)',
+              padding: '1rem',
+              borderRadius: '14px'
+            }}>
+              <div style={{ color: '#fee440', fontSize: '0.8rem', fontWeight: '600', marginBottom: '0.25rem' }}>
+                Pending AI Check
+              </div>
+              <div style={{ fontSize: '2rem', fontWeight: '800', color: '#fff' }}>
+                {stats?.pendingChecks ?? 0}
+              </div>
+            </div>
           </div>
-          <p style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.9rem', margin: '0.75rem 0 0 0' }}>
-            Listings requiring administrative review.
-          </p>
         </div>
 
       </div>

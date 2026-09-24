@@ -57,20 +57,37 @@ def verify_images(listing_id: int) -> dict:
     duplicate_found = False
     duplicate_listing_ids = set()
     
-    if image_hashes:
+    my_hashes = [h for h in image_hashes if h["phash"]]
+    
+    if my_hashes:
         other_images = fetch_all('''
-            SELECT i."ListingId", i."PHash"
+            SELECT i."Id" as "ImageId", i."ListingId", i."Url", i."PHash"
             FROM "ListingImages" i
             JOIN "Listings" l ON i."ListingId" = l."Id"
-            WHERE l."SellerId" != %s AND l."Status" != 'REJECTED' AND i."PHash" IS NOT NULL
+            WHERE l."SellerId" != %s AND l."Status" != 'REJECTED'
+            ORDER BY l."CreatedAt" DESC
+            LIMIT 100
         ''', (seller_id,))
         
-        for my_h in image_hashes:
+        for other_img in other_images:
+            other_phash_str = other_img["PHash"]
+            if not other_phash_str:
+                try:
+                    resp = requests.get(other_img["Url"], timeout=20)
+                    resp.raise_for_status()
+                    im = Image.open(BytesIO(resp.content))
+                    other_phash_str = str(imagehash.phash(im))
+                    # Append to image_hashes so ASP.NET saves it
+                    image_hashes.append({"image_id": other_img["ImageId"], "phash": other_phash_str})
+                except Exception as e:
+                    errors.append({"image_id": other_img["ImageId"], "error": str(e)})
+                    continue
+            
             try:
-                my_hash_val = imagehash.hex_to_hash(my_h["phash"])
-                for other_img in other_images:
+                other_hash_val = imagehash.hex_to_hash(other_phash_str)
+                for my_h in my_hashes:
                     try:
-                        other_hash_val = imagehash.hex_to_hash(other_img["PHash"])
+                        my_hash_val = imagehash.hex_to_hash(my_h["phash"])
                         if my_hash_val - other_hash_val <= 8:
                             duplicate_found = True
                             duplicate_listing_ids.add(other_img["ListingId"])

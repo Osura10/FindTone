@@ -94,7 +94,7 @@ const AdminFlaggedListings = () => {
   const getStatusBadge = (status) => {
     const s = (status || '').toUpperCase();
     if (s === 'FLAGGED') return { bg: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.3)', label: 'FLAGGED' };
-    if (s === 'PENDING') return { bg: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', border: '1px solid rgba(245, 158, 11, 0.3)', label: 'PENDING' };
+    if (s === 'PENDING') return { bg: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', border: '1px solid rgba(245, 158, 11, 0.3)', label: 'AI check pending/failed' };
     return { bg: 'rgba(255, 255, 255, 0.1)', color: '#fff', border: '1px solid rgba(255, 255, 255, 0.2)', label: s };
   };
 
@@ -110,6 +110,7 @@ const AdminFlaggedListings = () => {
   };
 
   const getTrustColor = (score) => {
+    if (score == null) return '#adb5bd'; // grey
     if (score < 40) return '#ef4444'; // red
     if (score < 70) return '#f59e0b'; // amber
     return '#10b981'; // green
@@ -160,13 +161,33 @@ const AdminFlaggedListings = () => {
           </p>
         </div>
 
-        <button 
-          onClick={fetchListings} 
-          className="btn btn-outline" 
-          style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', borderRadius: '12px', fontSize: '0.85rem' }}
-        >
-          <RefreshCw size={16} className={loading ? 'animate-spin' : ''} /> Refresh List
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <button 
+            onClick={async () => {
+              try {
+                setLoading(true);
+                const res = await apiCall('/admin/listings/recheck-pending', { method: 'POST' });
+                showToast('success', res.message || 'Re-checked pending listings.');
+                fetchListings();
+              } catch (err) {
+                console.error(err);
+                showToast('error', err.message || 'Failed to re-check pending listings.');
+                setLoading(false);
+              }
+            }}
+            className="btn btn-outline" 
+            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', borderRadius: '12px', fontSize: '0.85rem' }}
+          >
+            <RefreshCw size={16} /> Re-check all pending
+          </button>
+          <button 
+            onClick={fetchListings} 
+            className="btn btn-outline" 
+            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', borderRadius: '12px', fontSize: '0.85rem' }}
+          >
+            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} /> Refresh List
+          </button>
+        </div>
       </div>
 
       {/* Content Grid */}
@@ -186,7 +207,7 @@ const AdminFlaggedListings = () => {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.5rem' }}>
           {listings.map((item) => {
-            const statusBadge = getStatusBadge(item.status || (item.trustScore < 70 ? 'FLAGGED' : 'PENDING'));
+            const statusBadge = getStatusBadge(item.status);
             const verdictBadge = getVerdictBadge(item.priceVerdict);
             const trustColor = getTrustColor(item.trustScore);
             const imageUrl = item.firstImageUrl || 'https://placehold.co/300x200?text=No+Photo';
@@ -280,10 +301,14 @@ const AdminFlaggedListings = () => {
                     <div style={{ marginTop: '1rem' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '0.25rem' }}>
                         <span>Trust Score</span>
-                        <span style={{ fontWeight: '700', color: trustColor }}>{item.trustScore}/100</span>
+                        <span style={{ fontWeight: '700', color: trustColor }}>
+                          {item.trustScore != null ? `${item.trustScore}/100` : 'Not checked'}
+                        </span>
                       </div>
                       <div style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px', overflow: 'hidden' }}>
-                        <div style={{ width: `${Math.min(100, Math.max(0, item.trustScore || 0))}%`, height: '100%', background: trustColor }} />
+                        {item.trustScore != null && (
+                          <div style={{ width: `${Math.min(100, Math.max(0, item.trustScore))}%`, height: '100%', background: trustColor }} />
+                        )}
                       </div>
                     </div>
 

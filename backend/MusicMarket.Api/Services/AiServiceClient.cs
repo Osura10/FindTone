@@ -148,7 +148,8 @@ public class AiServiceClient
     {
         try
         {
-            var response = await _http.PostAsJsonAsync("/api/agents/fair-price", request);
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(120));
+            var response = await _http.PostAsJsonAsync("/api/agents/fair-price", request, cts.Token);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -190,7 +191,7 @@ public class AiServiceClient
         try
         {
             var request = new { listing_id = listingId };
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(120));
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(180));
             var response = await _http.PostAsJsonAsync("/api/agents/trust-check", request, cts.Token);
 
             if (!response.IsSuccessStatusCode)
@@ -203,6 +204,11 @@ public class AiServiceClient
 
             var result = await response.Content.ReadFromJsonAsync<TrustCheckResult>(
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true }, cts.Token);
+
+            if (result != null)
+            {
+                _logger.LogInformation("Trust Check Result: Score={Score}, Decision={Decision}", result.TrustScore, result.Decision);
+            }
 
             return result;
         }
