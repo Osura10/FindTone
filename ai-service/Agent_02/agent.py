@@ -72,6 +72,7 @@ def run_trust_check(listing_id: int) -> dict:
             
     except Exception as e:
         print(f"Trust Agent failed or fallback triggered: {e}")
+        print("[Trust] LLM did not call tools (ollama) -> deterministic pipeline, LLM wrote the reason")
         
         try:
             verify_res = verify_images.invoke({"listing_id": listing_id})
@@ -96,11 +97,22 @@ def run_trust_check(listing_id: int) -> dict:
             result["duplicate_listing_ids"] = verify_res.get("duplicate_listing_ids", [])
             result["used_fallback"] = True
             
-            if calc_res.get("signals"):
-                signal_details = [s["detail"] for s in calc_res["signals"]]
-                result["reason"] = f"Fallback generated reason. Applied penalties: {'; '.join(signal_details)}"
-            else:
-                result["reason"] = "Fallback generated reason. No penalties applied."
+            try:
+                llm = get_chat_llm(temperature=0.1)
+                prompt = f"""You are a Trust Check agent. Write a short reason (max 3 sentences, simple English) for the admin explaining the trust decision.
+Decision: {calc_res.get('decision')}
+Score: {calc_res.get('trust_score')}
+Applied signals: {', '.join([s['detail'] for s in calc_res.get('signals', [])]) if calc_res.get('signals') else 'None'}
+Do not invent numbers or signals."""
+                resp = llm.invoke([HumanMessage(content=prompt)])
+                result["reason"] = message_text(resp).strip()
+            except Exception as llm_e:
+                print(f"[Trust] LLM also failed to write reason: {llm_e}")
+                if calc_res.get("signals"):
+                    signal_details = [s["detail"] for s in calc_res["signals"]]
+                    result["reason"] = f"Fallback generated reason. Applied penalties: {'; '.join(signal_details)}"
+                else:
+                    result["reason"] = "Fallback generated reason. No penalties applied."
                 
         except Exception as fallback_e:
             print(f"Trust Fallback also failed: {fallback_e}")

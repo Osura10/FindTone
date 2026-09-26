@@ -88,6 +88,7 @@ def run_fair_price(listing: dict) -> dict:
             
     except Exception as e:
         print(f"Agent failed or fallback triggered: {e}")
+        print("[Agent 01] LLM did not call tools (ollama) -> deterministic pipeline, LLM wrote the reason")
         
         try:
             desc = (listing.get("description") or "").lower()
@@ -136,17 +137,29 @@ def run_fair_price(listing: dict) -> dict:
             result["extras_detected"] = extras
             result["used_fallback"] = True
 
-            if fp <= 0:
-                result["explanation"] = (
-                    "We could not find a reference price for this instrument, "
-                    "so no price evaluation could be performed."
-                )
-            else:
-                result["explanation"] = (
-                    f"Based on market data, a fair price is around {fp:,.0f} LKR. "
-                    f"The fair range is between {result['fair_range']['min']:,.0f} "
-                    f"and {result['fair_range']['max']:,.0f} LKR."
-                )
+            try:
+                llm = get_chat_llm(temperature=0.1)
+                prompt = f"""You are a Fair Price evaluation agent. Write a short, simple-English explanation for the seller (max 3 sentences) that mentions the fair range and a suggested price if possible.
+Fair Price: {fp:,.0f} LKR
+Min Price: {result['fair_range']['min']:,.0f} LKR
+Max Price: {result['fair_range']['max']:,.0f} LKR
+Verdict: {result['verdict']}
+Do not invent numbers."""
+                resp = llm.invoke([HumanMessage(content=prompt)])
+                result["explanation"] = message_text(resp).strip()
+            except Exception as llm_e:
+                print(f"[Agent 01] LLM also failed to write explanation: {llm_e}")
+                if fp <= 0:
+                    result["explanation"] = (
+                        "We could not find a reference price for this instrument, "
+                        "so no price evaluation could be performed."
+                    )
+                else:
+                    result["explanation"] = (
+                        f"Based on market data, a fair price is around {fp:,.0f} LKR. "
+                        f"The fair range is between {result['fair_range']['min']:,.0f} "
+                        f"and {result['fair_range']['max']:,.0f} LKR."
+                    )
         except Exception as fallback_e:
             print(f"Fallback also failed: {fallback_e}")
             result["explanation"] = "Could not calculate fair price due to an error."

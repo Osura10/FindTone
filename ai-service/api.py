@@ -10,6 +10,7 @@ from llm_config import message_text
 from Agent_01.agent import run_fair_price
 from Agent_02.agent import run_trust_check
 from Agent_02.tools import get_clip_model
+from Agent_03.agent import run_smart_alert, parse_alert_text
 app = FastAPI(title="MusicMarket AI Service")
 
 # Allow CORS for the frontend
@@ -22,15 +23,23 @@ app.add_middleware(
 )
 
 # Initialize the agents once
-print("Initializing ChatBot Agent 01...")
 agent_01 = create_music_agent()
-print("ChatBot Agent 01 is ready!")
-print("Fair Price Agent is ready!")
 
+clip_status = "off"
 if os.getenv("ENABLE_CLIP", "true").lower() != "false":
-    print("Preloading CLIP model for Trust Check Agent...")
     get_clip_model()
-    print("CLIP model is ready!")
+    clip_status = "on"
+
+provider = os.getenv("LLM_PROVIDER", "ollama")
+model_name = os.getenv("OLLAMA_MODEL", "llama3.1:8b") if provider == "ollama" else os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+
+print("\n" + "="*50)
+print(f"     [ChatBot] RAG assistant ready")
+print(f"     [Agent 01] Fair Price Agent ready")
+print(f"     [Agent 02] Trust & Fraud Agent ready (CLIP: {clip_status})")
+print(f"     [Agent 03] Smart Alert Agent ready")
+print(f"     LLM provider: {provider} ({model_name})")
+print("="*50 + "\n")
 
 def verify_internal_key(x_internal_key: Optional[str] = Header(None)):
     expected_key = os.getenv("X_INTERNAL_KEY")
@@ -89,6 +98,24 @@ async def api_trust_check(request: TrustCheckRequest, _ = Depends(verify_interna
     result = run_trust_check(request.listing_id)
     if "error" in result and result.get("status_code") == 404:
         raise HTTPException(status_code=404, detail=result["error"])
+    return result
+
+class SmartAlertRequest(BaseModel):
+    listing_id: int
+    event: str
+    old_price: Optional[float] = None
+
+@app.post("/api/agents/smart-alert")
+async def api_smart_alert(request: SmartAlertRequest, _ = Depends(verify_internal_key)):
+    result = run_smart_alert(request.listing_id, request.event, request.old_price)
+    return result
+
+class ParseAlertRequest(BaseModel):
+    text: str
+
+@app.post("/api/agents/parse-alert")
+async def api_parse_alert(request: ParseAlertRequest, _ = Depends(verify_internal_key)):
+    result = parse_alert_text(request.text)
     return result
 
 class ChatRequest(BaseModel):
