@@ -228,4 +228,64 @@ public class AiServiceClient
             return null;
         }
     }
+
+    /// <summary>
+    /// Calls POST /api/agents/smart-alert and returns the result,
+    /// or null if the AI service is unreachable or returns an error.
+    /// Never throws; errors are logged.
+    /// </summary>
+    public async Task<MusicMarket.Api.Dtos.SmartAlertResult?> GetSmartAlertsAsync(int listingId, string eventType, decimal? oldPrice = null)
+    {
+        try
+        {
+            var request = new { listing_id = listingId, @event = eventType, old_price = oldPrice };
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(90));
+            var response = await _http.PostAsJsonAsync("/api/agents/smart-alert", request, cts.Token);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                _logger.LogWarning("AI service returned {Status} for smart-alert: {Body}", response.StatusCode, body);
+                return null;
+            }
+
+            return await response.Content.ReadFromJsonAsync<MusicMarket.Api.Dtos.SmartAlertResult>(
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }, cts.Token);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error calling AI service (smart-alert).");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Calls POST /api/agents/parse-alert and returns the result,
+    /// or null if the AI service is unreachable or returns an error.
+    /// Never throws; errors are logged.
+    /// </summary>
+    public async Task<MusicMarket.Api.Dtos.ParseAlertResult?> ParseAlertTextAsync(string text)
+    {
+        try
+        {
+            var request = new { text = text };
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(90));
+            var response = await _http.PostAsJsonAsync("/api/agents/parse-alert", request, cts.Token);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                _logger.LogWarning("AI service returned {Status} for parse-alert: {Body}", response.StatusCode, body);
+                return null;
+            }
+
+            return await response.Content.ReadFromJsonAsync<MusicMarket.Api.Dtos.ParseAlertResult>(
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }, cts.Token);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error calling AI service (parse-alert).");
+            return null;
+        }
+    }
 }

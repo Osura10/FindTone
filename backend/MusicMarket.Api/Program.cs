@@ -56,12 +56,14 @@ var aiInternalKey = Environment.GetEnvironmentVariable("AI_INTERNAL_KEY") ?? "";
 builder.Services.AddHttpClient<AiServiceClient>(client =>
 {
     client.BaseAddress = new Uri(aiBaseUrl);
-    client.Timeout = TimeSpan.FromSeconds(60);
+    client.Timeout = TimeSpan.FromMinutes(5);
     if (!string.IsNullOrEmpty(aiInternalKey))
     {
         client.DefaultRequestHeaders.Add("X-Internal-Key", aiInternalKey);
     }
 });
+
+builder.Services.AddScoped<SmartAlertService>();
 
 // CORS for Frontend
 builder.Services.AddCors(options =>
