@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, PlusCircle, User, LogOut, ShieldCheck, Store, Users, ShoppingBag, ShieldAlert } from 'lucide-react';
+import { LayoutDashboard, PlusCircle, User, LogOut, ShieldCheck, Store, Users, ShoppingBag, ShieldAlert, BellPlus, Heart, Bell } from 'lucide-react';
 import { apiCall } from '../services/api';
 
 const Sidebar = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [role, setRole] = useState(() => (sessionStorage.getItem('role') || localStorage.getItem('role') || 'buyer').toLowerCase());
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     const fetchUserRole = async () => {
@@ -30,6 +31,25 @@ const Sidebar = () => {
 
     fetchUserRole();
   }, [location.pathname, navigate]);
+
+  useEffect(() => {
+    if (role === 'admin') return;
+
+    const fetchUnreadCount = async () => {
+      try {
+        const data = await apiCall('/notifications/unread-count');
+        if (data && data.unreadCount !== undefined) {
+          setUnreadCount(data.unreadCount);
+        }
+      } catch (err) {
+        console.error('Failed to fetch unread count', err);
+      }
+    };
+
+    fetchUnreadCount();
+    const interval = setInterval(fetchUnreadCount, 30000);
+    return () => clearInterval(interval);
+  }, [role]);
 
   const handleLogout = () => {
     sessionStorage.removeItem('token');
@@ -55,6 +75,9 @@ const Sidebar = () => {
   } else {
     // Non-admin items
     navItems.push({ name: 'All Items', path: '/dashboard/items', icon: LayoutDashboard });
+    navItems.push({ name: 'My Alerts', path: '/dashboard/alerts', icon: BellPlus });
+    navItems.push({ name: 'Wishlist', path: '/dashboard/wishlist', icon: Heart });
+    navItems.push({ name: 'Notifications', path: '/dashboard/notifications', icon: Bell, badge: unreadCount });
 
     // ONLY Shop gets the 'Create Post' option
     if (role === 'shop') {
@@ -106,8 +129,34 @@ const Sidebar = () => {
               fontWeight: isActive ? '600' : '400'
             })}
           >
-            <item.icon size={20} />
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+              <item.icon size={20} />
+              {item.badge > 0 && (
+                <span style={{
+                  position: 'absolute',
+                  top: '-5px',
+                  right: '-5px',
+                  background: '#ff006e',
+                  width: '8px',
+                  height: '8px',
+                  borderRadius: '50%'
+                }}></span>
+              )}
+            </div>
             {item.name}
+            {item.badge > 0 && (
+              <span style={{
+                background: '#ff006e',
+                color: 'white',
+                fontSize: '0.75rem',
+                padding: '2px 8px',
+                borderRadius: '12px',
+                marginLeft: 'auto',
+                fontWeight: 'bold'
+              }}>
+                {item.badge}
+              </span>
+            )}
           </NavLink>
         ))}
       </nav>
