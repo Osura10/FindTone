@@ -17,12 +17,14 @@ public class AdminController : ControllerBase
     private readonly CloudinaryDotNet.Cloudinary _cloudinary;
 
     private readonly AiServiceClient _ai;
+    private readonly SmartAlertService _smartAlerts;
 
-    public AdminController(AppDbContext db, CloudinaryDotNet.Cloudinary cloudinary, AiServiceClient ai)
+    public AdminController(AppDbContext db, CloudinaryDotNet.Cloudinary cloudinary, AiServiceClient ai, SmartAlertService smartAlerts)
     {
         _db = db;
         _cloudinary = cloudinary;
         _ai = ai;
+        _smartAlerts = smartAlerts;
     }
 
     [HttpGet("stats")]
@@ -223,6 +225,7 @@ public class AdminController : ControllerBase
         if (listing.Status != "FLAGGED" && listing.Status != "PENDING")
             return BadRequest("Listing is not in FLAGGED or PENDING status.");
 
+        var oldStatus = listing.Status;
         listing.Status = dto.Approve ? "LIVE" : "REJECTED";
         if (!string.IsNullOrWhiteSpace(dto.Note))
         {
@@ -231,6 +234,12 @@ public class AdminController : ControllerBase
         listing.UpdatedAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
+
+        if (oldStatus != "LIVE" && listing.Status == "LIVE")
+        {
+            await _smartAlerts.OnListingBecameLiveAsync(listing);
+        }
+
         return Ok(new { message = "Listing reviewed successfully", Status = listing.Status });
     }
 
@@ -257,6 +266,7 @@ public class AdminController : ControllerBase
             }
             listing.AiReason = detailedReason;
             
+            var oldStatus = listing.Status;
             if (listing.Status != "REJECTED" && listing.Status != "SOLD")
             {
                 if (trustResult.Decision == "LIVE" || trustResult.Decision == "FLAGGED")
@@ -277,6 +287,11 @@ public class AdminController : ControllerBase
             
             listing.UpdatedAt = DateTime.UtcNow;
             await _db.SaveChangesAsync();
+
+            if (oldStatus != "LIVE" && listing.Status == "LIVE")
+            {
+                await _smartAlerts.OnListingBecameLiveAsync(listing);
+            }
 
             return Ok(new { message = "Recheck successful", trustResult });
         }
@@ -335,6 +350,7 @@ public class AdminController : ControllerBase
                 }
                 listing.AiReason = detailedReason;
                 
+                var oldStatus = listing.Status;
                 if (listing.Status != "REJECTED" && listing.Status != "SOLD")
                 {
                     if (trustResult.Decision == "LIVE" || trustResult.Decision == "FLAGGED")
@@ -359,6 +375,12 @@ public class AdminController : ControllerBase
                 
                 listing.UpdatedAt = DateTime.UtcNow;
                 await _db.SaveChangesAsync();
+                
+                if (oldStatus != "LIVE" && listing.Status == "LIVE")
+                {
+                    await _smartAlerts.OnListingBecameLiveAsync(listing);
+                }
+                
                 successCount++;
             }
             else

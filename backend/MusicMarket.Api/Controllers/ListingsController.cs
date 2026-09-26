@@ -18,6 +18,7 @@ public class ListingsController : ControllerBase
     private readonly AppDbContext _db;
     private readonly Cloudinary? _cloudinary;
     private readonly AiServiceClient _ai;
+    private readonly SmartAlertService _smartAlerts;
     private static readonly HashSet<string> AllowedConditions = new(StringComparer.OrdinalIgnoreCase)
     {
         "new", "like_new", "excellent", "good", "fair", "poor", "for_parts"
@@ -27,11 +28,12 @@ public class ListingsController : ControllerBase
         ".jpg", ".jpeg", ".png", ".webp"
     };
 
-    public ListingsController(AppDbContext db, IServiceProvider serviceProvider, AiServiceClient ai)
+    public ListingsController(AppDbContext db, IServiceProvider serviceProvider, AiServiceClient ai, SmartAlertService smartAlerts)
     {
         _db = db;
         _cloudinary = serviceProvider.GetService<Cloudinary>();
         _ai = ai;
+        _smartAlerts = smartAlerts;
     }
 
     /// <summary>
@@ -197,6 +199,7 @@ public class ListingsController : ControllerBase
             }
             listing.AiReason = detailedReason;
             
+            var becameLive = (listing.Status != "LIVE" && trustResult.Decision == "LIVE");
             if (trustResult.Decision == "LIVE" || trustResult.Decision == "FLAGGED")
             {
                 listing.Status = trustResult.Decision;
@@ -219,6 +222,11 @@ public class ListingsController : ControllerBase
             
             listing.UpdatedAt = DateTime.UtcNow;
             await _db.SaveChangesAsync();
+
+            if (becameLive)
+            {
+                await _smartAlerts.OnListingBecameLiveAsync(listing);
+            }
         }
         else
         {
@@ -574,6 +582,7 @@ public class ListingsController : ControllerBase
             }
             listing.AiReason = detailedReason;
             
+            var wasLive = listing.Status == "LIVE";
             if (listing.Status != "REJECTED" && listing.Status != "SOLD")
             {
                 if (trustResult.Decision == "LIVE" || trustResult.Decision == "FLAGGED")
@@ -599,16 +608,31 @@ public class ListingsController : ControllerBase
             
             listing.UpdatedAt = DateTime.UtcNow;
             await _db.SaveChangesAsync();
+
+            if (!wasLive && listing.Status == "LIVE")
+            {
+                await _smartAlerts.OnListingBecameLiveAsync(listing);
+            }
+            else if (wasLive && listing.Status == "LIVE" && listing.Price < oldPrice)
+            {
+                await _smartAlerts.OnPriceChangedAsync(listing, oldPrice);
+            }
         }
         else
         {
-            if (listing.Status != "REJECTED" && listing.Status != "SOLD")
+            var wasLiveTimeout = listing.Status == "LIVE";
+            if (listing.Status != "REJECTED" && listing.Status != "SOLD" && listing.Status != "LIVE")
             {
                 listing.Status = "PENDING";
             }
             listing.AiReason = "AI check failed: Service unavailable or timed out. An admin can re-check this listing.";
             listing.UpdatedAt = DateTime.UtcNow;
             await _db.SaveChangesAsync();
+            
+            if (wasLiveTimeout && listing.Status == "LIVE" && listing.Price < oldPrice)
+            {
+                await _smartAlerts.OnPriceChangedAsync(listing, oldPrice);
+            }
         }
 
         return Ok(new

@@ -99,3 +99,36 @@ Accept: application/json
 ### 9. Get Instrument Catalog Filtered by Category
 GET {{MusicMarket.Api_HostAddress}}/api/catalog?category=Acoustic%20Guitar
 Accept: application/json
+
+### 10. Create a Saved Search Alert [Authorize]
+POST {{MusicMarket.Api_HostAddress}}/api/alerts
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+  "name": "Fender Guitars Under 300k",
+  "category": "Electric Guitar",
+  "brand": "Fender",
+  "maxPrice": 300000,
+  "conditions": "new,like_new,excellent"
+}
+
+### 11. Get My Alerts [Authorize]
+GET {{MusicMarket.Api_HostAddress}}/api/alerts
+Authorization: Bearer {{authToken}}
+Accept: application/json
+
+### 12. Add to Wishlist [Authorize]
+POST {{MusicMarket.Api_HostAddress}}/api/wishlist/1
+Authorization: Bearer {{authToken}}
+Accept: application/json
+
+### 13. Get My Wishlist [Authorize]
+GET {{MusicMarket.Api_HostAddress}}/api/wishlist
+Authorization: Bearer {{authToken}}
+Accept: application/json
+
+### 14. Get Notifications [Authorize]
+GET {{MusicMarket.Api_HostAddress}}/api/notifications
+Authorization: Bearer {{authToken}}
+Accept: application/json
