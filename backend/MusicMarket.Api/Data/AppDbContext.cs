@@ -12,6 +12,9 @@ public class AppDbContext : DbContext
     public DbSet<ListingImage> ListingImages => Set<ListingImage>();
     public DbSet<PriceHistory> PriceHistories => Set<PriceHistory>();
     public DbSet<CatalogModel> CatalogModels => Set<CatalogModel>();
+    public DbSet<SavedSearch> SavedSearches => Set<SavedSearch>();
+    public DbSet<WishlistItem> WishlistItems => Set<WishlistItem>();
+    public DbSet<Notification> Notifications => Set<Notification>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -50,6 +53,7 @@ public class AppDbContext : DbContext
         {
             entity.HasIndex(c => new { c.Brand, c.Model })
                 .IsUnique();
+
 
             // Note: Prices in LKR are approximate current market estimates and must be verified against vendor/import pricing.
             entity.HasData(
@@ -97,6 +101,56 @@ public class AppDbContext : DbContext
                 new CatalogModel { Id = 29, Brand = "Boss", Model = "Katana-50 MkII", Category = "Amplifier", Tier = "budget", NewPriceLkr = 88000m, ReleaseYear = 2019, IsCollectible = false },
                 new CatalogModel { Id = 30, Brand = "Marshall", Model = "DSL40CR", Category = "Amplifier", Tier = "premium", NewPriceLkr = 320000m, ReleaseYear = 2018, IsCollectible = false }
             );
+        });
+
+        // SavedSearch configuration
+        builder.Entity<SavedSearch>(entity =>
+        {
+            entity.HasIndex(s => s.UserId);
+            entity.HasIndex(s => s.IsActive);
+            
+            entity.HasOne(s => s.User)
+                .WithMany()
+                .HasForeignKey(s => s.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // WishlistItem configuration
+        builder.Entity<WishlistItem>(entity =>
+        {
+            entity.HasIndex(w => new { w.UserId, w.ListingId }).IsUnique();
+            
+            entity.HasOne(w => w.User)
+                .WithMany()
+                .HasForeignKey(w => w.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+                
+            entity.HasOne(w => w.Listing)
+                .WithMany()
+                .HasForeignKey(w => w.ListingId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Notification configuration
+        builder.Entity<Notification>(entity =>
+        {
+            entity.HasIndex(n => new { n.UserId, n.IsRead });
+            entity.HasIndex(n => new { n.UserId, n.ListingId, n.Type }).IsUnique();
+            
+            entity.HasOne(n => n.User)
+                .WithMany()
+                .HasForeignKey(n => n.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+                
+            entity.HasOne(n => n.Listing)
+                .WithMany()
+                .HasForeignKey(n => n.ListingId)
+                .OnDelete(DeleteBehavior.SetNull);
+                
+            entity.HasOne(n => n.SavedSearch)
+                .WithMany()
+                .HasForeignKey(n => n.SavedSearchId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
     }
 }
