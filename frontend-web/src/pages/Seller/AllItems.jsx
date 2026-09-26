@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Package, PlusCircle, AlertCircle, RefreshCw, ShoppingBag, Store } from 'lucide-react';
+import { Search, Package, PlusCircle, AlertCircle, RefreshCw, ShoppingBag, Store, Heart, Edit2, XCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { apiCall } from '../../services/api';
 
@@ -10,6 +10,8 @@ const AllItems = () => {
   const [error, setError] = useState('');
   const [role, setRole] = useState(null);
   const [activeTab, setActiveTab] = useState('marketplace'); // 'marketplace' or 'mine'
+  const [wishlist, setWishlist] = useState([]);
+  const [priceModal, setPriceModal] = useState({ isOpen: false, listingId: null, currentPrice: 0, newPrice: 0 });
 
   const initialize = async () => {
     setLoading(true);
@@ -24,12 +26,14 @@ const AllItems = () => {
         if (userRole === 'buyer') {
           setActiveTab('marketplace');
           fetchMarketplace();
+          fetchWishlist();
         } else if (userRole === 'shop') {
           if (activeTab === 'mine') {
             fetchMyListings();
           } else {
             fetchMarketplace();
           }
+          fetchWishlist();
         } else {
           setActiveTab('marketplace');
           fetchMarketplace();
@@ -55,6 +59,46 @@ const AllItems = () => {
       setError('Unable to load marketplace listings.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchWishlist = async () => {
+    try {
+      const data = await apiCall('/wishlist');
+      setWishlist((data || []).map(w => w.listingId));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const toggleWishlist = async (id, e) => {
+    e.stopPropagation();
+    try {
+      if (wishlist.includes(id)) {
+        await apiCall(`/wishlist/${id}`, { method: 'DELETE' });
+        setWishlist(wishlist.filter(w => w !== id));
+      } else {
+        await apiCall(`/wishlist/${id}`, { method: 'POST' });
+        setWishlist([...wishlist, id]);
+      }
+    } catch (err) {
+      alert(err.message || 'Failed to update wishlist');
+    }
+  };
+
+  const handleUpdatePrice = async () => {
+    setPriceModal(prev => ({ ...prev, isSaving: true }));
+    try {
+      await apiCall(`/listings/${priceModal.listingId}/price`, {
+        method: 'PUT',
+        body: JSON.stringify({ newPrice: Number(priceModal.newPrice) })
+      });
+      setPriceModal({ isOpen: false, listingId: null, currentPrice: 0, newPrice: 0, isSaving: false });
+      if (activeTab === 'mine') fetchMyListings();
+      else fetchMarketplace();
+    } catch (err) {
+      alert(err.message || 'Failed to update price');
+      setPriceModal(prev => ({ ...prev, isSaving: false }));
     }
   };
 
@@ -247,6 +291,22 @@ const AllItems = () => {
                     alt={item.title || item.name} 
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
                   />
+
+                  {/* Heart button */}
+                  {role !== 'admin' && activeTab === 'marketplace' && item.status === 'LIVE' && (
+                    <button
+                      onClick={(e) => toggleWishlist(item.id, e)}
+                      style={{
+                        position: 'absolute', top: '10px', left: '10px',
+                        background: 'rgba(0,0,0,0.5)', border: 'none', borderRadius: '50%',
+                        width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: wishlist.includes(item.id) ? '#ff006e' : '#fff',
+                        cursor: 'pointer', transition: 'transform 0.2s'
+                      }}
+                    >
+                      <Heart size={18} fill={wishlist.includes(item.id) ? '#ff006e' : 'none'} />
+                    </button>
+                  )}
                   
                   {/* Status & Trust Badges */}
                   <div style={{ 
@@ -338,6 +398,19 @@ const AllItems = () => {
                       Fair: {fmtLkr(item.fairPriceMin)} – {fmtLkr(item.fairPriceMax)}
                     </div>
                   )}
+                  
+                  {activeTab === 'mine' && item.status === 'LIVE' && (
+                    <button 
+                      className="btn btn-outline"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPriceModal({ isOpen: true, listingId: item.id, currentPrice: item.price, newPrice: item.price });
+                      }}
+                      style={{ marginTop: '0.75rem', padding: '0.4rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+                    >
+                      <Edit2 size={14} /> Edit Price
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -364,6 +437,48 @@ const AllItems = () => {
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Price Edit Modal */}
+      {priceModal.isOpen && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(8, 6, 15, 0.8)', backdropFilter: 'blur(8px)',
+          display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 999999, padding: '1rem'
+        }}>
+          <div className="glass-panel" style={{
+            width: '100%', maxWidth: '400px', padding: '2rem', borderRadius: '24px',
+            background: 'linear-gradient(145deg, rgba(30, 24, 45, 0.98), rgba(18, 14, 28, 0.99))'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h3 style={{ margin: 0 }}>Update Price</h3>
+              <button onClick={() => setPriceModal({ isOpen: false, listingId: null, currentPrice: 0, newPrice: 0 })} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>
+                <XCircle size={20} />
+              </button>
+            </div>
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Current Price</label>
+              <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{fmtLkr(priceModal.currentPrice)}</div>
+            </div>
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>New Price (LKR)</label>
+              <input 
+                type="number" 
+                min="0"
+                className="input-field" 
+                value={priceModal.newPrice}
+                onChange={e => setPriceModal({ ...priceModal, newPrice: e.target.value })}
+                style={{ width: '100%' }}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: '1rem' }}>
+              <button className="btn btn-outline" onClick={() => setPriceModal({ isOpen: false, listingId: null, currentPrice: 0, newPrice: 0, isSaving: false })} style={{ flex: 1 }} disabled={priceModal.isSaving}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleUpdatePrice} style={{ flex: 1 }} disabled={priceModal.isSaving}>
+                {priceModal.isSaving ? 'Saving...' : 'Save Price'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
