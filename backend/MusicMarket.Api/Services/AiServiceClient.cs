@@ -125,6 +125,95 @@ public class TrustCheckResult
     [JsonPropertyName("used_fallback")]
     public bool UsedFallback { get; set; }
 }
+public class ShoppingAssistantRequest
+{
+    [JsonPropertyName("message")]
+    public string Message { get; set; } = "";
+
+    [JsonPropertyName("session_id")]
+    public string? SessionId { get; set; }
+
+    [JsonPropertyName("user_id")]
+    public int? UserId { get; set; }
+}
+
+public class ShoppingAssistantListing
+{
+    [JsonPropertyName("id")]
+    public int Id { get; set; }
+
+    [JsonPropertyName("title")]
+    public string Title { get; set; } = "";
+
+    [JsonPropertyName("brand")]
+    public string Brand { get; set; } = "";
+
+    [JsonPropertyName("model")]
+    public string Model { get; set; } = "";
+
+    [JsonPropertyName("category")]
+    public string Category { get; set; } = "";
+
+    [JsonPropertyName("condition")]
+    public string Condition { get; set; } = "";
+
+    [JsonPropertyName("year")]
+    public int? Year { get; set; }
+
+    [JsonPropertyName("price")]
+    public decimal Price { get; set; }
+
+    [JsonPropertyName("location")]
+    public string Location { get; set; } = "";
+
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = "";
+
+    [JsonPropertyName("trust_score")]
+    public int? TrustScore { get; set; }
+
+    [JsonPropertyName("fair_price")]
+    public decimal? FairPrice { get; set; }
+
+    [JsonPropertyName("fair_price_min")]
+    public decimal? FairPriceMin { get; set; }
+
+    [JsonPropertyName("fair_price_max")]
+    public decimal? FairPriceMax { get; set; }
+
+    [JsonPropertyName("price_verdict")]
+    public string? PriceVerdict { get; set; }
+
+    [JsonPropertyName("price_explanation")]
+    public string? PriceExplanation { get; set; }
+
+    [JsonPropertyName("image_url")]
+    public string? ImageUrl { get; set; }
+}
+
+public class ShoppingAssistantResult
+{
+    [JsonPropertyName("reply")]
+    public string Reply { get; set; } = "";
+
+    [JsonPropertyName("listings")]
+    public List<ShoppingAssistantListing> Listings { get; set; } = [];
+
+    [JsonPropertyName("comparison")]
+    public JsonElement? Comparison { get; set; }
+
+    [JsonPropertyName("price_insight")]
+    public JsonElement? PriceInsight { get; set; }
+
+    [JsonPropertyName("alert_to_create")]
+    public JsonElement? AlertToCreate { get; set; }
+
+    [JsonPropertyName("session_id")]
+    public string SessionId { get; set; } = "";
+
+    [JsonPropertyName("used_fallback")]
+    public bool UsedFallback { get; set; }
+}
 
 // ── Typed HttpClient ─────────────────────────────────────────────────────────
 
@@ -288,4 +377,65 @@ public class AiServiceClient
             return null;
         }
     }
+        /// <summary>
+    /// Calls POST /api/agents/shopping-assistant and returns the result,
+    /// or null if the AI service is unreachable or returns an error.
+    /// Never throws; errors are logged.
+    /// </summary>
+    public async Task<ShoppingAssistantResult?> GetShoppingAssistantAsync(
+        string message,
+        string? sessionId,
+        int userId)
+    {
+        try
+        {
+            var request = new ShoppingAssistantRequest
+            {
+                Message = message,
+                SessionId = sessionId,
+                UserId = userId
+            };
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(120));
+
+            var response = await _http.PostAsJsonAsync(
+                "/api/agents/shopping-assistant",
+                request,
+                cts.Token);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+
+                _logger.LogWarning(
+                    "AI service returned {Status} for shopping-assistant: {Body}",
+                    response.StatusCode,
+                    body);
+
+                return null;
+            }
+
+            var result = await response.Content.ReadFromJsonAsync<ShoppingAssistantResult>(
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true },
+                cts.Token);
+
+            return result;
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "AI service is unreachable (shopping-assistant).");
+            return null;
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogError(ex, "AI service timed out (shopping-assistant).");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error calling AI service (shopping-assistant).");
+            return null;
+        }
+    }
+
 }
