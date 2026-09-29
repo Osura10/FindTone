@@ -21,6 +21,8 @@ public class Listing
     public string ListingType { get; set; } = "Sell";
     public decimal Price { get; set; }
     public string Location { get; set; } = "";
+    public double? Latitude { get; set; }
+    public double? Longitude { get; set; }
     public string Description { get; set; } = "";
     
     // Status values: PENDING, LIVE, FLAGGED, REJECTED, SOLD

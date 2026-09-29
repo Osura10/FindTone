@@ -56,6 +56,20 @@ public class ListingsController : ControllerBase
             return BadRequest("Price must be greater than 0");
         }
 
+        // Validate Coordinates
+        if (dto.Latitude.HasValue != dto.Longitude.HasValue)
+        {
+            return BadRequest("Latitude and Longitude must both be provided or both be null");
+        }
+        if (dto.Latitude.HasValue && (dto.Latitude < -90 || dto.Latitude > 90))
+        {
+            return BadRequest("Latitude must be between -90 and 90");
+        }
+        if (dto.Longitude.HasValue && (dto.Longitude < -180 || dto.Longitude > 180))
+        {
+            return BadRequest("Longitude must be between -180 and 180");
+        }
+
         // Validate Condition
         var condition = dto.Condition?.Trim().ToLowerInvariant() ?? "";
         if (!AllowedConditions.Contains(condition))
@@ -101,6 +115,8 @@ public class ListingsController : ControllerBase
             ListingType = string.IsNullOrWhiteSpace(dto.ListingType) ? "Sell" : dto.ListingType.Trim(),
             Price = dto.Price,
             Location = dto.Location.Trim(),
+            Latitude = dto.Latitude,
+            Longitude = dto.Longitude,
             Description = dto.Description?.Trim() ?? "",
             Status = "PENDING",
             CreatedAt = DateTime.UtcNow,
@@ -254,6 +270,8 @@ public class ListingsController : ControllerBase
             ListingType = listing.ListingType,
             Price = listing.Price,
             Location = listing.Location,
+            Latitude = listing.Latitude,
+            Longitude = listing.Longitude,
             Description = listing.Description,
             Status = listing.Status,
             FairPrice = listing.FairPrice,
@@ -349,6 +367,8 @@ public class ListingsController : ControllerBase
                 ListingType = l.ListingType,
                 Price = l.Price,
                 Location = l.Location,
+                Latitude = l.Latitude,
+                Longitude = l.Longitude,
                 Status = l.Status,
                 FirstImageUrl = l.Images.OrderBy(i => i.SortOrder).Select(i => i.Url).FirstOrDefault(),
                 FairPrice = l.FairPrice,
@@ -406,6 +426,8 @@ public class ListingsController : ControllerBase
             ListingType = listing.ListingType,
             Price = listing.Price,
             Location = listing.Location,
+            Latitude = listing.Latitude,
+            Longitude = listing.Longitude,
             Description = listing.Description,
             Status = listing.Status,
             SoldPrice = listing.SoldPrice,
@@ -472,6 +494,8 @@ public class ListingsController : ControllerBase
                 ListingType = l.ListingType,
                 Price = l.Price,
                 Location = l.Location,
+                Latitude = l.Latitude,
+                Longitude = l.Longitude,
                 Status = l.Status,
                 FirstImageUrl = l.Images.OrderBy(i => i.SortOrder).Select(i => i.Url).FirstOrDefault(),
                 FairPrice = l.FairPrice,

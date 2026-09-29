@@ -1,7 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Package, PlusCircle, AlertCircle, RefreshCw, ShoppingBag, Store, Heart, Edit2, XCircle } from 'lucide-react';
+import { Search, Package, PlusCircle, AlertCircle, RefreshCw, ShoppingBag, Store, Heart, Edit2, XCircle, MapPin } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { apiCall } from '../../services/api';
+import { MapContainer, TileLayer, Marker } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+
+import icon from 'leaflet/dist/images/marker-icon.png';
+import iconShadow from 'leaflet/dist/images/marker-shadow.png';
+
+let DefaultIcon = L.icon({
+    iconUrl: icon,
+    shadowUrl: iconShadow,
+    iconSize: [25, 41],
+    iconAnchor: [12, 41]
+});
+L.Marker.prototype.options.icon = DefaultIcon;
 
 const AllItems = () => {
   const [items, setItems] = useState([]);
@@ -396,6 +410,20 @@ const AllItems = () => {
                   {item.fairPriceMin != null && item.fairPriceMax != null && (
                     <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
                       Fair: {fmtLkr(item.fairPriceMin)} – {fmtLkr(item.fairPriceMax)}
+                    </div>
+                  )}
+                  {item.location && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                      <MapPin size={12} /> {item.location}
+                    </div>
+                  )}
+                  
+                  {item.latitude != null && item.longitude != null && (
+                    <div style={{ height: '100px', width: '100%', borderRadius: '6px', overflow: 'hidden', marginTop: '0.5rem', border: '1px solid rgba(255,255,255,0.1)' }}>
+                      <MapContainer center={[item.latitude, item.longitude]} zoom={13} style={{ height: '100%', width: '100%', zIndex: 1 }} zoomControl={false} dragging={false} scrollWheelZoom={false} doubleClickZoom={false}>
+                        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap' />
+                        <Marker position={[item.latitude, item.longitude]} />
+                      </MapContainer>
                     </div>
                   )}
                   

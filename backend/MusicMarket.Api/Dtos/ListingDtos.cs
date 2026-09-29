@@ -14,6 +14,8 @@ public class CreateListingDto
     public string ListingType { get; set; } = "Sell";
     public decimal Price { get; set; }
     public string Location { get; set; } = "";
+    public double? Latitude { get; set; }
+    public double? Longitude { get; set; }
     public string Description { get; set; } = "";
     public List<IFormFile> Images { get; set; } = [];
 }
@@ -65,6 +67,8 @@ public class ListingSummaryDto
     public string ListingType { get; set; } = "Sell";
     public decimal Price { get; set; }
     public string Location { get; set; } = "";
+    public double? Latitude { get; set; }
+    public double? Longitude { get; set; }
     public string Status { get; set; } = "LIVE";
     public string? FirstImageUrl { get; set; }
     
@@ -97,6 +101,8 @@ public class ListingDetailDto
     public string ListingType { get; set; } = "Sell";
     public decimal Price { get; set; }
     public string Location { get; set; } = "";
+    public double? Latitude { get; set; }
+    public double? Longitude { get; set; }
     public string Description { get; set; } = "";
     public string Status { get; set; } = "PENDING";
     public decimal? SoldPrice { get; set; }

@@ -1,7 +1,50 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, Plus, X, CheckCircle, TrendingUp, Loader } from 'lucide-react';
+import { Upload, Plus, X, CheckCircle, TrendingUp, Loader, Navigation } from 'lucide-react';
 import { apiCall } from '../../services/api';
+import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+
+import icon from 'leaflet/dist/images/marker-icon.png';
+import iconShadow from 'leaflet/dist/images/marker-shadow.png';
+
+let DefaultIcon = L.icon({
+    iconUrl: icon,
+    shadowUrl: iconShadow,
+    iconSize: [25, 41],
+    iconAnchor: [12, 41]
+});
+L.Marker.prototype.options.icon = DefaultIcon;
+
+const LocationMarker = ({ position, setPosition }) => {
+  useMapEvents({
+    click(e) {
+      setPosition(e.latlng);
+    },
+  });
+
+  return position === null ? null : (
+    <Marker 
+      position={position} 
+      draggable={true}
+      eventHandlers={{
+        dragend: (e) => {
+          setPosition(e.target.getLatLng());
+        }
+      }}
+    />
+  );
+};
+
+const MapUpdater = ({ position }) => {
+  const map = useMap();
+  useEffect(() => {
+    map.setView(position, map.getZoom());
+  }, [position, map]);
+  return null;
+};
+
 
 const CONDITIONS = [
   { value: 'new', label: 'Brand New (Unopened)' },
@@ -54,6 +97,13 @@ const CreatePost = () => {
   const [priceCheckResult, setPriceCheckResult] = useState(null);
   const [priceCheckError, setPriceCheckError] = useState('');
 
+  // Map state
+  const [position, setPosition] = useState(null);
+  const [mapQuery, setMapQuery] = useState('');
+  const [mapResults, setMapResults] = useState([]);
+  const [showMapResults, setShowMapResults] = useState(false);
+  const searchTimeoutRef = useRef(null);
+
   useEffect(() => {
     // Guard: Both Shops and Buyers can access Create Post
     apiCall('/auth/me').then(user => {
@@ -83,6 +133,71 @@ const CreatePost = () => {
     if (['brand', 'model', 'category', 'condition', 'price', 'year', 'description'].includes(e.target.name)) {
       setPriceCheckResult(null);
       setPriceCheckError('');
+    }
+  };
+
+  const handleMapSearchChange = (e) => {
+    const val = e.target.value;
+    setMapQuery(val);
+    if (!val.trim()) {
+      setMapResults([]);
+      setShowMapResults(false);
+      return;
+    }
+    
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    
+    searchTimeoutRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&countrycodes=lk&q=${encodeURIComponent(val)}`);
+        const data = await res.json();
+        setMapResults(data);
+        setShowMapResults(true);
+      } catch (err) {
+        console.error('Nominatim search error', err);
+      }
+    }, 1000);
+  };
+
+  const handleSelectMapResult = (result) => {
+    const latlng = { lat: parseFloat(result.lat), lng: parseFloat(result.lon) };
+    setPosition(latlng);
+    if (!formData.location) {
+      setFormData(prev => ({ ...prev, location: result.display_name.split(',')[0] }));
+    }
+    setMapQuery(result.display_name);
+    setShowMapResults(false);
+  };
+
+  useEffect(() => {
+    if (!position || formData.location) return;
+    
+    const reverseGeocode = async () => {
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${position.lat}&lon=${position.lng}`);
+        const data = await res.json();
+        if (data && data.display_name) {
+          setFormData(prev => ({ ...prev, location: data.display_name.split(',')[0] }));
+        }
+      } catch (err) {
+        console.error('Nominatim reverse error', err);
+      }
+    };
+    
+    const timeout = setTimeout(reverseGeocode, 1000);
+    return () => clearTimeout(timeout);
+  }, [position]);
+
+  const handleUseCurrentLocation = () => {
+    if ('geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        },
+        (err) => {
+          console.error('Geolocation error', err);
+        }
+      );
     }
   };
 
@@ -195,6 +310,10 @@ const CreatePost = () => {
       data.append('ListingType', formData.listingType);
       data.append('Price', formData.price);
       data.append('Location', formData.location.trim());
+      if (position) {
+        data.append('Latitude', position.lat);
+        data.append('Longitude', position.lng);
+      }
       data.append('Description', formData.description.trim());
 
       selectedImages.forEach((file) => {
@@ -502,6 +621,54 @@ const CreatePost = () => {
               required
               style={inputStyle}
             />
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', gridColumn: '1 / -1' }}>
+            <label style={labelStyle}>Pin your location (Optional)</label>
+            <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  type="text"
+                  placeholder="Search map for an address..."
+                  value={mapQuery}
+                  onChange={handleMapSearchChange}
+                  style={inputStyle}
+                  onFocus={() => { if (mapResults.length > 0) setShowMapResults(true); }}
+                  onBlur={() => setTimeout(() => setShowMapResults(false), 200)}
+                />
+                <button
+                  type="button"
+                  onClick={handleUseCurrentLocation}
+                  style={{ ...inputStyle, width: 'auto', background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
+                >
+                  <Navigation size={18} />
+                  Current Location
+                </button>
+              </div>
+              {showMapResults && (
+                <div style={{ position: 'absolute', top: '48px', left: 0, right: 0, background: '#1f1b2e', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', zIndex: 1000, maxHeight: '200px', overflowY: 'auto' }}>
+                  {mapResults.map(r => (
+                    <div
+                      key={r.place_id}
+                      style={{ padding: '8px 12px', cursor: 'pointer', color: '#fff', borderBottom: '1px solid rgba(255,255,255,0.1)' }}
+                      onMouseDown={() => handleSelectMapResult(r)}
+                    >
+                      {r.display_name}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ height: '300px', width: '100%', borderRadius: '8px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.3)' }}>
+                <MapContainer center={[6.9271, 79.8612]} zoom={12} style={{ height: '100%', width: '100%', zIndex: 1 }}>
+                  <TileLayer
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                  />
+                  <LocationMarker position={position} setPosition={setPosition} />
+                  {position && <MapUpdater position={position} />}
+                </MapContainer>
+              </div>
+            </div>
           </div>
         </div>
 
