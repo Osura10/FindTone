@@ -11,6 +11,7 @@ from Agent_01.agent import run_fair_price
 from Agent_02.agent import run_trust_check
 from Agent_02.tools import get_clip_model
 from Agent_03.agent import run_smart_alert, parse_alert_text
+from Agent_04.agent import run_shopping_assistant, create_shopping_assistant
 app = FastAPI(title="MusicMarket AI Service")
 
 # Allow CORS for the frontend
@@ -38,6 +39,10 @@ print(f"     [ChatBot] RAG assistant ready")
 print(f"     [Agent 01] Fair Price Agent ready")
 print(f"     [Agent 02] Trust & Fraud Agent ready (CLIP: {clip_status})")
 print(f"     [Agent 03] Smart Alert Agent ready")
+
+if create_shopping_assistant:
+    print(f"     [Agent 04] Shopping Assistant ready")
+    
 print(f"     LLM provider: {provider} ({model_name})")
 print("="*50 + "\n")
 
@@ -116,6 +121,60 @@ class ParseAlertRequest(BaseModel):
 @app.post("/api/agents/parse-alert")
 async def api_parse_alert(request: ParseAlertRequest, _ = Depends(verify_internal_key)):
     result = parse_alert_text(request.text)
+    return result
+
+class ShoppingAssistantRequest(BaseModel):
+    message: str
+    session_id: Optional[str] = None
+    user_id: Optional[int] = None
+
+class ShoppingAssistantListing(BaseModel):
+    id: int
+    title: str
+    brand: str
+    model: str
+    category: str
+    condition: str
+    year: Optional[int] = None
+    price: float
+    location: str
+    status: str
+    trust_score: Optional[int] = None
+    fair_price: Optional[float] = None
+    fair_price_min: Optional[float] = None
+    fair_price_max: Optional[float] = None
+    price_verdict: Optional[str] = None
+    price_explanation: Optional[str] = None
+    image_url: Optional[str] = None
+
+class ShoppingAssistantResponse(BaseModel):
+    reply: str
+    listings: List[ShoppingAssistantListing] = []
+    comparison: Optional[dict] = None
+    price_insight: Optional[dict] = None
+    alert_to_create: Optional[dict] = None
+    session_id: str
+    used_fallback: bool
+
+@app.post("/api/agents/shopping-assistant", response_model=ShoppingAssistantResponse)
+async def api_shopping_assistant(request: ShoppingAssistantRequest, _ = Depends(verify_internal_key)):
+    result = run_shopping_assistant(
+        message=request.message,
+        session_id=request.session_id,
+        user_id=request.user_id
+    )
+    
+    # Logging
+    tools_called = []
+    if result.get("listings"): tools_called.append("search_listings")
+    if result.get("comparison"): tools_called.append("compare_items")
+    if result.get("price_insight"): tools_called.append("get_price_insight")
+    if result.get("alert_to_create"): tools_called.append("create_alert_criteria")
+    
+    tools_str = ", ".join(tools_called) if tools_called else "none"
+    listings_count = len(result.get("listings", []))
+    print(f"[Shopping] tools called: [{tools_str}] | listings={listings_count} | used_fallback={result.get('used_fallback', False)}")
+    
     return result
 
 class ChatRequest(BaseModel):

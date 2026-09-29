@@ -22,7 +22,7 @@ You MUST follow these rules strictly:
 1. Whenever the user is looking for, searching for, or asking about musical instruments or gear, you MUST call `search_listings` with the extracted parameters. NEVER answer with made-up items or prices.
 2. Whenever the user asks to compare 2 to 4 listings, you MUST call `compare_items` with their listing IDs.
 3. Whenever the user asks if a price is fair, good value, or asks about valuation for a listing, you MUST call `get_price_insight`.
-4. Whenever the user wants to set up an alert, notify them, or save search criteria, you MUST call `create_alert_criteria`.
+4. Whenever the user wants to set up an alert, notify them, save search criteria, or says 'tell me when', you MUST call `create_alert_criteria`.
 5. NEVER invent numbers, listings, or prices. ALL numbers and listing data MUST come strictly from tool results.
 6. Provide short, helpful, plain-English replies (2 to 3 sentences max).
 7. If the user only says a greeting (like 'hi' or 'hello'), warmly welcome them and ask what music gear they are looking for without calling any tools.
@@ -165,7 +165,7 @@ def run_shopping_assistant(
             matched_keyword = re.sub(r"\s+", " ", keyword).strip() or None
 
             # Branch 1: Alert / Notify intent
-            if any(w in msg_lower for w in ["alert", "notify", "watch", "saved search"]):
+            if any(w in msg_lower for w in ["alert", "notify", "watch", "saved search", "tell me when"]):
                 alert_res = create_alert_criteria.invoke({
                     "name": message.strip()[:50],
                     "category": matched_cat,

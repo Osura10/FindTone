@@ -4,12 +4,15 @@ import { AlertTriangle, KeyRound, CheckCircle2 } from 'lucide-react';
 import Sidebar from './Sidebar';
 import ChangePasswordModal from './ChangePasswordModal';
 import { apiCall } from '../services/api';
+import ErrorBoundary from './ErrorBoundary';
+import ShoppingAssistant, { ShoppingAssistantLauncher } from './ShoppingAssistant/ShoppingAssistant';
 
 const DashboardLayout = () => {
   const location = useLocation();
   const [currentUser, setCurrentUser] = useState(null);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [passwordChangeSuccess, setPasswordChangeSuccess] = useState(false);
+  const [isAssistantOpen, setIsAssistantOpen] = useState(false);
 
   const fetchUser = async () => {
     try {
@@ -131,6 +134,18 @@ const DashboardLayout = () => {
         onClose={() => setIsPasswordModalOpen(false)}
         onPasswordChanged={handlePasswordChanged}
       />
+
+      {/* Shopping Assistant floating UI - Only for buyers and shops */}
+      {currentUser && currentUser.role !== 'admin' && (
+        <ErrorBoundary>
+          {!isAssistantOpen && (
+            <ShoppingAssistantLauncher onClick={() => setIsAssistantOpen(true)} />
+          )}
+          {isAssistantOpen && (
+            <ShoppingAssistant onClose={() => setIsAssistantOpen(false)} />
+          )}
+        </ErrorBoundary>
+      )}
     </>
   );
 };
