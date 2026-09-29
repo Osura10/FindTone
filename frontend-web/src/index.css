@@ -1,3 +1,4 @@
+@import './styles/theme.css';
 :root {
   --primary-color: #7b2cbf;
   --primary-hover: #9d4edd;

@@ -1,4 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { Toaster } from 'react-hot-toast';
 import Landing from './pages/Landing/Landing';
 import Login from './pages/Login/Login';
 import RegisterSelection from './pages/Register/RegisterSelection';
@@ -25,6 +26,14 @@ import Sales from './pages/Seller/Sales';
 function App() {
   return (
     <Router>
+      <Toaster 
+        position="top-right" 
+        toastOptions={{ 
+          style: { background: 'var(--color-bg-surface)', color: '#fff', border: '1px solid var(--color-border-glass)' },
+          success: { iconTheme: { primary: 'var(--color-success)', secondary: '#fff' } },
+          error: { iconTheme: { primary: 'var(--color-danger)', secondary: '#fff' } }
+        }} 
+      />
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
