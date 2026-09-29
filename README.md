@@ -11,7 +11,7 @@ FindTone/
 ├── ai-service/       # Python FastAPI service (Agentic AI)
 ├── backend/          # ASP.NET Core 8 Web API
 ├── frontend-web/     # React 19 + Vite web app
-├── mobile-app/       # Flutter mobile app
+├── frontend-mobile/  # Flutter mobile app
 └── docs/             # Documentation
 ```
 
@@ -80,7 +80,7 @@ uvicorn api:app --host 127.0.0.1 --port 8000 --reload
 #### Mobile App (Flutter)
 
 ```bash
-cd mobile-app
+cd frontend-mobile
 flutter pub get
 flutter run
 ```
