@@ -306,8 +306,21 @@ const AllItems = () => {
                   <img 
                     src={displayImage} 
                     alt={item.title || item.name} 
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                    style={{ 
+                      width: '100%', height: '100%', objectFit: 'cover', 
+                      filter: item.status === 'SOLD' ? 'grayscale(100%)' : 'none' 
+                    }} 
                   />
+                  {item.status === 'SOLD' && (
+                    <div style={{
+                      position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%) rotate(-15deg)',
+                      background: 'rgba(239, 68, 68, 0.9)', color: '#fff', padding: '6px 20px', fontSize: '1.2rem',
+                      fontWeight: '900', border: '2px solid #fff', borderRadius: '6px', zIndex: 10,
+                      boxShadow: '0 4px 10px rgba(0,0,0,0.5)', textTransform: 'uppercase', letterSpacing: '2px'
+                    }}>
+                      SOLD OUT
+                    </div>
+                  )}
 
                   {/* Heart button */}
                   {role !== 'admin' && activeTab === 'marketplace' && item.status === 'LIVE' && (

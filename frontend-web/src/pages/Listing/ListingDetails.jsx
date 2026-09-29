@@ -169,10 +169,21 @@ const ListingDetails = () => {
             <div style={{
               position: 'absolute', top: '16px', left: '16px',
               background: statusStyle.bg, color: statusStyle.color,
-              padding: '6px 14px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 'bold'
+              padding: '6px 14px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 'bold',
+              zIndex: 10
             }}>
               {statusStyle.label}
             </div>
+            {listing.status === 'SOLD' && (
+              <div style={{
+                position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%) rotate(-15deg)',
+                background: 'rgba(239, 68, 68, 0.9)', color: '#fff', padding: '10px 30px', fontSize: '2rem',
+                fontWeight: '900', border: '4px solid #fff', borderRadius: '8px', zIndex: 10,
+                boxShadow: '0 4px 15px rgba(0,0,0,0.5)', textTransform: 'uppercase', letterSpacing: '2px'
+              }}>
+                SOLD OUT
+              </div>
+            )}
             {userId && !isOwner && listing.status === 'LIVE' && (
               <button
                 onClick={toggleWishlist}
@@ -336,9 +347,13 @@ const ListingDetails = () => {
 
           {/* Actions */}
           <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-            {!isOwner && listing.status !== 'SOLD' && (
-              <button className="btn btn-primary" style={{ flex: 1, opacity: 0.6, cursor: 'not-allowed' }} disabled>
-                Buy now (Coming soon)
+            {!isOwner && listing.status === 'LIVE' && (
+              <button 
+                className="btn btn-primary" 
+                style={{ flex: 1, fontWeight: 'bold' }}
+                onClick={() => navigate(`/dashboard/checkout/${listing.id}`)}
+              >
+                Buy now
               </button>
             )}
             

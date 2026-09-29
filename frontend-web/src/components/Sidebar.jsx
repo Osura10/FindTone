@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, PlusCircle, User, LogOut, ShieldCheck, Store, Users, ShoppingBag, ShieldAlert, BellPlus, Heart, Bell } from 'lucide-react';
+import { LayoutDashboard, PlusCircle, User, LogOut, ShieldCheck, Store, Users, ShoppingBag, ShieldAlert, BellPlus, Heart, Bell, Banknote } from 'lucide-react';
 import { apiCall } from '../services/api';
 
 const Sidebar = () => {
@@ -78,10 +78,12 @@ const Sidebar = () => {
     navItems.push({ name: 'My Alerts', path: '/dashboard/alerts', icon: BellPlus });
     navItems.push({ name: 'Wishlist', path: '/dashboard/wishlist', icon: Heart });
     navItems.push({ name: 'Notifications', path: '/dashboard/notifications', icon: Bell, badge: unreadCount });
+    navItems.push({ name: 'My Orders', path: '/dashboard/orders', icon: ShoppingBag });
 
     // ONLY Shop gets the 'Create Post' option
     if (role === 'shop') {
       navItems.push({ name: 'Create Post', path: '/dashboard/create', icon: PlusCircle });
+      navItems.push({ name: 'My Sales', path: '/dashboard/sales', icon: Banknote });
     }
   }
 

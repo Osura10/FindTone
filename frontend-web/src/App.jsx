@@ -18,6 +18,9 @@ import MyAlerts from './pages/Buyer/MyAlerts';
 import Wishlist from './pages/Buyer/Wishlist';
 import Notifications from './pages/Notifications';
 import ListingDetails from './pages/Listing/ListingDetails';
+import Checkout from './pages/Checkout/Checkout';
+import MyOrders from './pages/Buyer/MyOrders';
+import Sales from './pages/Seller/Sales';
 
 function App() {
   return (
@@ -39,6 +42,9 @@ function App() {
           <Route path="wishlist" element={<Wishlist />} />
           <Route path="notifications" element={<Notifications />} />
           <Route path="listings/:id" element={<ListingDetails />} />
+          <Route path="checkout/:listingId" element={<Checkout />} />
+          <Route path="orders" element={<MyOrders />} />
+          <Route path="sales" element={<Sales />} />
 
           {/* Admin Routes */}
           <Route path="admin" element={<AdminDashboard />} />

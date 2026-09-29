@@ -3,7 +3,8 @@ import os
 import pytest
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from Agent_04.tools import validate_alert_criteria
+from Agent_04.tools import validate_alert_criteria, search_listings, compare_items, get_price_insight
+from unittest.mock import patch
 
 def test_validate_alert_criteria_valid():
     res = validate_alert_criteria(
@@ -57,4 +58,28 @@ def test_validate_alert_criteria_auto_name():
     )
     assert res["valid"] is True
     assert res["alert"]["name"] == "Yamaha in Colombo under LKR 40,000"
+
+@patch('Agent_04.tools.fetch_all')
+def test_search_listings_only_live(mock_fetch_all):
+    mock_fetch_all.return_value = []
+    search_listings.invoke({"category": "Guitar"})
+    assert mock_fetch_all.called
+    sql = mock_fetch_all.call_args[0][0]
+    assert "l.\"Status\" = 'LIVE'" in sql
+
+@patch('Agent_04.tools.fetch_all')
+def test_compare_items_only_live(mock_fetch_all):
+    mock_fetch_all.return_value = []
+    compare_items.invoke({"listing_ids": [1, 2]})
+    assert mock_fetch_all.called
+    sql = mock_fetch_all.call_args[0][0]
+    assert "\"Status\" = 'LIVE'" in sql
+
+@patch('Agent_04.tools.fetch_one')
+def test_get_price_insight_only_live(mock_fetch_one):
+    mock_fetch_one.return_value = None
+    get_price_insight.invoke({"listing_id": 1})
+    assert mock_fetch_one.called
+    sql = mock_fetch_one.call_args[0][0]
+    assert "\"Status\" = 'LIVE'" in sql
 

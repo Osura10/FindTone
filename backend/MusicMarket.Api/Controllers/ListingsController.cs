@@ -317,7 +317,11 @@ public class ListingsController : ControllerBase
         var query = _db.Listings.AsNoTracking().AsQueryable();
 
         // Status filter (default LIVE)
-        if (!string.IsNullOrEmpty(status) && !status.Equals("all", StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrEmpty(status) || status.Equals("LIVE", StringComparison.OrdinalIgnoreCase))
+        {
+            query = query.Where(l => l.Status == "LIVE" || l.Status == "SOLD");
+        }
+        else if (!status.Equals("all", StringComparison.OrdinalIgnoreCase))
         {
             query = query.Where(l => l.Status == status);
         }
@@ -350,7 +354,8 @@ public class ListingsController : ControllerBase
         var totalCount = await query.CountAsync();
 
         var items = await query
-            .OrderByDescending(l => l.CreatedAt)
+            .OrderBy(l => l.Status) // "LIVE" comes before "SOLD" alphabetically
+            .ThenByDescending(l => l.CreatedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .Select(l => new ListingSummaryDto
@@ -614,6 +619,11 @@ public class ListingsController : ControllerBase
         if (listing.SellerId != sellerId && role != "admin")
         {
             return Forbid();
+        }
+
+        if (listing.Status == "SOLD")
+        {
+            return BadRequest("Sold items cannot be edited.");
         }
 
         var oldPrice = listing.Price;

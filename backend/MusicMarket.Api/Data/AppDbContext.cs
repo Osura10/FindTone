@@ -15,6 +15,7 @@ public class AppDbContext : DbContext
     public DbSet<SavedSearch> SavedSearches => Set<SavedSearch>();
     public DbSet<WishlistItem> WishlistItems => Set<WishlistItem>();
     public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<Order> Orders => Set<Order>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -151,6 +152,20 @@ public class AppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(n => n.SavedSearchId)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // Order configuration
+        builder.Entity<Order>(entity =>
+        {
+            entity.HasOne(o => o.Listing)
+                .WithMany()
+                .HasForeignKey(o => o.ListingId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(o => o.Buyer)
+                .WithMany()
+                .HasForeignKey(o => o.BuyerId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

@@ -45,6 +45,8 @@ const Notifications = () => {
   const getIcon = (type) => {
     if (type === 'NEW_MATCH') return '🎸';
     if (type === 'PRICE_DROP') return '📉';
+    if (type === 'ITEM_SOLD') return '💰';
+    if (type === 'ORDER_PLACED') return '📦';
     return '🔔';
   };
 
