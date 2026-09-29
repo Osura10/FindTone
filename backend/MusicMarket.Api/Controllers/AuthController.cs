@@ -26,6 +26,7 @@ public class AuthController : ControllerBase
         _cloudinary = cloudinary;
     }
 
+    [AllowAnonymous]
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromForm] RegisterDto dto)
     {
@@ -36,7 +37,8 @@ public class AuthController : ControllerBase
             return BadRequest("Invalid role. Must be buyer or shop.");
         }
 
-        var taken = await _db.Users.AnyAsync(u => u.Email == dto.Email);
+        var trimmedEmail = dto.Email?.Trim();
+        var taken = await _db.Users.AnyAsync(u => u.Email.ToLower() == trimmedEmail.ToLower());
         if (taken) return Conflict("Email already used");
 
         string? profileImageUrl = null;
@@ -55,7 +57,7 @@ public class AuthController : ControllerBase
         var user = new User
         {
             Name = dto.Name,
-            Email = dto.Email,
+            Email = trimmedEmail,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
             Role = role,
             Approval = (role == "buyer"), // Buyer gets true, Shop gets false
@@ -73,10 +75,12 @@ public class AuthController : ControllerBase
         return StatusCode(201, new { user.Id, user.Email, user.Role, user.Approval, user.ProfileImageUrl });
     }
 
+    [AllowAnonymous]
     [HttpPost("login")]
     public async Task<IActionResult> Login(LoginDto dto)
     {
-        var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == dto.Email);
+        var trimmedEmail = dto.Email?.Trim();
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Email.ToLower() == trimmedEmail.ToLower());
         
         if (user is null || !BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
         {

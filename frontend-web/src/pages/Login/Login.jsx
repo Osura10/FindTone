@@ -39,6 +39,11 @@ const Login = () => {
     setPendingApprovalMsg('');
     setLoading(true);
 
+    sessionStorage.removeItem('token');
+    sessionStorage.removeItem('role');
+    localStorage.removeItem('token');
+    localStorage.removeItem('role');
+
     try {
       const data = await apiCall('/auth/login', {
         method: 'POST',
@@ -181,7 +186,7 @@ const Login = () => {
                 value={email}
                 onChange={(e) => {
                   setEmail(e.target.value);
-                  setErrors((current) => ({ ...current, email: '' }));
+                  setErrors((current) => ({ ...current, email: '', global: '' }));
                 }}
               />
               {errors.email && <small style={{ color: 'red' }}>{errors.email}</small>}
@@ -196,7 +201,7 @@ const Login = () => {
                   value={password}
                   onChange={(e) => {
                     setPassword(e.target.value);
-                    setErrors((current) => ({ ...current, password: '' }));
+                    setErrors((current) => ({ ...current, password: '', global: '' }));
                   }}
                 />
                 <button type="button" className="password-toggle-btn" onClick={() => setShowPassword(!showPassword)}>

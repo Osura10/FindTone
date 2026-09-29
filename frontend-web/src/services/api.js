@@ -3,9 +3,10 @@ const BASE_URL = 'http://localhost:5036/api';
 export const apiCall = async (endpoint, options = {}) => {
   // Check sessionStorage first (per-tab isolation) then fallback to localStorage
   const token = sessionStorage.getItem('token') || localStorage.getItem('token');
+  const isAuthRoute = endpoint.startsWith('/auth/login') || endpoint.startsWith('/auth/register');
   
   const headers = {
-    ...(token && { 'Authorization': `Bearer ${token}` }),
+    ...((token && !isAuthRoute) && { 'Authorization': `Bearer ${token}` }),
     ...options.headers,
   };
 
