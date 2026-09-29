@@ -1,4 +1,9 @@
-# FindTone
+
+[![AI Service CI](https://github.com/OWNER/REPO/actions/workflows/ai-service-ci.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/ai-service-ci.yml)
+[![Backend CI](https://github.com/OWNER/REPO/actions/workflows/backend-ci.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/backend-ci.yml)
+[![Frontend CI](https://github.com/OWNER/REPO/actions/workflows/frontend-ci.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/frontend-ci.yml)
+[![Mobile CI](https://github.com/OWNER/REPO/actions/workflows/mobile-ci.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/mobile-ci.yml)
+\n# FindTone
 
 FindTone is a music marketplace platform with an Agentic AI assistant, an ASP.NET Core backend API, a React web frontend, and a Flutter mobile app.
 

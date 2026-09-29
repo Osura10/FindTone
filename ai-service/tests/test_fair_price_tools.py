@@ -1,9 +1,12 @@
+import pytest
+import os
 import sys
 import os
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from Agent_01.tools import calculate_fair_price, evaluate_and_flag
 
+@pytest.mark.skipif(os.getenv("LLM_PROVIDER") == "ollama", reason="Skip in CI without LLM")
 def test_calculate_fair_price():
     result = calculate_fair_price.invoke({
         "new_price": 45000.0,
@@ -20,6 +23,7 @@ def test_calculate_fair_price():
     assert result["max"] == 31100
     assert result["confidence"] == "high"
 
+@pytest.mark.skipif(os.getenv("LLM_PROVIDER") == "ollama", reason="Skip in CI without LLM")
 def test_evaluate_and_flag_overpriced():
     result = evaluate_and_flag.invoke({
         "asking_price": 75000.0,
@@ -32,6 +36,7 @@ def test_evaluate_and_flag_overpriced():
     assert result["verdict"] == "OVERPRICED"
     assert result["flag_for_trust"] is False
 
+@pytest.mark.skipif(os.getenv("LLM_PROVIDER") == "ollama", reason="Skip in CI without LLM")
 def test_evaluate_and_flag_suspicious():
     result = evaluate_and_flag.invoke({
         "asking_price": 8000.0,

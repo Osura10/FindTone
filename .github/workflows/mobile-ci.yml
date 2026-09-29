@@ -1,0 +1,43 @@
+name: Mobile CI
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'frontend-mobile/music_market/**'
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - 'frontend-mobile/music_market/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend-mobile/music_market
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        channel: 'stable'
+        cache: true
+
+    - name: Install dependencies
+      run: flutter pub get
+
+    - name: Analyze
+      run: flutter analyze
+
+    - name: Run tests
+      run: flutter test
+
+    - name: Build APK
+      run: flutter build apk --debug
