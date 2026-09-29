@@ -70,6 +70,7 @@ const Wishlist = () => {
                   borderRadius: '16px', overflow: 'hidden', cursor: 'pointer', transition: 'transform 0.2s',
                   position: 'relative', display: 'flex', flexDirection: 'column'
                 }}
+                onClick={() => navigate(`/dashboard/listings/${item.listing.id}`)}
               >
                 <div style={{ height: '180px', background: '#111', position: 'relative' }}>
                   <img 

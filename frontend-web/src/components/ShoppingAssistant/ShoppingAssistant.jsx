@@ -3,11 +3,13 @@ import {
   X, Send, Sparkles, ShoppingBag, BellPlus, CheckCircle,
   ArrowRight, ShieldCheck, MapPin, Tag, ExternalLink, Loader2
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import { apiCall } from '../../services/api';
 import './ShoppingAssistant.css';
 
 const ShoppingAssistant = ({ onClose }) => {
+  const navigate = useNavigate();
   const [messages, setMessages] = useState([
     {
       text: "Hi! I'm your FindTone Shopping Assistant. I can help you search live gear, compare instruments, verify if asking prices are fair, or set up smart alerts for you. What are you looking for today?",
@@ -156,7 +158,15 @@ const ShoppingAssistant = ({ onClose }) => {
                 {msg.listings && msg.listings.length > 0 && (
                   <div className="sa-listings-grid">
                     {msg.listings.map((item) => (
-                      <div key={item.id} className="sa-listing-card">
+                      <div 
+                        key={item.id} 
+                        className="sa-listing-card"
+                        style={{ cursor: 'pointer' }}
+                        onClick={() => {
+                          navigate(`/dashboard/listings/${item.id}`);
+                          onClose();
+                        }}
+                      >
                         <div className="sa-listing-img-box">
                           {item.image_url ? (
                             <img src={item.image_url} alt={item.title} className="sa-listing-img" />
@@ -194,7 +204,15 @@ const ShoppingAssistant = ({ onClose }) => {
                       {msg.comparison.items.map((item) => {
                         const isCheapest = item.id === msg.comparison.cheapest_id;
                         return (
-                          <div key={item.id} className={`sa-compare-card ${isCheapest ? 'cheapest' : ''}`}>
+                          <div 
+                            key={item.id} 
+                            className={`sa-compare-card ${isCheapest ? 'cheapest' : ''}`}
+                            style={{ cursor: 'pointer' }}
+                            onClick={() => {
+                              navigate(`/dashboard/listings/${item.id}`);
+                              onClose();
+                            }}
+                          >
                             <strong style={{ fontSize: '0.88rem', color: '#fff' }}>{item.title}</strong>
                             <div style={{ fontSize: '1rem', fontWeight: 700, color: isCheapest ? '#00f5d4' : '#fff' }}>
                               LKR {Number(item.price).toLocaleString()}

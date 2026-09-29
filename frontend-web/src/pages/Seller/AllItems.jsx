@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Package, PlusCircle, AlertCircle, RefreshCw, ShoppingBag, Store, Heart, Edit2, XCircle, MapPin } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { apiCall } from '../../services/api';
 import { MapContainer, TileLayer, Marker } from 'react-leaflet';
 import L from 'leaflet';
@@ -18,6 +18,7 @@ let DefaultIcon = L.icon({
 L.Marker.prototype.options.icon = DefaultIcon;
 
 const AllItems = () => {
+  const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
@@ -294,8 +295,10 @@ const AllItems = () => {
                   flexDirection: 'column', 
                   transition: 'transform 0.3s ease, box-shadow 0.3s ease', 
                   borderRadius: '14px',
-                  border: '1px solid rgba(255, 255, 255, 0.15)'
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  cursor: 'pointer'
                 }} 
+                onClick={() => navigate(`/dashboard/listings/${item.id}`)}
                 onMouseOver={(e) => e.currentTarget.style.transform = 'translateY(-4px)'} 
                 onMouseOut={(e) => e.currentTarget.style.transform = 'translateY(0)'}
               >

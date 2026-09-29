@@ -92,6 +92,9 @@ public class ListingDetailDto
     public int Id { get; set; }
     public int SellerId { get; set; }
     public string SellerName { get; set; } = "";
+    public string? SellerPhone { get; set; }
+    public string SellerRole { get; set; } = "";
+    public DateTime? SellerMemberSince { get; set; }
     public string Title { get; set; } = "";
     public string Category { get; set; } = "";
     public string Brand { get; set; } = "";

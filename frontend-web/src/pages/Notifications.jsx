@@ -91,8 +91,10 @@ const Notifications = () => {
               className="glass-panel" 
               onClick={() => {
                 if (!n.isRead) handleMarkAsRead(n.id);
-                if (n.listingId || (n.listing && n.listing.id)) {
-                  navigate(`/dashboard/items`);
+                if (n.listingId) {
+                  navigate(`/dashboard/listings/${n.listingId}`);
+                } else if (n.listing && n.listing.id) {
+                  navigate(`/dashboard/listings/${n.listing.id}`);
                 }
               }}
               style={{ 
@@ -128,7 +130,7 @@ const Notifications = () => {
                     onClick={(e) => {
                       e.stopPropagation();
                       if (!n.isRead) handleMarkAsRead(n.id);
-                      navigate(`/dashboard/items`); // They can find it there
+                      navigate(`/dashboard/listings/${n.listing.id}`);
                     }}
                   >
                     <img 

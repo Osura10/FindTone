@@ -412,11 +412,16 @@ public class ListingsController : ControllerBase
             return NotFound($"Listing #{id} not found");
         }
 
+        var showPhone = User.Identity?.IsAuthenticated == true;
+
         var dto = new ListingDetailDto
         {
             Id = listing.Id,
             SellerId = listing.SellerId,
             SellerName = listing.Seller?.Name ?? "",
+            SellerPhone = showPhone ? listing.Seller?.PhoneNumber : null,
+            SellerRole = listing.Seller?.Role ?? "",
+            SellerMemberSince = listing.Seller?.CreatedAt,
             Title = listing.Title,
             Category = listing.Category,
             Brand = listing.Brand,
@@ -461,6 +466,72 @@ public class ListingsController : ControllerBase
         };
 
         return Ok(dto);
+    }
+
+    /// <summary>
+    /// 3b. Delete a listing (owner or admin only).
+    /// </summary>
+    [HttpDelete("{id:int}")]
+    [Authorize]
+    public async Task<IActionResult> DeleteListing(int id)
+    {
+        var listing = await _db.Listings
+            .Include(l => l.Images)
+            .FirstOrDefaultAsync(l => l.Id == id);
+
+        if (listing == null)
+        {
+            return NotFound($"Listing #{id} not found");
+        }
+
+        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var role = User.FindFirstValue(ClaimTypes.Role);
+        
+        if (!int.TryParse(userIdStr, out var userId))
+        {
+            return Unauthorized();
+        }
+
+        if (listing.SellerId != userId && role != "admin")
+        {
+            return Forbid();
+        }
+
+        if (listing.Status == "SOLD")
+        {
+            return BadRequest("Sold items are kept for order history");
+        }
+
+        // Delete from Cloudinary
+        if (_cloudinary != null)
+        {
+            foreach (var img in listing.Images)
+            {
+                if (!string.IsNullOrEmpty(img.PublicId) && !img.PublicId.StartsWith("local_"))
+                {
+                    try
+                    {
+                        await _cloudinary.DestroyAsync(new DeletionParams(img.PublicId));
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Failed to delete image {img.PublicId} from Cloudinary: {ex.Message}");
+                    }
+                }
+            }
+        }
+
+        // Keep notifications but set ListingId to null
+        var notifications = await _db.Notifications.Where(n => n.ListingId == id).ToListAsync();
+        foreach (var notif in notifications)
+        {
+            notif.ListingId = null;
+        }
+
+        _db.Listings.Remove(listing);
+        await _db.SaveChangesAsync();
+
+        return Ok(new { message = "Listing deleted successfully" });
     }
 
     /// <summary>

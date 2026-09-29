@@ -17,6 +17,8 @@ import AdminFlaggedListings from './pages/Admin/AdminFlaggedListings';
 import MyAlerts from './pages/Buyer/MyAlerts';
 import Wishlist from './pages/Buyer/Wishlist';
 import Notifications from './pages/Notifications';
+import ListingDetails from './pages/Listing/ListingDetails';
+
 function App() {
   return (
     <Router>
@@ -36,6 +38,7 @@ function App() {
           <Route path="alerts" element={<MyAlerts />} />
           <Route path="wishlist" element={<Wishlist />} />
           <Route path="notifications" element={<Notifications />} />
+          <Route path="listings/:id" element={<ListingDetails />} />
 
           {/* Admin Routes */}
           <Route path="admin" element={<AdminDashboard />} />
