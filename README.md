@@ -117,12 +117,12 @@ To automatically evaluate the safety, authenticity, and pricing of musical instr
 - **Image Category Mismatch:** -30 pts
 - **Price Suspiciously Low:** -20 pts
 - **Previously Rejected Listings:** -15 pts per listing
-- **Duplicate Images Found:** -40 pts
+- **Duplicate Images Found:** -40 pts (forces immediate FLAGGED decision)
 
 **Routing Decision:**  
 - **LIVE (Score 70+):** The listing is approved and immediately visible to buyers.
 - **LIVE with Warning (Score 40-69):** The listing is visible but flagged with a "Low Trust" badge for buyers.
-- **FLAGGED (Score < 40 or Price > LKR 200,000):** The listing is hidden from buyers and placed in a queue for manual Admin review.
+- **FLAGGED (Score < 40, Duplicate Image Found, or Price > LKR 200,000):** The listing is hidden from buyers and placed in a queue for manual Admin review.
 
 ### Image Verification & Category Check
 

@@ -6,8 +6,40 @@ import 'features/auth/providers/auth_provider.dart';
 import 'core/providers/catalog_provider.dart';
 import 'features/marketplace/providers/marketplace_provider.dart';
 import 'features/wishlist/providers/wishlist_provider.dart';
+import 'features/shop/providers/shop_provider.dart';
 
 void main() {
+  ErrorWidget.builder = (FlutterErrorDetails details) {
+    bool inDebug = false;
+    assert(() {
+      inDebug = true;
+      return true;
+    }());
+    
+    return Material(
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, color: Colors.red, size: 48),
+              const SizedBox(height: 16),
+              const Text('Something went wrong', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              if (inDebug)
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Text(details.exceptionAsString(), style: const TextStyle(fontSize: 12)),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  };
+
   runApp(const MusicMarketApp());
 }
 
@@ -23,6 +55,7 @@ class MusicMarketApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => CatalogProvider()..fetchCatalog()),
         ChangeNotifierProvider(create: (_) => MarketplaceProvider()..fetchListings(refresh: true)),
         ChangeNotifierProvider(create: (_) => WishlistProvider()),
+        ChangeNotifierProvider(create: (_) => ShopProvider()),
       ],
       child: MaterialApp.router(
         title: 'FindTone',

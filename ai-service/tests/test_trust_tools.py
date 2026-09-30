@@ -74,17 +74,32 @@ def test_calculate_trust_and_route_price_limit():
 @pytest.mark.skipif(os.getenv("LLM_PROVIDER") == "ollama", reason="Skip in CI without LLM")
 def test_calculate_trust_and_route_warning():
     res = calculate_trust_and_route.invoke({
-        "duplicate_found": True, # -40
-        "category_mismatch": False,
+        "duplicate_found": False,
+        "category_mismatch": True, # -20
         "suspicious_low": False,
-        "frequent_changes": False, # 0
+        "frequent_changes": False,
         "is_new_account": False,
-        "rejected_listings": 0,
+        "rejected_listings": 2, # -20
         "asking_price": 50000
     })
     # score 60
     assert res["trust_score"] == 60
     assert res["decision"] == "LIVE"
+    assert res["warning"] is True
+
+@pytest.mark.skipif(os.getenv("LLM_PROVIDER") == "ollama", reason="Skip in CI without LLM")
+def test_calculate_trust_and_route_duplicate_always_flagged():
+    res = calculate_trust_and_route.invoke({
+        "duplicate_found": True,
+        "category_mismatch": False,
+        "suspicious_low": False,
+        "frequent_changes": False,
+        "is_new_account": False,
+        "rejected_listings": 0,
+        "asking_price": 50000
+    })
+    assert res["trust_score"] == 60
+    assert res["decision"] == "FLAGGED"
     assert res["warning"] is True
 
 @pytest.mark.skipif(os.getenv("LLM_PROVIDER") == "ollama", reason="Skip in CI without LLM")

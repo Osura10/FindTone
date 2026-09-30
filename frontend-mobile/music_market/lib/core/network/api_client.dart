@@ -29,7 +29,8 @@ class ApiClient {
       BaseOptions(
         baseUrl: baseUrl,
         connectTimeout: const Duration(seconds: 15),
-        receiveTimeout: const Duration(seconds: 15),
+        sendTimeout: const Duration(seconds: 60),
+        receiveTimeout: const Duration(seconds: 30),
       ),
     );
 
@@ -48,14 +49,26 @@ class ApiClient {
       },
       onError: (DioException e, handler) async {
         if (e.type == DioExceptionType.connectionTimeout || 
-            e.type == DioExceptionType.receiveTimeout || 
             e.type == DioExceptionType.connectionError) {
           if (kDebugMode) {
             print("DioException: ${e.type}, ${e.message}, ${e.requestOptions.uri}, ${e.response?.statusCode}, ${e.error}");
           }
-          String msg = e.type == DioExceptionType.connectionError 
-              ? "Cannot reach the server at $baseUrl. Is the backend running?" 
-              : "Timeout connecting to the server.";
+          return handler.next(DioException(
+            requestOptions: e.requestOptions,
+            error: AppException("Cannot reach the server"),
+          ));
+        }
+
+        if (e.type == DioExceptionType.receiveTimeout || e.type == DioExceptionType.sendTimeout) {
+          if (kDebugMode) {
+            print("DioException Timeout: ${e.type}, path: ${e.requestOptions.path}");
+          }
+          String msg = "Request timed out, try again.";
+          if (e.requestOptions.path.endsWith('/listings') && e.requestOptions.method == 'POST') {
+            msg = "The AI is taking longer than usual. Your listing was saved and will be checked shortly.";
+          } else if (e.requestOptions.path.endsWith('/price-check')) {
+            msg = "Price check timed out, try again";
+          }
           return handler.next(DioException(
             requestOptions: e.requestOptions,
             error: AppException(msg),
@@ -73,13 +86,15 @@ class ApiClient {
           ));
         }
         
-        String message = "An error occurred";
+        String message = "Something went wrong";
         if (e.response?.data != null) {
           if (e.response?.data is Map<String, dynamic> && e.response?.data['message'] != null) {
             message = e.response?.data['message'];
           } else if (e.response?.data is String) {
             message = e.response?.data;
           }
+        } else if (e.message != null && e.message!.isNotEmpty) {
+          message = e.message!;
         }
 
         return handler.next(DioException(

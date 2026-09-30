@@ -208,19 +208,32 @@ class _ListingDetailsScreenState extends State<ListingDetailsScreen> {
 
                   if (listing.trustScore != null) ...[
                     AppCard(
-                      child: Row(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(Icons.verified_user, color: Formatters.getTrustColor(listing.trustScore!)),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('Trust ${listing.trustScore}', style: TextStyle(fontWeight: FontWeight.bold, color: Formatters.getTrustColor(listing.trustScore!))),
-                                const Text('Verified by Agent 02', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                              ],
-                            ),
+                          Row(
+                            children: [
+                              Icon(Icons.verified_user, color: listing.trustScore! >= 70 ? Colors.green : (listing.trustScore! >= 40 ? Colors.amber : Colors.red)),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('Trust Score: ${listing.trustScore}', style: TextStyle(fontWeight: FontWeight.bold, color: listing.trustScore! >= 70 ? Colors.green : (listing.trustScore! >= 40 ? Colors.amber : Colors.red))),
+                                    const Text('Verified by Agent 02', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
+                          if (listing.aiReason != null && listing.aiReason!.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 12),
+                              child: Text(
+                                listing.trustScore! >= 40 ? 'Low trust: ${listing.aiReason}' : listing.aiReason!,
+                                style: TextStyle(color: listing.trustScore! >= 40 ? Colors.amber[800] : Colors.red[800], fontStyle: FontStyle.italic),
+                              ),
+                            ),
                         ],
                       ),
                     ),

@@ -241,7 +241,7 @@ def calculate_trust_and_route(duplicate_found: bool, category_mismatch: bool,
     
     if duplicate_found:
         score -= 40
-        signals.append({"code": "DUPLICATE_IMAGE", "points": -40, "detail": "Image matches another seller's listing."})
+        signals.append({"code": "DUPLICATE_IMAGE", "points": -40, "detail": "Photo matches another seller's listing - sent to admin review"})
     if category_mismatch:
         score -= 20
         signals.append({"code": "CATEGORY_MISMATCH", "points": -20, "detail": "Image does not match expected category."})
@@ -262,7 +262,9 @@ def calculate_trust_and_route(duplicate_found: bool, category_mismatch: bool,
         
     score = max(0, min(100, score))
     
-    if score < 40 or asking_price > 200000:
+    if duplicate_found:
+        decision = "FLAGGED"
+    elif score < 40 or asking_price > 200000:
         decision = "FLAGGED"
     else:
         decision = "LIVE"

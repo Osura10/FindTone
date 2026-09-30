@@ -49,7 +49,7 @@ class WishlistItemModel {
     return WishlistItemModel(
       id: json['id'],
       listingId: json['listingId'],
-      priceWhenSaved: (json['priceWhenSaved'] as num).toDouble(),
+      priceWhenSaved: (json['priceWhenSaved'] as num?)?.toDouble() ?? 0.0,
       createdAt: DateTime.parse(json['createdAt']),
       listing: WishlistListingSnapshot.fromJson(json['listing']),
     );
