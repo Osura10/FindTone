@@ -85,7 +85,7 @@ uvicorn api:app --host 127.0.0.1 --port 8000 --reload
 #### Mobile App (Flutter)
 
 ```bash
-cd frontend-mobile
+cd frontend-mobile/music_market
 flutter pub get
 flutter run
 ```
