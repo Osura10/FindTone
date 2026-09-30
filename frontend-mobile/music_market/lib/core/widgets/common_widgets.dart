@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:shimmer/shimmer.dart';
+import '../utils/formatters.dart';
 
 class AppCard extends StatelessWidget {
   final Widget child;
@@ -80,9 +80,8 @@ class PriceText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final format = NumberFormat.currency(symbol: 'LKR ', decimalDigits: 2);
     return Text(
-      format.format(amount),
+      Formatters.price(amount),
       style: style ?? const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
     );
   }

@@ -4,6 +4,7 @@ import '../../features/auth/screens/login_screen.dart';
 import '../../features/auth/screens/register_screen.dart';
 import '../../features/buyer/screens/buyer_home_screen.dart';
 import '../../features/shop/screens/shop_home_screen.dart';
+import '../../features/marketplace/screens/listing_details_screen.dart';
 
 class AppRouter {
   static final router = GoRouter(
@@ -28,6 +29,13 @@ class AppRouter {
       GoRoute(
         path: '/shop_home',
         builder: (context, state) => const ShopHomeScreen(),
+      ),
+      GoRoute(
+        path: '/listing/:id',
+        builder: (context, state) {
+          final id = int.parse(state.pathParameters['id']!);
+          return ListingDetailsScreen(id: id);
+        },
       ),
     ],
   );

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../marketplace/screens/marketplace_screen.dart';
+import '../../wishlist/screens/wishlist_screen.dart';
 
 class BuyerHomeScreen extends StatefulWidget {
   const BuyerHomeScreen({super.key});
@@ -11,8 +13,8 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
   int _currentIndex = 0;
 
   final List<Widget> _screens = [
-    const Center(child: Text('Marketplace Placeholder')),
-    const Center(child: Text('Wishlist Placeholder')),
+    const MarketplaceScreen(),
+    const WishlistScreen(),
     const Center(child: Text('Assistant Placeholder')),
     const Center(child: Text('Notifications Placeholder')),
     const Center(child: Text('Profile Placeholder')),
