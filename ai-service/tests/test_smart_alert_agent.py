@@ -1,3 +1,4 @@
+import os
 from Agent_03.agent import parse_alert_text
 import pytest
 
