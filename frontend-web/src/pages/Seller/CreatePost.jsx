@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Upload, Plus, X, CheckCircle, TrendingUp, Loader, Navigation } from 'lucide-react';
 import { apiCall } from '../../services/api';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
@@ -69,6 +69,8 @@ const fmt = (n) => Math.round(n).toLocaleString('en-LK');
 
 const CreatePost = () => {
   const navigate = useNavigate();
+  const { id } = useParams();
+  const isEdit = Boolean(id);
   const fileInputRef = useRef(null);
 
   const [formData, setFormData] = useState({
@@ -87,6 +89,7 @@ const CreatePost = () => {
   const [categories, setCategories] = useState([]);
   const [selectedImages, setSelectedImages] = useState([]);
   const [imagePreviews, setImagePreviews] = useState([]);
+  const [existingImages, setExistingImages] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -105,7 +108,7 @@ const CreatePost = () => {
   const searchTimeoutRef = useRef(null);
 
   useEffect(() => {
-    // Guard: Both Shops and Buyers can access Create Post
+    // Guard: Both Shops and Buyers can access {isEdit ? 'Save Changes' : 'Create Post'}
     apiCall('/auth/me').then(user => {
       if (user && !['shop', 'buyer'].includes(user.role)) {
         navigate('/dashboard/items');
@@ -119,9 +122,6 @@ const CreatePost = () => {
       if (Array.isArray(data)) {
         const uniqueCategories = [...new Set(data.map(item => item.category))].filter(Boolean);
         setCategories(uniqueCategories);
-        if (uniqueCategories.length > 0) {
-          setFormData(prev => ({ ...prev, category: uniqueCategories[0] }));
-        }
       }
     }).catch(err => console.error('Failed to fetch catalog categories', err));
   }, [navigate]);
@@ -170,7 +170,7 @@ const CreatePost = () => {
   };
 
   useEffect(() => {
-    if (!position || formData.location) return;
+    if (!position) return;
     
     const reverseGeocode = async () => {
       try {
@@ -219,7 +219,7 @@ const CreatePost = () => {
       validFiles.push(file);
     }
 
-    if (selectedImages.length + validFiles.length > 6) {
+    if (existingImages.length + selectedImages.length + validFiles.length > 6) {
       setError('You can upload a maximum of 6 photos per listing.');
       return;
     }
@@ -234,6 +234,11 @@ const CreatePost = () => {
     if (e.target.files && e.target.files.length > 0) {
       handleFiles(e.target.files);
     }
+  };
+
+  const handleRemoveExistingImage = (imageId, e) => {
+    e.stopPropagation();
+    setExistingImages(prev => prev.filter(img => img.id !== imageId));
   };
 
   const handleRemoveImage = (index, e) => {
@@ -287,7 +292,7 @@ const CreatePost = () => {
     setError('');
     setSuccess('');
 
-    if (selectedImages.length === 0) {
+    if (existingImages.length + selectedImages.length === 0) {
       setError('Please upload at least 1 photo of your instrument.');
       return;
     }
@@ -298,6 +303,12 @@ const CreatePost = () => {
     }
 
     setLoading(true);
+
+    if (!position || !formData.location) {
+      setError('Please pin your location on the map.');
+      setLoading(false);
+      return;
+    }
 
     try {
       const data = new FormData();
@@ -310,22 +321,30 @@ const CreatePost = () => {
       data.append('ListingType', formData.listingType);
       data.append('Price', formData.price);
       data.append('Location', formData.location.trim());
-      if (position) {
-        data.append('Latitude', position.lat);
-        data.append('Longitude', position.lng);
-      }
+      data.append('Latitude', position.lat);
+      data.append('Longitude', position.lng);
       data.append('Description', formData.description.trim());
 
+            existingImages.forEach(img => {
+        data.append('ExistingImageIds', img.id);
+      });
       selectedImages.forEach((file) => {
-        data.append('Images', file);
+        data.append(isEdit ? 'NewImages' : 'Images', file);
       });
 
-      await apiCall('/listings', {
-        method: 'POST',
-        body: data
-      });
-
-      setSuccess('Listing created successfully! Your item is now pending review.');
+      if (isEdit) {
+        await apiCall(`/listings/${id}`, {
+          method: 'PUT',
+          body: data
+        });
+        setSuccess('Listing updated successfully!');
+      } else {
+        await apiCall('/listings', {
+          method: 'POST',
+          body: data
+        });
+        setSuccess('Listing created successfully! Your item is now pending review.');
+      }
       setTimeout(() => {
         navigate('/dashboard/items');
       }, 1500);
@@ -365,8 +384,8 @@ const CreatePost = () => {
   return (
     <div className="animate-fade-in-up" style={{ padding: '1rem 0', maxWidth: '800px', margin: '0 auto' }}>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '2rem' }}>
-        <h1 className="text-gradient" style={{ fontSize: '2.5rem', margin: 0 }}>Create New Post</h1>
-        <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>List your instrument for sale, trade, or rent in Sri Lanka</p>
+        <h1 className="text-gradient" style={{ fontSize: '2.5rem', margin: 0 }}>{isEdit ? "Edit Post" : "Create New Post"}</h1>
+        <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>{isEdit ? "Update your listing details" : "List your instrument for sale, trade, or rent in Sri Lanka"}</p>
       </div>
 
       {error && (
@@ -414,7 +433,7 @@ const CreatePost = () => {
             position: 'relative'
           }}
         >
-          {selectedImages.length === 0 ? (
+          {(existingImages.length + selectedImages.length) === 0 ? (
             <>
               <Upload size={42} style={{ color: 'var(--text-secondary)', marginBottom: '0.75rem' }} />
               <p style={{ color: '#fff', fontSize: '1rem', fontWeight: '500', margin: 0 }}>Click to browse or drag &amp; drop photos here</p>
@@ -424,9 +443,9 @@ const CreatePost = () => {
             <div style={{ width: '100%' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                 <span style={{ color: '#eaeaea', fontSize: '0.9rem', fontWeight: '500' }}>
-                  {selectedImages.length} / 6 photos selected
+                  {existingImages.length + selectedImages.length} / 6 photos selected
                 </span>
-                {selectedImages.length < 6 && (
+                {(existingImages.length + selectedImages.length) < 6 && (
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
@@ -436,7 +455,20 @@ const CreatePost = () => {
                   </button>
                 )}
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: '12px' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: '12px' }}>
+                {existingImages.map((img) => (
+                  <div key={img.id} style={{ position: 'relative', height: '100px', borderRadius: '8px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.2)' }}>
+                    <img src={img.url} alt="Existing" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <button
+                      type="button"
+                      onClick={(e) => handleRemoveExistingImage(img.id, e)}
+                      style={{ position: 'absolute', top: '4px', right: '4px', background: 'rgba(0,0,0,0.7)', border: 'none', color: '#ff6b6b', borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                      title="Remove photo"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
                 {imagePreviews.map((src, idx) => (
                   <div key={idx} style={{ position: 'relative', height: '100px', borderRadius: '8px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.2)' }}>
                     <img src={src} alt={`Preview ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -485,12 +517,23 @@ const CreatePost = () => {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             <label style={labelStyle}>Category *</label>
-            <select name="category" value={formData.category} onChange={handleChange} style={selectStyle} required>
-              <option value="" disabled>Select a category</option>
+            <input
+              type="text"
+              name="category"
+              list="category-suggestions"
+              value={formData.category}
+              onChange={handleChange}
+              placeholder="e.g. Electric Guitar, Ukulele"
+              required
+              minLength={2}
+              maxLength={50}
+              style={inputStyle}
+            />
+            <datalist id="category-suggestions">
               {categories.map(cat => (
-                <option key={cat} value={cat}>{cat}</option>
+                <option key={cat} value={cat} />
               ))}
-            </select>
+            </datalist>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -610,21 +653,8 @@ const CreatePost = () => {
             )}
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            <label style={labelStyle}>Location *</label>
-            <input
-              type="text"
-              name="location"
-              value={formData.location}
-              onChange={handleChange}
-              placeholder="e.g. Colombo, Kandy, Gampaha"
-              required
-              style={inputStyle}
-            />
-          </div>
-
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', gridColumn: '1 / -1' }}>
-            <label style={labelStyle}>Pin your location (Optional)</label>
+            <label style={labelStyle}>Location *</label>
             <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <input
@@ -668,6 +698,11 @@ const CreatePost = () => {
                   {position && <MapUpdater position={position} />}
                 </MapContainer>
               </div>
+              {formData.location && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.15)' }}>
+                  <span style={{ color: '#eaeaea', fontSize: '0.9rem' }}>{formData.location}</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -773,11 +808,11 @@ const CreatePost = () => {
           style={{ marginTop: '1rem', alignSelf: 'flex-end', display: 'flex', alignItems: 'center', gap: '8px', padding: '0.8rem 1.8rem', fontSize: '1rem' }}
         >
           {loading ? (
-            'Uploading & Creating...'
+            isEdit ? 'Updating...' : 'Uploading & Creating...'
           ) : (
             <>
               <Plus size={20} />
-              Create Post
+              {isEdit ? 'Save Changes' : 'Create Post'}
             </>
           )}
         </button>

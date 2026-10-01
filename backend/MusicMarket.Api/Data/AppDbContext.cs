@@ -136,7 +136,7 @@ public class AppDbContext : DbContext
         builder.Entity<Notification>(entity =>
         {
             entity.HasIndex(n => new { n.UserId, n.IsRead });
-            entity.HasIndex(n => new { n.UserId, n.ListingId, n.Type }).IsUnique();
+            entity.HasIndex(n => new { n.UserId, n.ListingId, n.Type });
             
             entity.HasOne(n => n.User)
                 .WithMany()

@@ -13,10 +13,51 @@ import '../../features/marketplace/models/listing_model.dart';
 import '../../features/alerts/screens/my_alerts_screen.dart';
 import '../../features/shop/screens/sales_screen.dart';
 
+
+
+import '../../features/auth/providers/auth_provider.dart';
+
 class AppRouter {
-  static final router = GoRouter(
-    initialLocation: '/',
-    routes: [
+  static GoRouter? _router;
+  static GoRouter get router => _router!;
+
+  static GoRouter getRouter(AuthProvider authProvider) {
+    _router ??= GoRouter(
+      initialLocation: '/',
+      refreshListenable: authProvider,
+      redirect: (context, state) {
+        final isLoading = authProvider.isAuthLoading;
+        final isLoggedIn = authProvider.isAuthenticated;
+        final role = authProvider.role;
+        final path = state.matchedLocation;
+
+        if (isLoading) {
+          return '/';
+        }
+
+        final isSplash = path == '/';
+        final isLogin = path == '/login';
+        final isRegister = path == '/register';
+
+        if (!isLoggedIn) {
+          if (isLogin || isRegister) return null;
+          return '/login';
+        }
+
+        if (isSplash || isLogin || isRegister) {
+          if (role == 'shop') return '/shop_home';
+          if (role == 'buyer') return '/buyer_home';
+        }
+
+        final isShopRoute = path.startsWith('/shop_home') || path.startsWith('/sales');
+        final isBuyerRoute = path.startsWith('/buyer_home') || path.startsWith('/checkout') || path.startsWith('/my_orders');
+
+        if (role == 'shop' && isBuyerRoute) return '/shop_home';
+        if (role == 'buyer' && isShopRoute) return '/buyer_home';
+
+        return null;
+      },
+      routes: [
       GoRoute(
         path: '/',
         builder: (context, state) => const SplashScreen(),
@@ -66,4 +107,6 @@ class AppRouter {
       ),
     ],
   );
+  return _router!;
+  }
 }

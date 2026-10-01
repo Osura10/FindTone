@@ -103,6 +103,8 @@ const Checkout = () => {
 
       // Client-side expiry validation
       if (formData.paymentMethod === 'CARD') {
+        payload.card = formData.card;
+        
         const expiryParts = formData.card.expiry.split('/');
         if (expiryParts.length === 2) {
           const month = parseInt(expiryParts[0], 10);
@@ -145,8 +147,8 @@ const Checkout = () => {
             return;
           }
         } catch (e) {
-          // ignore
-        }
+      console.error(e);
+    }
       }
 
       let msg = err.message;

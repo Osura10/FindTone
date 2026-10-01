@@ -1,3 +1,4 @@
+import 'package:music_market/core/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import '../network/api_client.dart';
 import '../models/catalog_model.dart';
@@ -7,11 +8,13 @@ class CatalogProvider with ChangeNotifier {
   
   List<CatalogModel> _items = [];
   bool _isLoading = false;
+  String? _errorMessage;
 
   List<CatalogModel> get items => _items;
   List<String> get categories => _items.map((e) => e.category).toSet().toList()..sort();
   List<String> get brands => _items.map((e) => e.brand).toSet().toList()..sort();
   bool get isLoading => _isLoading;
+  String? get errorMessage => _errorMessage;
 
   Future<void> fetchCatalog() async {
     _isLoading = true;
@@ -23,7 +26,9 @@ class CatalogProvider with ChangeNotifier {
         _items = (response.data as List).map((e) => CatalogModel.fromJson(e)).toList();
       }
     } catch (e) {
-      // Handle error natively if needed
+logDebug('Caught error:', e);
+      _errorMessage = 'An error occurred. Pull to refresh or try again.';
+      notifyListeners();
     } finally {
       _isLoading = false;
       notifyListeners();

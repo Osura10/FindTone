@@ -201,9 +201,21 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
                           ),
                           if (listing.status != 'SOLD') ...[
                             IconButton(
-                              icon: const Icon(Icons.edit, color: Colors.blue),
-                              onPressed: () => _showEditPriceSheet(context, listing.id, listing.price),
+                              icon: const Icon(Icons.edit_note, color: Colors.blue),
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => CreatePostScreen(listingId: listing.id),
+                                  ),
+                                );
+                              },
                             ),
+                            if (listing.status == 'LIVE')
+                              IconButton(
+                                icon: const Icon(Icons.attach_money, color: Colors.blue),
+                                onPressed: () => _showEditPriceSheet(context, listing.id, listing.price),
+                              ),
                             IconButton(
                               icon: const Icon(Icons.delete, color: Colors.red),
                               onPressed: () => _confirmDelete(context, listing.id),

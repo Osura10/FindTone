@@ -165,7 +165,18 @@ Rules:
             text_resp = text_resp.split("```")[1].strip()
             
         parsed = json.loads(text_resp)
-        result.update(parsed)
+        if isinstance(parsed, dict):
+            for k in ["name", "category", "brand", "model_keyword", "conditions", "location"]:
+                val = parsed.get(k) or parsed.get(k.replace('_', '').title()) or parsed.get(k.replace('_', '').lower())
+                if val is not None:
+                    result[k] = str(val)
+            for k in ["min_price", "max_price"]:
+                val = parsed.get(k) or parsed.get(k.replace('_', '').title()) or parsed.get(k.replace('_', '').lower())
+                if val is not None:
+                    try:
+                        result[k] = float(str(val).replace(',', ''))
+                    except ValueError:
+                        pass
     except Exception as e:
         print(f"[SmartAlert] parse_alert_text LLM failed: {e}")
         used_fallback = True

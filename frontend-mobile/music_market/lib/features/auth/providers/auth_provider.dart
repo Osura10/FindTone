@@ -1,3 +1,4 @@
+import 'package:music_market/core/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:dio/dio.dart';
@@ -8,6 +9,9 @@ import '../../../core/network/api_exceptions.dart';
 class AuthProvider with ChangeNotifier {
   final ApiClient _apiClient = ApiClient();
   final _secureStorage = const FlutterSecureStorage();
+  
+  bool _isAuthLoading = true;
+  bool get isAuthLoading => _isAuthLoading;
   
   bool _isLoading = false;
   bool get isLoading => _isLoading;
@@ -39,9 +43,36 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
+  bool _isOffline = false;
+  bool get isOffline => _isOffline;
+
   Future<void> loadAuthData() async {
     _token = await _secureStorage.read(key: 'jwt_token');
     _role = await _secureStorage.read(key: 'user_role');
+    _isOffline = false;
+    
+    if (_token != null) {
+      try {
+        final response = await _apiClient.dio.get('/auth/me', 
+          options: Options(sendTimeout: const Duration(seconds: 10), receiveTimeout: const Duration(seconds: 10)));
+        if (response.statusCode == 200) {
+          _role = response.data['role'];
+          await _secureStorage.write(key: 'user_role', value: _role);
+        }
+      } on DioException catch (e) {
+        if (e.response?.statusCode == 401) {
+          _token = null;
+          _role = null;
+          await _secureStorage.deleteAll();
+        } else {
+          _isOffline = true;
+        }
+      } catch (_) {
+        _isOffline = true;
+      }
+    }
+    
+    _isAuthLoading = false;
     notifyListeners();
   }
 
@@ -109,7 +140,9 @@ class AuthProvider with ChangeNotifier {
       final response = await _apiClient.dio.get('/auth/me');
       _userProfile = response.data;
       notifyListeners();
-    } catch (_) {}
+    } catch (_) {
+      logDebug('Log:', 'Error caught');
+    }
   }
 
   Future<void> updatePhone(String phone) async {
@@ -148,8 +181,7 @@ class AuthProvider with ChangeNotifier {
     _token = null;
     _role = null;
     _userProfile = null;
-    await _secureStorage.delete(key: 'jwt_token');
-    await _secureStorage.delete(key: 'user_role');
+    await _secureStorage.deleteAll();
     notifyListeners();
   }
 }

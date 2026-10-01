@@ -1,3 +1,4 @@
+import 'package:music_market/core/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import '../../../core/network/api_client.dart';
 import '../models/notification_model.dart';
@@ -8,10 +9,12 @@ class NotificationsProvider with ChangeNotifier {
   
   List<NotificationModel> _notifications = [];
   bool _isLoading = false;
+  String? _errorMessage;
   Timer? _refreshTimer;
 
   List<NotificationModel> get notifications => _notifications;
   bool get isLoading => _isLoading;
+  String? get errorMessage => _errorMessage;
   int get unreadCount => _notifications.where((n) => !n.isRead).length;
 
   Future<void> fetchNotifications({bool background = false}) async {
@@ -25,7 +28,9 @@ class NotificationsProvider with ChangeNotifier {
         _notifications = (response.data as List).map((e) => NotificationModel.fromJson(e)).toList();
       }
     } catch (e) {
-      // Ignore
+logDebug('Caught error:', e);
+      _errorMessage = 'An error occurred. Pull to refresh or try again.';
+      notifyListeners();
     } finally {
       if (!background) {
         _isLoading = false;
@@ -52,7 +57,9 @@ class NotificationsProvider with ChangeNotifier {
         await _apiClient.dio.patch('/notifications/$id/read');
       }
     } catch (e) {
-      // Ignore
+logDebug('Caught error:', e);
+      _errorMessage = 'An error occurred. Pull to refresh or try again.';
+      notifyListeners();
     }
   }
 
@@ -75,7 +82,9 @@ class NotificationsProvider with ChangeNotifier {
       notifyListeners();
       await _apiClient.dio.patch('/notifications/read-all');
     } catch (e) {
-      // Ignore
+logDebug('Caught error:', e);
+      _errorMessage = 'An error occurred. Pull to refresh or try again.';
+      notifyListeners();
     }
   }
 

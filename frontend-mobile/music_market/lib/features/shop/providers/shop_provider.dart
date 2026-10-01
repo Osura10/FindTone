@@ -1,3 +1,4 @@
+import 'package:music_market/core/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:image_picker/image_picker.dart';
@@ -14,6 +15,8 @@ class ShopProvider with ChangeNotifier {
   List<OrderModel> _sales = [];
 
   bool _isLoadingListings = false;
+  String? _errorMessage;
+  String? get errorMessage => _errorMessage;
   bool _isLoadingSales = false;
 
   List<ListingSummary> get myListings => _myListings;
@@ -30,7 +33,9 @@ class ShopProvider with ChangeNotifier {
         _myListings = (response.data as List).map((e) => ListingSummary.fromJson(e)).toList();
       }
     } catch (e) {
-      //
+logDebug('Caught error:', e);
+      _errorMessage = 'An error occurred. Pull to refresh or try again.';
+      notifyListeners();
     } finally {
       _isLoadingListings = false;
       notifyListeners();
@@ -46,7 +51,9 @@ class ShopProvider with ChangeNotifier {
         _sales = (response.data as List).map((e) => OrderModel.fromJson(e)).toList();
       }
     } catch (e) {
-      //
+logDebug('Caught error:', e);
+      _errorMessage = 'An error occurred. Pull to refresh or try again.';
+      notifyListeners();
     } finally {
       _isLoadingSales = false;
       notifyListeners();
@@ -62,7 +69,9 @@ class ShopProvider with ChangeNotifier {
         return true;
       }
     } catch (e) {
-      //
+logDebug('Caught error:', e);
+      _errorMessage = 'An error occurred. Pull to refresh or try again.';
+      notifyListeners();
     }
     return false;
   }
@@ -101,6 +110,41 @@ class ShopProvider with ChangeNotifier {
       throw AppException(e.message ?? 'Unknown error checking price');
     } catch (e) {
       throw AppException('Error parsing price check result: $e');
+    }
+  }
+
+
+  Future<bool> updateListing(int id, Map<String, dynamic> data, List<XFile> newImages, List<dynamic> existingImages) async {
+    try {
+      final formData = FormData.fromMap(data);
+      for (var image in newImages) {
+        final bytes = await image.readAsBytes();
+        formData.files.add(MapEntry(
+          'NewImages',
+          MultipartFile.fromBytes(bytes, filename: image.name),
+        ));
+      }
+      for (var img in existingImages) {
+        formData.fields.add(MapEntry('ExistingImageIds', img.id.toString()));
+      }
+
+      final response = await _apiClient.dio.put(
+        '/listings/$id',
+        data: formData,
+        options: Options(
+          receiveTimeout: const Duration(seconds: 300),
+        ),
+      );
+      
+      if (response.statusCode == 200) {
+        await fetchMyListings();
+        return true;
+      }
+      throw AppException('Failed to update listing');
+    } on DioException catch (e) {
+      throw AppException(e.error is AppException ? (e.error as AppException).message : e.message ?? 'Unknown error');
+    } catch (e) {
+      throw AppException(e.toString());
     }
   }
 

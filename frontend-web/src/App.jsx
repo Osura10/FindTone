@@ -46,6 +46,7 @@ function App() {
           <Route index element={<Navigate to="items" replace />} />
           <Route path="items" element={<AllItems />} />
           <Route path="create" element={<CreatePost />} />
+          <Route path="edit/:id" element={<CreatePost />} />
           <Route path="profile" element={<Profile />} />
           <Route path="alerts" element={<MyAlerts />} />
           <Route path="wishlist" element={<Wishlist />} />

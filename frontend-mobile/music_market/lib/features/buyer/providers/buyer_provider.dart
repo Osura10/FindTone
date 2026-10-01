@@ -1,3 +1,4 @@
+import 'package:music_market/core/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import '../../../core/network/api_client.dart';
 import '../../shop/models/order_model.dart';
@@ -9,6 +10,8 @@ class BuyerProvider with ChangeNotifier {
   
   List<OrderModel> _myOrders = [];
   bool _isLoadingOrders = false;
+  String? _errorMessage;
+  String? get errorMessage => _errorMessage;
 
   List<OrderModel> get myOrders => _myOrders;
   bool get isLoadingOrders => _isLoadingOrders;
@@ -22,7 +25,9 @@ class BuyerProvider with ChangeNotifier {
         _myOrders = (response.data as List).map((e) => OrderModel.fromJson(e)).toList();
       }
     } catch (e) {
-      // 
+logDebug('Caught error:', e);
+      _errorMessage = 'An error occurred. Pull to refresh or try again.';
+      notifyListeners();
     } finally {
       _isLoadingOrders = false;
       notifyListeners();

@@ -1,3 +1,4 @@
+import 'package:music_market/core/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import '../../../core/network/api_client.dart';
 import '../models/alert_model.dart';
@@ -7,9 +8,11 @@ class AlertsProvider with ChangeNotifier {
   
   List<AlertModel> _alerts = [];
   bool _isLoading = false;
+  String? _errorMessage;
 
   List<AlertModel> get alerts => _alerts;
   bool get isLoading => _isLoading;
+  String? get errorMessage => _errorMessage;
 
   Future<void> fetchAlerts() async {
     _isLoading = true;
@@ -20,7 +23,9 @@ class AlertsProvider with ChangeNotifier {
         _alerts = (response.data as List).map((e) => AlertModel.fromJson(e)).toList();
       }
     } catch (e) {
-      // Ignore
+logDebug('Caught error:', e);
+      _errorMessage = 'An error occurred. Pull to refresh or try again.';
+      notifyListeners();
     } finally {
       _isLoading = false;
       notifyListeners();
