@@ -57,6 +57,11 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         title: const Text('Marketplace'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.notifications_active),
+            onPressed: () => context.push('/my_alerts'),
+            tooltip: 'My Alerts',
+          ),
+          IconButton(
             icon: const Icon(Icons.filter_list),
             onPressed: _showFilterSheet,
           ),

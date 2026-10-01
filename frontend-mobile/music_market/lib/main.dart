@@ -8,6 +8,9 @@ import 'features/marketplace/providers/marketplace_provider.dart';
 import 'features/wishlist/providers/wishlist_provider.dart';
 import 'features/shop/providers/shop_provider.dart';
 import 'features/buyer/providers/buyer_provider.dart';
+import 'features/alerts/providers/alerts_provider.dart';
+import 'features/assistant/providers/assistant_provider.dart';
+import 'features/notifications/providers/notifications_provider.dart';
 
 void main() {
   ErrorWidget.builder = (FlutterErrorDetails details) {
@@ -58,6 +61,9 @@ class MusicMarketApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => WishlistProvider()),
         ChangeNotifierProvider(create: (_) => ShopProvider()),
         ChangeNotifierProvider(create: (_) => BuyerProvider()),
+        ChangeNotifierProvider(create: (_) => AlertsProvider()),
+        ChangeNotifierProvider(create: (_) => AssistantProvider()),
+        ChangeNotifierProvider(create: (_) => NotificationsProvider()),
       ],
       child: MaterialApp.router(
         title: 'FindTone',

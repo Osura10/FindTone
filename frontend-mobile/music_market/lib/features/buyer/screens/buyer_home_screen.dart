@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import '../../marketplace/screens/marketplace_screen.dart';
 import '../../wishlist/screens/wishlist_screen.dart';
 import 'buyer_profile_screen.dart';
+import '../../assistant/screens/assistant_screen.dart';
+import '../../notifications/screens/notifications_screen.dart';
+import 'package:provider/provider.dart';
+import '../../notifications/providers/notifications_provider.dart';
 
 class BuyerHomeScreen extends StatefulWidget {
   const BuyerHomeScreen({super.key});
@@ -16,8 +20,8 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
   final List<Widget> _screens = [
     const MarketplaceScreen(),
     const WishlistScreen(),
-    const Center(child: Text('Assistant Placeholder')),
-    const Center(child: Text('Notifications Placeholder')),
+    const AssistantScreen(),
+    const NotificationsScreen(),
     const BuyerProfileScreen(),
   ];
 
@@ -33,12 +37,20 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
           });
         },
         type: BottomNavigationBarType.fixed,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.store), label: 'Marketplace'),
-          BottomNavigationBarItem(icon: Icon(Icons.favorite), label: 'Wishlist'),
-          BottomNavigationBarItem(icon: Icon(Icons.chat), label: 'Assistant'),
-          BottomNavigationBarItem(icon: Icon(Icons.notifications), label: 'Notifications'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+        items: [
+          const BottomNavigationBarItem(icon: Icon(Icons.store), label: 'Marketplace'),
+          const BottomNavigationBarItem(icon: Icon(Icons.favorite), label: 'Wishlist'),
+          const BottomNavigationBarItem(icon: Icon(Icons.chat), label: 'Assistant'),
+          BottomNavigationBarItem(
+            icon: context.watch<NotificationsProvider>().unreadCount > 0
+                ? Badge(
+                    label: Text(context.watch<NotificationsProvider>().unreadCount.toString()),
+                    child: const Icon(Icons.notifications),
+                  )
+                : const Icon(Icons.notifications),
+            label: 'Notifications',
+          ),
+          const BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
         ],
       ),
     );

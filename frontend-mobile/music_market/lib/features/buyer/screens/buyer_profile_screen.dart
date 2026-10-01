@@ -26,6 +26,13 @@ class BuyerProfileScreen extends StatelessWidget {
           ),
           const Divider(),
           ListTile(
+            leading: const Icon(Icons.notifications_active),
+            title: const Text('My Alerts'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/my_alerts'),
+          ),
+          const Divider(),
+          ListTile(
             leading: const Icon(Icons.logout, color: Colors.red),
             title: const Text('Logout', style: TextStyle(color: Colors.red)),
             onTap: () {
