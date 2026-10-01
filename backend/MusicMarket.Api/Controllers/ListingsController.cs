@@ -478,7 +478,7 @@ public class ListingsController : ControllerBase
     /// </summary>
     [HttpDelete("{id:int}")]
     [Authorize]
-    public async Task<IActionResult> DeleteListing(int id)
+    public async Task<IActionResult> DeleteListing(int id, [FromQuery] string? reason = null)
     {
         var listing = await _db.Listings
             .Include(l => l.Images)
@@ -486,25 +486,26 @@ public class ListingsController : ControllerBase
 
         if (listing == null)
         {
-            return NotFound($"Listing #{id} not found");
+            return StatusCode(404, new { message = $"Listing #{id} not found" });
         }
 
         var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
         var role = User.FindFirstValue(ClaimTypes.Role);
         
-        if (!int.TryParse(userIdStr, out var userId))
+        if (string.IsNullOrEmpty(userIdStr) || !int.TryParse(userIdStr, out var userId))
         {
-            return Unauthorized();
+            return StatusCode(401, new { message = "Unauthorized" });
         }
 
-        if (listing.SellerId != userId && role != "admin")
+        if (listing.SellerId != userId && role != Constants.Roles.Admin)
         {
-            return Forbid();
+            return StatusCode(403, new { message = "Forbidden" });
         }
 
-        if (listing.Status == "SOLD")
+        var hasOrder = await _db.Orders.AnyAsync(o => o.ListingId == id);
+        if (hasOrder)
         {
-            return BadRequest("Sold items are kept for order history");
+            return StatusCode(409, new { message = "This listing has an order and cannot be deleted." });
         }
 
         // Delete from Cloudinary
@@ -516,7 +517,7 @@ public class ListingsController : ControllerBase
                 {
                     try
                     {
-                        await _cloudinary.DestroyAsync(new DeletionParams(img.PublicId));
+                        await _cloudinary.DestroyAsync(new CloudinaryDotNet.Actions.DeletionParams(img.PublicId));
                     }
                     catch (Exception ex)
                     {
@@ -526,11 +527,26 @@ public class ListingsController : ControllerBase
             }
         }
 
-        // Keep notifications but set ListingId to null
+        var wishlistItems = await _db.WishlistItems.Where(w => w.ListingId == id).ToListAsync();
+        if (wishlistItems.Any()) _db.WishlistItems.RemoveRange(wishlistItems);
+
         var notifications = await _db.Notifications.Where(n => n.ListingId == id).ToListAsync();
         foreach (var notif in notifications)
         {
             notif.ListingId = null;
+        }
+
+        // If admin deletes someone else's listing, create a notification
+        if (role == Constants.Roles.Admin && listing.SellerId != userId)
+        {
+            _db.Notifications.Add(new Notification
+            {
+                UserId = listing.SellerId,
+                Type = "LISTING_REMOVED",
+                Message = $"Your listing '{listing.Title}' was removed by an admin. Reason: {reason ?? "No reason provided."}",
+                CreatedAt = DateTime.UtcNow,
+                IsRead = false
+            });
         }
 
         _db.Listings.Remove(listing);

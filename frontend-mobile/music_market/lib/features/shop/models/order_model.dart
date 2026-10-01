@@ -35,21 +35,21 @@ class OrderModel {
 
   factory OrderModel.fromJson(Map<String, dynamic> json) {
     return OrderModel(
-      id: json['id'],
-      listingId: json['listingId'],
-      listingTitle: json['listingTitle'] ?? '',
-      listingImage: json['listingImage'],
+      id: json['id'] as int? ?? 0,
+      listingId: json['listingId'] as int? ?? 0,
+      listingTitle: json['listingTitle']?.toString() ?? '',
+      listingImage: json['listingImage']?.toString(),
       amount: (json['amount'] as num?)?.toDouble() ?? 0.0,
-      paymentMethod: json['paymentMethod'] ?? '',
-      status: json['status'] ?? '',
-      fullName: json['fullName'] ?? '',
-      phone: json['phone'] ?? '',
-      addressLine: json['addressLine'] ?? '',
-      city: json['city'] ?? '',
-      postalCode: json['postalCode'],
-      notes: json['notes'],
-      cardLast4: json['cardLast4'],
-      createdAt: DateTime.parse(json['createdAt']),
+      paymentMethod: json['paymentMethod']?.toString() ?? '',
+      status: json['status']?.toString() ?? '',
+      fullName: json['fullName']?.toString() ?? '',
+      phone: json['phone']?.toString() ?? '',
+      addressLine: json['addressLine']?.toString() ?? '',
+      city: json['city']?.toString() ?? '',
+      postalCode: json['postalCode']?.toString(),
+      notes: json['notes']?.toString(),
+      cardLast4: json['cardLast4']?.toString(),
+      createdAt: json['createdAt'] != null ? DateTime.parse(json['createdAt'].toString()) : DateTime.now(),
     );
   }
 }

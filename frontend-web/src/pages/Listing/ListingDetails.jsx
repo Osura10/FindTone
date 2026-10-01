@@ -34,6 +34,7 @@ const ListingDetails = () => {
   const [mainImage, setMainImage] = useState('');
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteReason, setDeleteReason] = useState('');
 
   useEffect(() => {
     fetchListing();
@@ -91,9 +92,9 @@ const ListingDetails = () => {
   const handleDelete = async () => {
     setIsDeleting(true);
     try {
-      await apiCall(`/listings/${id}`, { method: 'DELETE' });
+      await apiCall(`/listings/${id}${isAdmin && deleteReason ? `?reason=${encodeURIComponent(deleteReason)}` : ''}`, { method: 'DELETE' });
       alert('Listing deleted successfully');
-      navigate('/dashboard/items');
+      navigate(-1);
     } catch (err) {
       alert(err.message || 'Failed to delete listing');
       setIsDeleting(false);
@@ -123,7 +124,7 @@ const ListingDetails = () => {
 
   const isOwner = userId === listing.sellerId;
   const isAdmin = userRole === 'admin';
-  const canDelete = (isOwner || isAdmin) && listing.status !== 'SOLD';
+  const canDelete = isOwner || isAdmin;
 
   const fmt = (n) => Math.round(n).toLocaleString('en-LK');
 
@@ -184,7 +185,7 @@ const ListingDetails = () => {
                 SOLD OUT
               </div>
             )}
-            {userId && !isOwner && listing.status === 'LIVE' && (
+            {userId && !isOwner && !isAdmin && listing.status === 'LIVE' && (
               <button
                 onClick={toggleWishlist}
                 style={{
@@ -323,7 +324,7 @@ const ListingDetails = () => {
               </div>
             </div>
             
-            {listing.sellerPhone && (
+            {listing.sellerPhone && !isAdmin && (
               <div style={{ display: 'flex', gap: '1rem', marginTop: '1.2rem' }}>
                 <a href={`tel:${listing.sellerPhone}`} className="btn" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', background: 'rgba(255,255,255,0.1)', color: '#fff', textDecoration: 'none' }}>
                   <Phone size={18} /> Call
@@ -333,12 +334,12 @@ const ListingDetails = () => {
                 </a>
               </div>
             )}
-            {!listing.sellerPhone && userId && (
+            {!listing.sellerPhone && userId && !isAdmin && (
               <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '1rem' }}>
                 Phone number not available.
               </div>
             )}
-            {!userId && (
+            {!userId && !isAdmin && (
               <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '1rem' }}>
                 Log in to see seller contact info.
               </div>
@@ -347,7 +348,11 @@ const ListingDetails = () => {
 
           {/* Actions */}
           <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-            {!isOwner && listing.status === 'LIVE' && (
+            {isOwner ? (
+              <div style={{ color: 'var(--primary-hover)', fontWeight: 'bold', flex: 1, textAlign: 'center', padding: '1rem', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }}>
+                This is your listing
+              </div>
+            ) : listing.status === 'LIVE' && !isAdmin && (
               <button 
                 className="btn btn-primary" 
                 style={{ flex: 1, fontWeight: 'bold' }}
@@ -387,6 +392,15 @@ const ListingDetails = () => {
             <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
               This cannot be undone. Are you sure you want to permanently delete this listing?
             </p>
+            {isAdmin && !isOwner && (
+              <input
+                type="text"
+                placeholder="Reason for deletion (optional)"
+                value={deleteReason}
+                onChange={e => setDeleteReason(e.target.value)}
+                style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.2)', background: 'transparent', color: '#fff', marginBottom: '1.5rem' }}
+              />
+            )}
             <div style={{ display: 'flex', gap: '1rem' }}>
               <button className="btn btn-outline" onClick={() => setShowConfirmDelete(false)} style={{ flex: 1 }} disabled={isDeleting}>Cancel</button>
               <button className="btn btn-primary" style={{ flex: 1, background: '#ff6b6b' }} onClick={handleDelete} disabled={isDeleting}>

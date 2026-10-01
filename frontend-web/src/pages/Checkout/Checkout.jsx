@@ -35,12 +35,23 @@ const Checkout = () => {
 
   const fetchListing = async () => {
     try {
+      const user = await apiCall('/auth/me');
+      if (user?.role?.toLowerCase() === 'admin') {
+        alert("Admins cannot place orders.");
+        navigate(`/dashboard/item/${listingId}`);
+        return;
+      }
+      
       const data = await apiCall(`/listings/${listingId}`);
       if (data.status !== 'LIVE') {
         setError('This item is no longer available for purchase.');
       }
       setListing(data);
     } catch (err) {
+      if (err.status === 401) {
+        navigate(`/login?returnUrl=/checkout/${listingId}`);
+        return;
+      }
       setError('Failed to load listing.');
     } finally {
       setLoading(false);
@@ -58,7 +69,7 @@ const Checkout = () => {
         setFormData(prev => ({ ...prev, card: { ...prev.card, number: spaced.substring(0, 19) } }));
       } else if (field === 'expiry') {
         let formatted = value.replace(/\s+/g, '').replace(/[^0-9/]/gi, '');
-        if (formatted.length === 2 && !formatted.includes('/') && prev.card.expiry.length < 2) {
+        if (formatted.length === 2 && !formatted.includes('/') && formData.card.expiry.length < 2) {
             formatted += '/';
         }
         setFormData(prev => ({ ...prev, card: { ...prev.card, expiry: formatted.substring(0, 5) } }));
@@ -90,8 +101,23 @@ const Checkout = () => {
         notes: formData.notes
       };
 
+      // Client-side expiry validation
       if (formData.paymentMethod === 'CARD') {
-        payload.card = formData.card;
+        const expiryParts = formData.card.expiry.split('/');
+        if (expiryParts.length === 2) {
+          const month = parseInt(expiryParts[0], 10);
+          let year = parseInt(expiryParts[1], 10);
+          year = year < 100 ? 2000 + year : year;
+          const now = new Date();
+          const currentYear = now.getFullYear();
+          const currentMonth = now.getMonth() + 1;
+          
+          if (year < currentYear || (year === currentYear && month < currentMonth)) {
+            setError("Card expired.");
+            setSubmitting(false);
+            return;
+          }
+        }
       }
 
       const res = await apiCall('/orders', {
@@ -100,8 +126,34 @@ const Checkout = () => {
       });
 
       setSuccess(res.orderId);
+      window.history.replaceState(null, '', `/dashboard/orders`);
     } catch (err) {
-      setError(err.message || 'Failed to place order.');
+      if (err.status === 401) {
+        sessionStorage.removeItem('token');
+        localStorage.removeItem('token');
+        navigate(`/login?returnUrl=/checkout/${listingId}`);
+        return;
+      }
+      
+      if (err.status === 409) {
+        try {
+          const myOrders = await apiCall('/orders/mine');
+          const existingOrder = myOrders.find(o => o.listingId === parseInt(listingId));
+          if (existingOrder) {
+            setSuccess(existingOrder.id);
+            window.history.replaceState(null, '', `/dashboard/orders`);
+            return;
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      let msg = err.message;
+      if (msg === 'Forbidden' || !msg) {
+         msg = 'Could not place your order. Please try again.';
+      }
+      setError(msg);
       setSubmitting(false);
     }
   };

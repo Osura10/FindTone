@@ -5,12 +5,13 @@ using MusicMarket.Api.Data;
 using MusicMarket.Api.Dtos;
 using MusicMarket.Api.Models;
 using MusicMarket.Api.Services;
+using MusicMarket.Api.Constants;
 
 namespace MusicMarket.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "admin")]
+[Authorize(Roles = Roles.Admin)]
 public class AdminController : ControllerBase
 {
     private readonly AppDbContext _db;

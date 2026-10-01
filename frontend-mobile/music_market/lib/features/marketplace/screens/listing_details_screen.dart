@@ -8,6 +8,8 @@ import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../providers/marketplace_provider.dart';
 import '../../wishlist/providers/wishlist_provider.dart';
+import '../../auth/providers/auth_provider.dart';
+import 'package:go_router/go_router.dart';
 import '../models/listing_model.dart';
 import '../../../core/widgets/common_widgets.dart';
 import '../../../core/widgets/app_network_image.dart';
@@ -93,8 +95,8 @@ class _ListingDetailsScreenState extends State<ListingDetailsScreen> {
     final listing = _listing!;
     final wishlistProvider = context.watch<WishlistProvider>();
     final isInWishlist = wishlistProvider.isInWishlist(listing.id);
-    // Assuming authProvider can check if my listing. Here we skip or assume from sellerId (but we need my userId).
-    // Let's just check if phone matches or rely on a "isMyListing" flag if we add it, but backend doesn't send it. We'll ignore `isMyListing` check for now or assume they can't buy their own item on checkout.
+    final authProvider = context.watch<AuthProvider>();
+    final isOwner = authProvider.userId == listing.sellerId;
 
     return Scaffold(
       appBar: AppBar(
@@ -335,18 +337,30 @@ class _ListingDetailsScreenState extends State<ListingDetailsScreen> {
           ? Container(
               padding: const EdgeInsets.all(16),
               color: Theme.of(context).scaffoldBackgroundColor,
-              child: ElevatedButton(
-                onPressed: () {
-                  // Buy now logic
-                },
+              child: isOwner ? const Text('This is your listing', textAlign: TextAlign.center, style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)) : ElevatedButton(
+                onPressed: () => context.push('/checkout', extra: listing),
                 style: ElevatedButton.styleFrom(
                   minimumSize: const Size(double.infinity, 50),
                   padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
-                child: const Text('Buy Now', style: TextStyle(fontSize: 18)),
+                child: const Text('Buy Now', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               ),
             )
-          : null,
+          : listing.status == 'SOLD'
+              ? Container(
+                  padding: const EdgeInsets.all(16),
+                  color: Theme.of(context).scaffoldBackgroundColor,
+                  child: ElevatedButton(
+                    onPressed: null,
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 50),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      disabledBackgroundColor: Colors.grey[800],
+                    ),
+                    child: const Text('SOLD OUT', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                  ),
+                )
+              : null,
     );
   }
 }

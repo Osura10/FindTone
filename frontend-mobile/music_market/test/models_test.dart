@@ -78,6 +78,17 @@ void main() {
       expect(result.paymentMethod, 'Card');
     });
 
+    test('OrderModel POST response (just message and orderId) is parsed safely with defaults', () {
+      // The backend returns: { "message": "Order placed successfully", "orderId": 142 }
+      final json = { "message": "Order placed successfully", "orderId": 142 };
+      
+      // We expect fromJson to parse it safely now with defaults
+      final result = OrderModel.fromJson(json);
+      expect(result.id, 0); // json['id'] was null
+      expect(result.listingId, 0);
+      expect(result.amount, 0.0);
+    });
+
     test('ListingDetail parses camelCase correctly and handles numbers', () {
       final json = {
         "id": 1,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:dio/dio.dart';
+import 'dart:convert';
 import '../../../core/network/api_client.dart';
 import '../../../core/network/api_exceptions.dart';
 
@@ -20,6 +21,21 @@ class AuthProvider with ChangeNotifier {
   String? get role => _role;
   bool get pendingApproval => _pendingApproval;
   String? get errorMessage => _errorMessage;
+
+  int? get userId {
+    if (_token == null) return null;
+    try {
+      final parts = _token!.split('.');
+      if (parts.length != 3) return null;
+      final normalized = base64Url.normalize(parts[1]);
+      final payload = utf8.decode(base64Url.decode(normalized));
+      final map = jsonDecode(payload);
+      final idStr = map['nameid'] ?? map['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier'];
+      return idStr != null ? int.tryParse(idStr.toString()) : null;
+    } catch (_) {
+      return null;
+    }
+  }
 
   Future<void> loadAuthData() async {
     _token = await _secureStorage.read(key: 'jwt_token');

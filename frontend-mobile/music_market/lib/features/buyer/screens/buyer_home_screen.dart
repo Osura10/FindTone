@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../marketplace/screens/marketplace_screen.dart';
 import '../../wishlist/screens/wishlist_screen.dart';
+import 'buyer_profile_screen.dart';
 
 class BuyerHomeScreen extends StatefulWidget {
   const BuyerHomeScreen({super.key});
@@ -17,7 +18,7 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
     const WishlistScreen(),
     const Center(child: Text('Assistant Placeholder')),
     const Center(child: Text('Notifications Placeholder')),
-    const Center(child: Text('Profile Placeholder')),
+    const BuyerProfileScreen(),
   ];
 
   @override

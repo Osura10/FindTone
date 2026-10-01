@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using MusicMarket.Api.Data;
 using MusicMarket.Api.Dtos;
 using MusicMarket.Api.Models;
+using MusicMarket.Api.Constants;
 
 namespace MusicMarket.Api.Controllers;
 
@@ -28,15 +29,15 @@ public class OrdersController : ControllerBase
     public async Task<IActionResult> CreateOrder([FromBody] CreateOrderDto dto)
     {
         var role = User.FindFirstValue(ClaimTypes.Role);
-        if (role == "admin")
+        if (role == Roles.Admin)
         {
-            return Forbid();
+            return StatusCode(403, new { message = "Admin accounts cannot place orders." });
         }
 
         var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!int.TryParse(userIdStr, out var userId))
+        if (string.IsNullOrEmpty(userIdStr) || !int.TryParse(userIdStr, out var userId))
         {
-            return Unauthorized();
+            return StatusCode(401, new { message = "Please log in again." });
         }
 
         // Check required fields
@@ -62,10 +63,10 @@ public class OrdersController : ControllerBase
         {
             if (dto.Card == null) return BadRequest("Card details are required for CARD payment method.");
             
-            var cleanedNumber = dto.Card.Number.Replace(" ", "");
+            var cleanedNumber = dto.Card.Number.Replace(" ", "").Replace("-", "");
             if (cleanedNumber != "1234123412341234")
             {
-                return BadRequest("Payment declined. Use the demo card 1234 1234 1234 1234.");
+                return BadRequest("Invalid demo card number.");
             }
 
             if (string.IsNullOrWhiteSpace(dto.Card.HolderName))
@@ -79,19 +80,21 @@ public class OrdersController : ControllerBase
             }
 
             var expiryParts = dto.Card.Expiry.Split('/');
-            if (expiryParts.Length != 2 || !int.TryParse(expiryParts[0], out int month) || !int.TryParse(expiryParts[1], out int year))
+            if (expiryParts.Length != 2 || !int.TryParse(expiryParts[0], out int month) || !int.TryParse(expiryParts[1], out int yearPart))
             {
-                return BadRequest("Invalid Expiry.");
+                return BadRequest("Invalid expiry format.");
             }
+            
+            int year = yearPart < 100 ? 2000 + yearPart : yearPart;
             
             // Check if future month
             var now = DateTime.Now;
             var currentMonth = now.Month;
-            var currentYear = now.Year % 100;
+            var currentYear = now.Year;
             
-            if (year < currentYear || (year == currentYear && month <= currentMonth))
+            if (year < currentYear || (year == currentYear && month < currentMonth))
             {
-                return BadRequest("Card expiry must be a future month.");
+                return BadRequest("Card expired.");
             }
 
             status = "PAID";
@@ -118,7 +121,7 @@ public class OrdersController : ControllerBase
         
         if (listing.SellerId == userId)
         {
-            return BadRequest("You cannot buy your own listing.");
+            return StatusCode(403, new { message = "You cannot buy your own listing." });
         }
 
         if (listing.Status != "LIVE")
