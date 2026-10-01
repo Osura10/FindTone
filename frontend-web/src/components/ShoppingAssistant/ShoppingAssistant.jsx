@@ -1,8 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import {
-  X, Send, Sparkles, ShoppingBag, BellPlus, CheckCircle,
-  ArrowRight, ShieldCheck, MapPin, Tag, ExternalLink, Loader2
-} from 'lucide-react';
+import { X, Send, Sparkles, ShoppingBag, BellPlus, CheckCircle, MapPin, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import { apiCall } from '../../services/api';

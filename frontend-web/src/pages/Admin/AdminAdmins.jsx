@@ -32,7 +32,7 @@ const AdminAdmins = () => {
       setLoading(true);
       const [adminsData, meData] = await Promise.all([
         apiCall('/admin/users?role=admin'),
-        apiCall('/auth/me').catch(() => null)
+        apiCall('/auth/me').catch((err) => { showToast('error', `Could not load your admin account: ${err.message}`); return null; })
       ]);
       setAdmins(adminsData);
       if (meData) setCurrentUser(meData);
@@ -50,12 +50,14 @@ const AdminAdmins = () => {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchAdmins();
   }, []);
 
   useEffect(() => {
     const status = searchParams.get('status');
     if (status) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setStatusFilter(status);
     }
   }, [searchParams]);

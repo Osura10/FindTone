@@ -1,50 +1,11 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { Upload, Plus, X, CheckCircle, TrendingUp, Loader, Navigation } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useBlocker, useNavigate, useParams } from 'react-router-dom';
+import toast from 'react-hot-toast';
+import { Upload, Plus, X, TrendingUp, Loader, Save, AlertTriangle } from 'lucide-react';
 import { apiCall } from '../../services/api';
-import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-
-import icon from 'leaflet/dist/images/marker-icon.png';
-import iconShadow from 'leaflet/dist/images/marker-shadow.png';
-
-let DefaultIcon = L.icon({
-    iconUrl: icon,
-    shadowUrl: iconShadow,
-    iconSize: [25, 41],
-    iconAnchor: [12, 41]
-});
-L.Marker.prototype.options.icon = DefaultIcon;
-
-const LocationMarker = ({ position, setPosition }) => {
-  useMapEvents({
-    click(e) {
-      setPosition(e.latlng);
-    },
-  });
-
-  return position === null ? null : (
-    <Marker 
-      position={position} 
-      draggable={true}
-      eventHandlers={{
-        dragend: (e) => {
-          setPosition(e.target.getLatLng());
-        }
-      }}
-    />
-  );
-};
-
-const MapUpdater = ({ position }) => {
-  const map = useMap();
-  useEffect(() => {
-    map.setView(position, map.getZoom());
-  }, [position, map]);
-  return null;
-};
-
+import { useDashboard, isAdminUser } from '../../hooks/useDashboard';
+import LocationPicker from '../../components/LocationPicker';
+import { Skeleton, ErrorState } from '../../components/ui';
 
 const CONDITIONS = [
   { value: 'new', label: 'Brand New (Unopened)' },
@@ -65,202 +26,237 @@ const VERDICT_STYLES = {
   UNKNOWN:          { bg: 'rgba(134,142,150,0.2)', color: '#adb5bd', border: 'rgba(134,142,150,0.4)', label: 'Unknown' },
 };
 
+const EMPTY_FORM = {
+  title: '', category: '', brand: '', model: '', condition: 'good', year: '',
+  listingType: 'Sell', price: '', location: '', description: ''
+};
+
+// Form field -> backend multipart field name.
+const API_FIELDS = {
+  title: 'Title', description: 'Description', category: 'Category', brand: 'Brand', model: 'Model',
+  condition: 'Condition', year: 'Year', listingType: 'ListingType', price: 'Price', location: 'Location'
+};
+
+// Changing these makes the backend re-run the AI checks.
+const AI_FIELDS = ['price', 'category', 'brand', 'model', 'condition', 'year'];
+
+const MAX_PHOTOS = 6;
+const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
+const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const MAX_YEAR = new Date().getFullYear() + 1;
+
 const fmt = (n) => Math.round(n).toLocaleString('en-LK');
+const clean = (v) => String(v ?? '').trim().replace(/\s+/g, ' ');
+const samePlace = (a, b) => !!a && !!b && Math.abs(a.lat - b.lat) < 1e-6 && Math.abs(a.lng - b.lng) < 1e-6;
+
+const listingToForm = (l) => ({
+  title: l.title ?? '',
+  category: l.category ?? '',
+  brand: l.brand ?? '',
+  model: l.model ?? '',
+  condition: l.condition || 'good',
+  year: l.year != null ? String(l.year) : '',
+  listingType: l.listingType || 'Sell',
+  price: l.price != null ? String(l.price) : '',
+  location: l.location ?? '',
+  description: l.description ?? ''
+});
+
+// Short text about the AI result for the toast after saving.
+const aiSummary = (dto) => {
+  const parts = [`Status: ${dto.status}`];
+  if (dto.trustScore != null) parts.push(`Trust ${dto.trustScore}/100${dto.trustWarning ? ' (warning)' : ''}`);
+  if (dto.priceVerdict) parts.push(`Price: ${(VERDICT_STYLES[dto.priceVerdict] || VERDICT_STYLES.UNKNOWN).label}`);
+  return parts.join(' · ');
+};
 
 const CreatePost = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const isEdit = Boolean(id);
+  const { currentUser } = useDashboard();
   const fileInputRef = useRef(null);
+  const savedRef = useRef(false);        // true after a successful save, so leaving is not blocked
+  const previewsRef = useRef([]);        // object URLs to free when the page closes
 
-  const [formData, setFormData] = useState({
-    title: '',
-    category: '',
-    brand: '',
-    model: '',
-    condition: 'good',
-    year: '',
-    listingType: 'Sell',
-    price: '',
-    location: '',
-    description: '',
-  });
-
-  const [categories, setCategories] = useState([]);
-  const [selectedImages, setSelectedImages] = useState([]);
-  const [imagePreviews, setImagePreviews] = useState([]);
+  const [formData, setFormData] = useState(EMPTY_FORM);
+  const [original, setOriginal] = useState(null);
+  const [position, setPosition] = useState(null);
+  const [originalPosition, setOriginalPosition] = useState(null);
   const [existingImages, setExistingImages] = useState([]);
-  const [isDragging, setIsDragging] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const [removedImageIds, setRemovedImageIds] = useState([]);
+  const [newPhotos, setNewPhotos] = useState([]); // [{ file, preview }]
+  const [listingStatus, setListingStatus] = useState('');
+  const [sellerId, setSellerId] = useState(null);
 
-  // Price-check state
+  const [loadState, setLoadState] = useState(isEdit ? 'loading' : 'ready');
+  const [loadError, setLoadError] = useState('');
+  const [suggestions, setSuggestions] = useState({ categories: [], brands: [] });
+  const [suggestionError, setSuggestionError] = useState('');
+
+  const [isDragging, setIsDragging] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
   const [priceChecking, setPriceChecking] = useState(false);
   const [priceCheckResult, setPriceCheckResult] = useState(null);
   const [priceCheckError, setPriceCheckError] = useState('');
 
-  // Map state
-  const [position, setPosition] = useState(null);
-  const [mapQuery, setMapQuery] = useState('');
-  const [mapResults, setMapResults] = useState([]);
-  const [showMapResults, setShowMapResults] = useState(false);
-  const searchTimeoutRef = useRef(null);
+  // ── Loading ────────────────────────────────────────────────────────────────
+
+  const loadSuggestions = useCallback(async () => {
+    try {
+      const data = await apiCall('/catalog');
+      const list = Array.isArray(data) ? data : [];
+      setSuggestions({
+        categories: [...new Set(list.map((c) => c.category).filter(Boolean))].sort(),
+        brands: [...new Set(list.map((c) => c.brand).filter(Boolean))].sort()
+      });
+      setSuggestionError('');
+    } catch (err) {
+      setSuggestionError(`Suggestions are not available (${err.message}). You can still type any category or brand.`);
+    }
+  }, []);
+
+  // isActive() is false when the effect that started this request was cleaned up. Without it a late
+  // answer (e.g. the second StrictMode request) could overwrite what the user already typed.
+  const loadListing = useCallback(async (isActive = () => true) => {
+    try {
+      const data = await apiCall(`/listings/${id}`);
+      if (!isActive()) return;
+      const form = listingToForm(data);
+      setFormData(form);
+      setOriginal(form);
+      const pos = data.latitude != null && data.longitude != null ? { lat: data.latitude, lng: data.longitude } : null;
+      setPosition(pos);
+      setOriginalPosition(pos);
+      setExistingImages(data.images || []);
+      setRemovedImageIds([]);
+      setListingStatus(data.status);
+      setSellerId(data.sellerId);
+      setLoadState('ready');
+    } catch (err) {
+      if (!isActive()) return;
+      setLoadError(err.status === 404 ? 'This listing does not exist or you cannot edit it.' : (err.message || 'Could not load the listing.'));
+      setLoadState('error');
+    }
+  }, [id]);
+
+  // Data loading: these set state only after the request finishes.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadSuggestions();
+  }, [loadSuggestions]);
 
   useEffect(() => {
-    // Guard: Both Shops and Buyers can access {isEdit ? 'Save Changes' : 'Create Post'}
-    apiCall('/auth/me').then(user => {
-      if (user && !['shop', 'buyer'].includes(user.role)) {
-        navigate('/dashboard/items');
-      }
-    }).catch(() => {
-      navigate('/login');
-    });
+    if (!isEdit) return undefined;
+    let active = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadListing(() => active);
+    return () => { active = false; };
+  }, [isEdit, loadListing]);
 
-    // Fetch categories
-    apiCall('/catalog').then(data => {
-      if (Array.isArray(data)) {
-        const uniqueCategories = [...new Set(data.map(item => item.category))].filter(Boolean);
-        setCategories(uniqueCategories);
-      }
-    }).catch(err => console.error('Failed to fetch catalog categories', err));
-  }, [navigate]);
+  // Admins only view and delete listings; they do not create or edit them here.
+  useEffect(() => {
+    if (isAdminUser(currentUser)) {
+      toast.error('Admins cannot create or edit listings.');
+      navigate('/dashboard/items', { replace: true });
+    }
+  }, [currentUser, navigate]);
+
+  // Free photo previews when the page closes.
+  useEffect(() => () => previewsRef.current.forEach((u) => URL.revokeObjectURL(u)), []);
+
+  // ── Change tracking (edit mode) ─────────────────────────────────────────────
+
+  const changedFields = useMemo(() => {
+    if (!isEdit || !original) return [];
+    return Object.keys(API_FIELDS).filter((k) => {
+      const now = k === 'description' ? formData[k].trim() : clean(formData[k]);
+      const before = k === 'description' ? original[k].trim() : clean(original[k]);
+      // The API cannot clear these (an empty value means "not sent"), so empty is not a change.
+      if (now === '' && (k === 'year' || k === 'description')) return false;
+      if (k === 'price' || k === 'year') return now !== '' && Number(now) !== Number(before);
+      return now !== before;
+    });
+  }, [isEdit, original, formData]);
+
+  const pinChanged = isEdit && !!position && !samePlace(position, originalPosition);
+  const photosChanged = removedImageIds.length > 0 || newPhotos.length > 0;
+  const isDirty = isEdit
+    ? changedFields.length > 0 || pinChanged || photosChanged
+    : Object.keys(EMPTY_FORM).some((k) => clean(formData[k]) !== clean(EMPTY_FORM[k])) || newPhotos.length > 0 || !!position;
+
+  const blocker = useBlocker(({ currentLocation, nextLocation }) =>
+    isDirty && !savedRef.current && currentLocation.pathname !== nextLocation.pathname);
+
+  // Closing the tab / reloading with unsaved changes asks the browser to confirm.
+  useEffect(() => {
+    if (!isDirty) return undefined;
+    const warn = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [isDirty]);
+
+  const isChanged = (k) => changedFields.includes(k);
+
+  // ── Form handlers ──────────────────────────────────────────────────────────
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
     setError('');
-    // Clear price check when relevant fields change
-    if (['brand', 'model', 'category', 'condition', 'price', 'year', 'description'].includes(e.target.name)) {
+    if (['brand', 'model', 'category', 'condition', 'price', 'year', 'description'].includes(name)) {
       setPriceCheckResult(null);
       setPriceCheckError('');
     }
   };
 
-  const handleMapSearchChange = (e) => {
-    const val = e.target.value;
-    setMapQuery(val);
-    if (!val.trim()) {
-      setMapResults([]);
-      setShowMapResults(false);
-      return;
-    }
-    
-    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-    
-    searchTimeoutRef.current = setTimeout(async () => {
-      try {
-        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&countrycodes=lk&q=${encodeURIComponent(val)}`);
-        const data = await res.json();
-        setMapResults(data);
-        setShowMapResults(true);
-      } catch (err) {
-        console.error('Nominatim search error', err);
-      }
-    }, 1000);
-  };
+  const keptImages = existingImages.filter((img) => !removedImageIds.includes(img.id));
+  const photoCount = keptImages.length + newPhotos.length;
 
-  const handleSelectMapResult = (result) => {
-    const latlng = { lat: parseFloat(result.lat), lng: parseFloat(result.lon) };
-    setPosition(latlng);
-    if (!formData.location) {
-      setFormData(prev => ({ ...prev, location: result.display_name.split(',')[0] }));
-    }
-    setMapQuery(result.display_name);
-    setShowMapResults(false);
-  };
-
-  useEffect(() => {
-    if (!position) return;
-    
-    const reverseGeocode = async () => {
-      try {
-        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${position.lat}&lon=${position.lng}`);
-        const data = await res.json();
-        if (data && data.display_name) {
-          setFormData(prev => ({ ...prev, location: data.display_name.split(',')[0] }));
-        }
-      } catch (err) {
-        console.error('Nominatim reverse error', err);
-      }
-    };
-    
-    const timeout = setTimeout(reverseGeocode, 1000);
-    return () => clearTimeout(timeout);
-  }, [position]);
-
-  const handleUseCurrentLocation = () => {
-    if ('geolocation' in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        },
-        (err) => {
-          console.error('Geolocation error', err);
-        }
-      );
-    }
-  };
-
-  const handleFiles = (files) => {
+  const addFiles = (files) => {
     setError('');
-    const newFiles = Array.from(files);
-    const validExtensions = ['image/jpeg', 'image/png', 'image/webp'];
-    const validFiles = [];
-
-    for (const file of newFiles) {
-      if (!validExtensions.includes(file.type)) {
-        setError(`"${file.name}" is not a valid format. Only JPG, PNG, and WebP are allowed.`);
+    const picked = Array.from(files);
+    for (const file of picked) {
+      if (!PHOTO_TYPES.includes(file.type)) {
+        setError(`"${file.name}" is not a valid format. Only JPG, PNG and WebP are allowed.`);
         return;
       }
-      if (file.size > 5 * 1024 * 1024) {
-        setError(`"${file.name}" exceeds 5 MB limit.`);
+      if (file.size > MAX_PHOTO_BYTES) {
+        setError(`"${file.name}" is larger than 5 MB.`);
         return;
       }
-      validFiles.push(file);
     }
-
-    if (existingImages.length + selectedImages.length + validFiles.length > 6) {
-      setError('You can upload a maximum of 6 photos per listing.');
+    if (photoCount + picked.length > MAX_PHOTOS) {
+      setError(`You can have at most ${MAX_PHOTOS} photos per listing.`);
       return;
     }
-
-    const updatedImages = [...selectedImages, ...validFiles];
-    setSelectedImages(updatedImages);
-    const newPreviews = validFiles.map(file => URL.createObjectURL(file));
-    setImagePreviews([...imagePreviews, ...newPreviews]);
+    const added = picked.map((file) => {
+      const preview = URL.createObjectURL(file);
+      previewsRef.current.push(preview);
+      return { file, preview };
+    });
+    setNewPhotos((prev) => [...prev, ...added]);
   };
 
-  const handleFileInputChange = (e) => {
-    if (e.target.files && e.target.files.length > 0) {
-      handleFiles(e.target.files);
-    }
-  };
-
-  const handleRemoveExistingImage = (imageId, e) => {
+  const removeNewPhoto = (index, e) => {
     e.stopPropagation();
-    setExistingImages(prev => prev.filter(img => img.id !== imageId));
+    setNewPhotos((prev) => {
+      URL.revokeObjectURL(prev[index].preview);
+      return prev.filter((_, i) => i !== index);
+    });
   };
 
-  const handleRemoveImage = (index, e) => {
+  const removeExistingImage = (imageId, e) => {
     e.stopPropagation();
-    const updatedImages = selectedImages.filter((_, i) => i !== index);
-    const updatedPreviews = imagePreviews.filter((_, i) => i !== index);
-    setSelectedImages(updatedImages);
-    setImagePreviews(updatedPreviews);
-  };
-
-  const handleDragOver = (e) => { e.preventDefault(); setIsDragging(true); };
-  const handleDragLeave = () => setIsDragging(false);
-  const handleDrop = (e) => {
-    e.preventDefault();
-    setIsDragging(false);
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) handleFiles(e.dataTransfer.files);
+    setRemovedImageIds((prev) => [...prev, imageId]);
   };
 
   const handlePriceCheck = async () => {
     const { brand, model, category, condition } = formData;
-    if (!brand.trim() || !model.trim() || !category || !condition) {
-      setPriceCheckError('Please fill in Brand, Model, Category, and Condition before checking the price.');
+    if (!clean(brand) || !clean(model) || !clean(category) || !condition) {
+      setPriceCheckError('Please fill in Category, Brand, Model and Condition before checking the price.');
       return;
     }
     setPriceCheckError('');
@@ -270,14 +266,14 @@ const CreatePost = () => {
       const result = await apiCall('/listings/price-check', {
         method: 'POST',
         body: JSON.stringify({
-          brand: formData.brand.trim(),
-          model: formData.model.trim(),
-          category: formData.category,
-          condition: formData.condition,
+          brand: clean(brand),
+          model: clean(model),
+          category: clean(category),
+          condition,
           year: formData.year ? parseInt(formData.year, 10) : null,
           price: formData.price ? parseFloat(formData.price) : 0,
-          description: formData.description.trim(),
-        }),
+          description: formData.description.trim()
+        })
       });
       setPriceCheckResult(result);
     } catch (err) {
@@ -287,74 +283,77 @@ const CreatePost = () => {
     }
   };
 
+  // Same rules as the backend, so most mistakes are caught before upload.
+  const validate = () => {
+    if (!clean(formData.title)) return 'Please enter a title.';
+    if (!clean(formData.category)) return 'Please enter a category.';
+    if (!clean(formData.brand)) return 'Please enter a brand.';
+    if (!clean(formData.model)) return 'Please enter a model.';
+    if (!isEdit && !formData.description.trim()) return 'Please enter a description.';
+    const price = Number(formData.price);
+    if (!formData.price || Number.isNaN(price) || price <= 0) return 'Price must be greater than 0 LKR.';
+    if (formData.year) {
+      const y = Number(formData.year);
+      if (!Number.isInteger(y) || y < 1900 || y > MAX_YEAR) return `Year must be between 1900 and ${MAX_YEAR}.`;
+    }
+    if (!position) return 'Please drop a pin on the map for the location.';
+    if (!clean(formData.location)) return 'Please enter a location name.';
+    if (photoCount < 1) return 'Please add at least 1 photo.';
+    if (photoCount > MAX_PHOTOS) return `You can have at most ${MAX_PHOTOS} photos.`;
+    return null;
+  };
+
+  const goToMyListings = () => navigate('/dashboard/items?tab=mine', { state: { refreshAt: Date.now() } });
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
-    setSuccess('');
-
-    if (existingImages.length + selectedImages.length === 0) {
-      setError('Please upload at least 1 photo of your instrument.');
+    if (submitting) return;
+    const problem = validate();
+    if (problem) {
+      setError(problem);
       return;
     }
+    if (isEdit && !isDirty) return;
 
-    if (parseFloat(formData.price) <= 0 || isNaN(formData.price)) {
-      setError('Price must be greater than 0 LKR.');
-      return;
-    }
-
-    setLoading(true);
-
-    if (!position || !formData.location) {
-      setError('Please pin your location on the map.');
-      setLoading(false);
-      return;
-    }
-
-    try {
-      const data = new FormData();
-      data.append('Title', formData.title.trim());
-      data.append('Category', formData.category.trim());
-      data.append('Brand', formData.brand.trim());
-      data.append('Model', formData.model.trim());
-      data.append('Condition', formData.condition);
-      if (formData.year) data.append('Year', formData.year);
-      data.append('ListingType', formData.listingType);
-      data.append('Price', formData.price);
-      data.append('Location', formData.location.trim());
+    const data = new FormData();
+    if (isEdit) {
+      // Send ONLY what changed.
+      changedFields.forEach((k) => data.append(API_FIELDS[k], k === 'description' ? formData[k].trim() : clean(formData[k])));
+      if (pinChanged) {
+        data.append('Latitude', position.lat);
+        data.append('Longitude', position.lng);
+      }
+      removedImageIds.forEach((imageId) => data.append('RemoveImageIds', imageId));
+      newPhotos.forEach(({ file }) => data.append('NewImages', file));
+    } else {
+      Object.keys(API_FIELDS).forEach((k) => {
+        const value = k === 'description' ? formData[k].trim() : clean(formData[k]);
+        if (value !== '') data.append(API_FIELDS[k], value);
+      });
       data.append('Latitude', position.lat);
       data.append('Longitude', position.lng);
-      data.append('Description', formData.description.trim());
+      newPhotos.forEach(({ file }) => data.append('Images', file));
+    }
 
-            existingImages.forEach(img => {
-        data.append('ExistingImageIds', img.id);
-      });
-      selectedImages.forEach((file) => {
-        data.append(isEdit ? 'NewImages' : 'Images', file);
-      });
-
-      if (isEdit) {
-        await apiCall(`/listings/${id}`, {
-          method: 'PUT',
-          body: data
-        });
-        setSuccess('Listing updated successfully!');
-      } else {
-        await apiCall('/listings', {
-          method: 'POST',
-          body: data
-        });
-        setSuccess('Listing created successfully! Your item is now pending review.');
-      }
-      setTimeout(() => {
-        navigate('/dashboard/items');
-      }, 1500);
+    setSubmitting(true);
+    setError('');
+    try {
+      const result = await apiCall(isEdit ? `/listings/${id}` : '/listings', { method: isEdit ? 'PATCH' : 'POST', body: data });
+      savedRef.current = true;
+      const aiRan = !isEdit || photosChanged || changedFields.some((k) => AI_FIELDS.includes(k));
+      toast.success(
+        `${isEdit ? 'Listing updated' : 'Listing created'}.${aiRan ? `\n${aiSummary(result)}` : ''}`,
+        { duration: 7000 }
+      );
+      goToMyListings();
     } catch (err) {
-      console.error('Create listing error:', err);
-      setError(err.message || 'Failed to create listing. Please try again.');
+      setError(err.message || (isEdit ? 'Failed to save changes.' : 'Failed to create the listing.'));
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
+
+  // ── Styles ─────────────────────────────────────────────────────────────────
 
   const inputStyle = {
     padding: '0.8rem 1rem',
@@ -365,133 +364,115 @@ const CreatePost = () => {
     outline: 'none',
     fontSize: '1rem',
     width: '100%',
-    boxSizing: 'border-box',
-    transition: 'all 0.3s ease'
+    boxSizing: 'border-box'
   };
-
-  const selectStyle = {
-    ...inputStyle,
-    background: '#1f1b2e',
-    cursor: 'pointer'
-  };
-
+  const changedStyle = (k) => (isChanged(k) ? { ...inputStyle, border: '1px solid #a855f7', boxShadow: '0 0 0 1px #a855f7' } : inputStyle);
+  const selectStyle = (k) => ({ ...changedStyle(k), background: '#1f1b2e', cursor: 'pointer' });
   const labelStyle = { fontSize: '0.95rem', color: '#eaeaea', fontWeight: '500' };
+  const changedTag = (field) => (isChanged(field) ? <span style={{ color: '#c084fc', fontSize: '0.75rem', marginLeft: '6px' }}>• changed</span> : null);
 
-  const verdictStyle = priceCheckResult
-    ? (VERDICT_STYLES[priceCheckResult.verdict] || VERDICT_STYLES.UNKNOWN)
-    : VERDICT_STYLES.UNKNOWN;
+  const verdictStyle = priceCheckResult ? (VERDICT_STYLES[priceCheckResult.verdict] || VERDICT_STYLES.UNKNOWN) : VERDICT_STYLES.UNKNOWN;
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+
+  if (isEdit && loadState === 'loading') {
+    return (
+      <div data-testid="edit-skeleton" style={{ maxWidth: '800px', margin: '0 auto', padding: '1rem 0', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+        <Skeleton height="44px" width="50%" />
+        <Skeleton height="180px" />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} height="48px" />)}
+        </div>
+        <Skeleton height="280px" />
+      </div>
+    );
+  }
+
+  if (isEdit && loadState === 'error') {
+    return (
+      <div style={{ maxWidth: '800px', margin: '2rem auto' }}>
+        <ErrorState message={loadError} onRetry={() => { setLoadState('loading'); loadListing(); }} />
+      </div>
+    );
+  }
+
+  const notOwner = isEdit && currentUser && sellerId != null && currentUser.id !== sellerId;
+  if (isEdit && (listingStatus === 'SOLD' || notOwner)) {
+    return (
+      <div style={{ maxWidth: '800px', margin: '2rem auto' }}>
+        <ErrorState message={listingStatus === 'SOLD' ? 'This item is sold, so it cannot be edited.' : 'You can only edit your own listings.'} />
+        <button type="button" className="btn btn-outline" style={{ marginTop: '1rem' }} onClick={goToMyListings}>Back to My Listings</button>
+      </div>
+    );
+  }
 
   return (
     <div className="animate-fade-in-up" style={{ padding: '1rem 0', maxWidth: '800px', margin: '0 auto' }}>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '2rem' }}>
-        <h1 className="text-gradient" style={{ fontSize: '2.5rem', margin: 0 }}>{isEdit ? "Edit Post" : "Create New Post"}</h1>
-        <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>{isEdit ? "Update your listing details" : "List your instrument for sale, trade, or rent in Sri Lanka"}</p>
+        <h1 className="text-gradient" style={{ fontSize: '2.5rem', margin: 0 }}>{isEdit ? 'Edit Post' : 'Create New Post'}</h1>
+        <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
+          {isEdit ? 'Change only what you need. Only changed fields are saved.' : 'List your instrument for sale, trade, or rent in Sri Lanka'}
+        </p>
       </div>
 
-      {error && (
-        <div style={{ color: '#ff6b6b', background: 'rgba(255, 107, 107, 0.15)', border: '1px solid rgba(255, 107, 107, 0.3)', padding: '12px 16px', borderRadius: '8px', marginBottom: '1.5rem', fontSize: '14px', textAlign: 'center' }}>
-          {error}
-        </div>
-      )}
+      {error && <ErrorState compact message={error} />}
 
-      {success && (
-        <div style={{ color: '#51cf66', background: 'rgba(81, 207, 102, 0.15)', border: '1px solid rgba(81, 207, 102, 0.3)', padding: '12px 16px', borderRadius: '8px', marginBottom: '1.5rem', fontSize: '14px', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-          <CheckCircle size={18} /> {success}
-        </div>
-      )}
-      
-      <form onSubmit={handleSubmit} className="glass-panel" style={{ padding: '2.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-        
-        {/* Hidden File Input */}
+      <form onSubmit={handleSubmit} noValidate className="glass-panel" style={{ padding: '2.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
         <input
           type="file"
           ref={fileInputRef}
-          onChange={handleFileInputChange}
+          onChange={(e) => { if (e.target.files?.length) addFiles(e.target.files); e.target.value = ''; }}
           multiple
-          accept="image/jpeg,image/png,image/webp"
+          accept={PHOTO_TYPES.join(',')}
           style={{ display: 'none' }}
+          data-testid="photo-input"
         />
 
-        {/* Photos Box */}
+        {/* Photos */}
         <div
           onClick={() => fileInputRef.current?.click()}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-          style={{ 
-            minHeight: '180px', 
-            borderRadius: '12px', 
-            border: isDragging ? '2px dashed var(--primary-hover, #a855f7)' : '2px dashed rgba(255, 255, 255, 0.3)',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
+          onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={(e) => { e.preventDefault(); setIsDragging(false); if (e.dataTransfer.files?.length) addFiles(e.dataTransfer.files); }}
+          style={{
+            minHeight: '160px', borderRadius: '12px', padding: '1.5rem', cursor: 'pointer',
+            border: isDragging ? '2px dashed #a855f7' : `2px dashed ${photosChanged && isEdit ? '#a855f7' : 'rgba(255, 255, 255, 0.3)'}`,
             backgroundColor: isDragging ? 'rgba(168, 85, 247, 0.15)' : 'rgba(0,0,0,0.25)',
-            transition: 'all 0.3s ease',
-            padding: '1.5rem',
-            position: 'relative'
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'
           }}
         >
-          {(existingImages.length + selectedImages.length) === 0 ? (
+          {photoCount === 0 ? (
             <>
               <Upload size={42} style={{ color: 'var(--text-secondary)', marginBottom: '0.75rem' }} />
-              <p style={{ color: '#fff', fontSize: '1rem', fontWeight: '500', margin: 0 }}>Click to browse or drag &amp; drop photos here</p>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '0.35rem' }}>Upload 1 to 6 photos (JPG, PNG, WebP up to 5MB each)</p>
+              <p style={{ color: '#fff', margin: 0 }}>Click to browse or drag &amp; drop photos here</p>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '0.35rem' }}>1 to 6 photos (JPG, PNG, WebP up to 5 MB each)</p>
             </>
           ) : (
             <div style={{ width: '100%' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                <span style={{ color: '#eaeaea', fontSize: '0.9rem', fontWeight: '500' }}>
-                  {existingImages.length + selectedImages.length} / 6 photos selected
-                </span>
-                {(existingImages.length + selectedImages.length) < 6 && (
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
-                    style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', padding: '4px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem' }}
-                  >
-                    + Add More
+                <span style={{ color: '#eaeaea', fontSize: '0.9rem' }}>{photoCount} / {MAX_PHOTOS} photos</span>
+                {photoCount < MAX_PHOTOS && (
+                  <button type="button" onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
+                    style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', padding: '4px 12px', borderRadius: '6px', cursor: 'pointer' }}>
+                    + Add photos
                   </button>
                 )}
               </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: '12px' }}>
-                {existingImages.map((img) => (
-                  <div key={img.id} style={{ position: 'relative', height: '100px', borderRadius: '8px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.2)' }}>
-                    <img src={img.url} alt="Existing" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    <button
-                      type="button"
-                      onClick={(e) => handleRemoveExistingImage(img.id, e)}
-                      style={{ position: 'absolute', top: '4px', right: '4px', background: 'rgba(0,0,0,0.7)', border: 'none', color: '#ff6b6b', borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-                      title="Remove photo"
-                    >
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: '12px' }}>
+                {keptImages.map((img) => (
+                  <div key={`old-${img.id}`} style={{ position: 'relative', height: '100px', borderRadius: '8px', overflow: 'hidden' }}>
+                    <img src={img.url} alt="Listing" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <button type="button" aria-label="Remove photo" title="Remove photo" onClick={(e) => removeExistingImage(img.id, e)}
+                      style={{ position: 'absolute', top: '4px', right: '4px', background: 'rgba(0,0,0,0.7)', border: 'none', color: '#ff6b6b', borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                       <X size={14} />
                     </button>
                   </div>
                 ))}
-                {imagePreviews.map((src, idx) => (
-                  <div key={idx} style={{ position: 'relative', height: '100px', borderRadius: '8px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.2)' }}>
-                    <img src={src} alt={`Preview ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    <button
-                      type="button"
-                      onClick={(e) => handleRemoveImage(idx, e)}
-                      style={{
-                        position: 'absolute',
-                        top: '4px',
-                        right: '4px',
-                        background: 'rgba(0,0,0,0.7)',
-                        border: 'none',
-                        color: '#ff6b6b',
-                        borderRadius: '50%',
-                        width: '24px',
-                        height: '24px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        cursor: 'pointer'
-                      }}
-                      title="Remove photo"
-                    >
+                {newPhotos.map((p, idx) => (
+                  <div key={p.preview} style={{ position: 'relative', height: '100px', borderRadius: '8px', overflow: 'hidden', outline: isEdit ? '2px solid #a855f7' : 'none' }}>
+                    <img src={p.preview} alt={`New photo ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <button type="button" aria-label="Remove photo" title="Remove photo" onClick={(e) => removeNewPhoto(idx, e)}
+                      style={{ position: 'absolute', top: '4px', right: '4px', background: 'rgba(0,0,0,0.7)', border: 'none', color: '#ff6b6b', borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                       <X size={14} />
                     </button>
                   </div>
@@ -503,320 +484,174 @@ const CreatePost = () => {
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', gridColumn: 'span 2' }}>
-            <label style={labelStyle}>Listing Title *</label>
-            <input
-              type="text"
-              name="title"
-              value={formData.title}
-              onChange={handleChange}
-              placeholder="e.g. Fender Player Stratocaster Polar White"
-              required
-              style={inputStyle}
-            />
+            <label htmlFor="f-title" style={labelStyle}>Listing Title *{changedTag('title')}</label>
+            <input id="f-title" type="text" name="title" value={formData.title} onChange={handleChange} maxLength={120}
+              placeholder="e.g. Fender Player Stratocaster Polar White" style={changedStyle('title')} />
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            <label style={labelStyle}>Category *</label>
-            <input
-              type="text"
-              name="category"
-              list="category-suggestions"
-              value={formData.category}
-              onChange={handleChange}
-              placeholder="e.g. Electric Guitar, Ukulele"
-              required
-              minLength={2}
-              maxLength={50}
-              style={inputStyle}
-            />
+            <label htmlFor="f-category" style={labelStyle}>Category *{changedTag('category')}</label>
+            <input id="f-category" type="text" name="category" list="category-suggestions" value={formData.category} onChange={handleChange}
+              placeholder="e.g. Electric Guitar, Sitar, Ukulele" maxLength={50} style={changedStyle('category')} autoComplete="off" />
             <datalist id="category-suggestions">
-              {categories.map(cat => (
-                <option key={cat} value={cat} />
-              ))}
+              {suggestions.categories.map((c) => <option key={c} value={c} />)}
             </datalist>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            <label style={labelStyle}>Brand *</label>
-            <input
-              type="text"
-              name="brand"
-              value={formData.brand}
-              onChange={handleChange}
-              placeholder="e.g. Fender, Yamaha, Gibson"
-              required
-              style={inputStyle}
-            />
+            <label htmlFor="f-brand" style={labelStyle}>Brand *{changedTag('brand')}</label>
+            <input id="f-brand" type="text" name="brand" list="brand-suggestions" value={formData.brand} onChange={handleChange}
+              placeholder="e.g. Fender, Yamaha, any brand" maxLength={50} style={changedStyle('brand')} autoComplete="off" />
+            <datalist id="brand-suggestions">
+              {suggestions.brands.map((b) => <option key={b} value={b} />)}
+            </datalist>
+          </div>
+
+          {suggestionError && (
+            <div style={{ gridColumn: 'span 2', color: '#ffd43b', fontSize: '0.85rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              {suggestionError}
+              <button type="button" className="btn btn-outline" style={{ padding: '2px 10px' }} onClick={loadSuggestions}>Retry</button>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <label htmlFor="f-model" style={labelStyle}>Model *{changedTag('model')}</label>
+            <input id="f-model" type="text" name="model" value={formData.model} onChange={handleChange} maxLength={80}
+              placeholder="e.g. Stratocaster, F310" style={changedStyle('model')} />
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            <label style={labelStyle}>Model *</label>
-            <input
-              type="text"
-              name="model"
-              value={formData.model}
-              onChange={handleChange}
-              placeholder="e.g. Stratocaster, F310"
-              required
-              style={inputStyle}
-            />
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            <label style={labelStyle}>Condition *</label>
-            <select name="condition" value={formData.condition} onChange={handleChange} style={selectStyle}>
-              {CONDITIONS.map(cond => (
-                <option key={cond.value} value={cond.value}>{cond.label}</option>
-              ))}
+            <label htmlFor="f-condition" style={labelStyle}>Condition *{changedTag('condition')}</label>
+            <select id="f-condition" name="condition" value={formData.condition} onChange={handleChange} style={selectStyle('condition')}>
+              {CONDITIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
             </select>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            <label style={labelStyle}>Year (Optional)</label>
-            <input
-              type="number"
-              name="year"
-              value={formData.year}
-              onChange={handleChange}
-              placeholder="e.g. 2022"
-              min="1900"
-              max="2030"
-              style={inputStyle}
-            />
+            <label htmlFor="f-year" style={labelStyle}>Year (optional){changedTag('year')}</label>
+            <input id="f-year" type="number" name="year" value={formData.year} onChange={handleChange}
+              placeholder="e.g. 2022" min="1900" max={MAX_YEAR} style={changedStyle('year')} />
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            <label style={labelStyle}>Listing Type *</label>
-            <select name="listingType" value={formData.listingType} onChange={handleChange} style={selectStyle}>
+            <label htmlFor="f-type" style={labelStyle}>Listing Type *{changedTag('listingType')}</label>
+            <select id="f-type" name="listingType" value={formData.listingType} onChange={handleChange} style={selectStyle('listingType')}>
               <option value="Sell">Sell</option>
               <option value="Trade">Trade</option>
               <option value="Rent">Rent</option>
             </select>
           </div>
 
-          {/* Price field + Check Price button */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            <label style={labelStyle}>Price (LKR) *</label>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch' }}>
-              <input
-                type="number"
-                name="price"
-                value={formData.price}
-                onChange={handleChange}
-                placeholder="e.g. 185000"
-                min="1"
-                required
-                style={{ ...inputStyle, flex: 1 }}
-              />
-              <button
-                type="button"
-                id="btn-price-check"
-                onClick={handlePriceCheck}
-                disabled={priceChecking}
-                title="Check fair market price with AI"
-                style={{
-                  background: 'linear-gradient(135deg, #7c3aed, #a855f7)',
-                  border: 'none',
-                  borderRadius: '8px',
-                  color: '#fff',
-                  padding: '0 14px',
-                  cursor: priceChecking ? 'not-allowed' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  fontSize: '0.85rem',
-                  fontWeight: '600',
-                  whiteSpace: 'nowrap',
-                  opacity: priceChecking ? 0.7 : 1,
-                  transition: 'opacity 0.2s'
-                }}
-              >
-                {priceChecking
-                  ? <><Loader size={15} style={{ animation: 'spin 1s linear infinite' }} /> Checking...</>
-                  : <><TrendingUp size={15} /> Check Price</>
-                }
+          {/* Price + Check Price */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', gridColumn: 'span 2' }}>
+            <label htmlFor="f-price" style={labelStyle}>Price (LKR) *{changedTag('price')}</label>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <input id="f-price" type="number" name="price" value={formData.price} onChange={handleChange}
+                placeholder="e.g. 185000" min="1" style={{ ...changedStyle('price'), flex: 1 }} />
+              <button type="button" id="btn-price-check" onClick={handlePriceCheck} disabled={priceChecking}
+                style={{ background: 'linear-gradient(135deg, #7c3aed, #a855f7)', border: 'none', borderRadius: '8px', color: '#fff', padding: '0 14px', cursor: priceChecking ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '600', whiteSpace: 'nowrap', opacity: priceChecking ? 0.7 : 1 }}>
+                {priceChecking ? <><Loader size={15} className="animate-spin" /> Checking...</> : <><TrendingUp size={15} /> Check Price</>}
               </button>
             </div>
-
-            {/* Spinner hint */}
-            {priceChecking && (
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', margin: '4px 0 0 0' }}>
-                Checking market price… this can take up to 30 s.
-              </p>
-            )}
-
-            {/* Price-check inline error */}
-            {priceCheckError && (
-              <div style={{ color: '#ffd43b', background: 'rgba(255,212,59,0.12)', border: '1px solid rgba(255,212,59,0.3)', borderRadius: '8px', padding: '8px 12px', fontSize: '0.85rem', marginTop: '4px' }}>
-                {priceCheckError}
-              </div>
-            )}
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', gridColumn: '1 / -1' }}>
-            <label style={labelStyle}>Location *</label>
-            <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <input
-                  type="text"
-                  placeholder="Search map for an address..."
-                  value={mapQuery}
-                  onChange={handleMapSearchChange}
-                  style={inputStyle}
-                  onFocus={() => { if (mapResults.length > 0) setShowMapResults(true); }}
-                  onBlur={() => setTimeout(() => setShowMapResults(false), 200)}
-                />
-                <button
-                  type="button"
-                  onClick={handleUseCurrentLocation}
-                  style={{ ...inputStyle, width: 'auto', background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
-                >
-                  <Navigation size={18} />
-                  Current Location
-                </button>
-              </div>
-              {showMapResults && (
-                <div style={{ position: 'absolute', top: '48px', left: 0, right: 0, background: '#1f1b2e', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', zIndex: 1000, maxHeight: '200px', overflowY: 'auto' }}>
-                  {mapResults.map(r => (
-                    <div
-                      key={r.place_id}
-                      style={{ padding: '8px 12px', cursor: 'pointer', color: '#fff', borderBottom: '1px solid rgba(255,255,255,0.1)' }}
-                      onMouseDown={() => handleSelectMapResult(r)}
-                    >
-                      {r.display_name}
-                    </div>
-                  ))}
-                </div>
-              )}
-              <div style={{ height: '300px', width: '100%', borderRadius: '8px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.3)' }}>
-                <MapContainer center={[6.9271, 79.8612]} zoom={12} style={{ height: '100%', width: '100%', zIndex: 1 }}>
-                  <TileLayer
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                  />
-                  <LocationMarker position={position} setPosition={setPosition} />
-                  {position && <MapUpdater position={position} />}
-                </MapContainer>
-              </div>
-              {formData.location && (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.15)' }}>
-                  <span style={{ color: '#eaeaea', fontSize: '0.9rem' }}>{formData.location}</span>
-                </div>
-              )}
-            </div>
+            {priceChecking && <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', margin: '4px 0 0 0' }}>Checking the market price… this can take up to a minute.</p>}
+            {priceCheckError && <ErrorState compact message={priceCheckError} onRetry={handlePriceCheck} />}
           </div>
         </div>
 
-        {/* Price-check result card */}
         {priceCheckResult && (
-          <div style={{
-            background: 'rgba(255,255,255,0.05)',
-            border: `1px solid ${verdictStyle.border}`,
-            borderRadius: '12px',
-            padding: '1.25rem 1.5rem',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '0.75rem',
-            animation: 'fadeIn 0.4s ease'
-          }}>
+          <div data-testid="price-check-result" style={{ background: 'rgba(255,255,255,0.05)', border: `1px solid ${verdictStyle.border}`, borderRadius: '12px', padding: '1.25rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-              <span style={{ fontWeight: '700', fontSize: '1rem', color: '#fff' }}>AI Price Analysis</span>
-              <span style={{
-                background: verdictStyle.bg,
-                color: verdictStyle.color,
-                border: `1px solid ${verdictStyle.border}`,
-                padding: '4px 14px',
-                borderRadius: '20px',
-                fontSize: '0.8rem',
-                fontWeight: '700',
-                letterSpacing: '0.5px'
-              }}>
+              <span style={{ fontWeight: '700', color: '#fff' }}>AI Price Analysis</span>
+              <span style={{ background: verdictStyle.bg, color: verdictStyle.color, border: `1px solid ${verdictStyle.border}`, padding: '4px 14px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: '700' }}>
                 {verdictStyle.label}
               </span>
             </div>
-
-            <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
-              <div>
-                <div style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', marginBottom: '2px' }}>Fair Range</div>
-                <div style={{ color: '#fff', fontWeight: '700', fontSize: '1rem' }}>
-                  LKR {fmt(priceCheckResult.fair_range.min)} – {fmt(priceCheckResult.fair_range.max)}
-                </div>
-              </div>
-              <div>
-                <div style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', marginBottom: '2px' }}>Suggested Price</div>
-                <div style={{ color: '#a855f7', fontWeight: '700', fontSize: '1rem' }}>
-                  LKR {fmt(priceCheckResult.fair_price)}
-                </div>
-              </div>
-              {priceCheckResult.deviation_percent !== undefined && priceCheckResult.verdict !== 'UNKNOWN' && (
+            {priceCheckResult.fair_price > 0 ? (
+              <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
                 <div>
-                  <div style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', marginBottom: '2px' }}>Deviation</div>
-                  <div style={{ color: verdictStyle.color, fontWeight: '700', fontSize: '1rem' }}>
-                    {priceCheckResult.deviation_percent > 0 ? '+' : ''}{priceCheckResult.deviation_percent.toFixed(1)}%
-                  </div>
+                  <div style={{ color: 'var(--text-secondary)', fontSize: '0.78rem' }}>Fair Range</div>
+                  <div style={{ color: '#fff', fontWeight: '700' }}>LKR {fmt(priceCheckResult.fair_range.min)} – {fmt(priceCheckResult.fair_range.max)}</div>
                 </div>
-              )}
-            </div>
-
-            {priceCheckResult.explanation && (
-              <p style={{ color: '#c8c8c8', fontSize: '0.88rem', margin: 0, lineHeight: 1.6 }}>
-                {priceCheckResult.explanation}
-              </p>
+                <div>
+                  <div style={{ color: 'var(--text-secondary)', fontSize: '0.78rem' }}>Suggested Price</div>
+                  <div style={{ color: '#a855f7', fontWeight: '700' }}>LKR {fmt(priceCheckResult.fair_price)}</div>
+                </div>
+                {priceCheckResult.verdict !== 'UNKNOWN' && formData.price && (
+                  <div>
+                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.78rem' }}>Your price vs fair</div>
+                    <div style={{ color: verdictStyle.color, fontWeight: '700' }}>
+                      {priceCheckResult.deviation_percent > 0 ? '+' : ''}{Number(priceCheckResult.deviation_percent).toFixed(1)}%
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div style={{ color: 'var(--text-secondary)' }}>No reference price was found for this item, so there is no suggested price.</div>
             )}
-
-            {priceCheckResult.verdict !== 'UNKNOWN' && priceCheckResult.fair_price > 0 && (
-              <button
-                type="button"
-                id="btn-use-suggested-price"
-                onClick={() => setFormData(prev => ({ ...prev, price: String(Math.round(priceCheckResult.fair_price)) }))}
-                style={{
-                  alignSelf: 'flex-start',
-                  background: 'rgba(168,85,247,0.2)',
-                  border: '1px solid rgba(168,85,247,0.5)',
-                  color: '#c084fc',
-                  borderRadius: '8px',
-                  padding: '6px 14px',
-                  cursor: 'pointer',
-                  fontSize: '0.85rem',
-                  fontWeight: '600',
-                  transition: 'background 0.2s'
-                }}
-              >
-                Use suggested price (LKR {fmt(priceCheckResult.fair_price)})
+            {priceCheckResult.explanation && <p style={{ color: '#c8c8c8', fontSize: '0.88rem', margin: 0, lineHeight: 1.6 }}>{priceCheckResult.explanation}</p>}
+            {priceCheckResult.fair_price > 0 && (
+              <button type="button" id="btn-use-suggested-price"
+                onClick={() => setFormData((prev) => ({ ...prev, price: String(Math.round(priceCheckResult.fair_price)) }))}
+                style={{ alignSelf: 'flex-start', background: 'rgba(168,85,247,0.2)', border: '1px solid rgba(168,85,247,0.5)', color: '#c084fc', borderRadius: '8px', padding: '6px 14px', cursor: 'pointer', fontWeight: '600' }}>
+                Use Suggested Price (LKR {fmt(priceCheckResult.fair_price)})
               </button>
             )}
           </div>
         )}
 
+        {/* One location section */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-          <label style={labelStyle}>Description *</label>
-          <textarea
-            name="description"
-            value={formData.description}
-            onChange={handleChange}
-            placeholder="Describe the instrument, accessories included, history, and current condition..."
-            rows={5}
-            required
-            style={{ ...inputStyle, resize: 'vertical' }}
+          <span style={labelStyle}>Location *{changedTag('location')}{pinChanged && <span style={{ color: '#c084fc', fontSize: '0.75rem', marginLeft: '6px' }}>• pin moved</span>}</span>
+          <LocationPicker
+            position={position}
+            onPositionChange={setPosition}
+            label={formData.location}
+            onLabelChange={(value) => setFormData((prev) => ({ ...prev, location: value }))}
+            inputStyle={changedStyle('location')}
           />
         </div>
 
-        <button
-          type="submit"
-          className="btn btn-primary"
-          disabled={loading}
-          style={{ marginTop: '1rem', alignSelf: 'flex-end', display: 'flex', alignItems: 'center', gap: '8px', padding: '0.8rem 1.8rem', fontSize: '1rem' }}
-        >
-          {loading ? (
-            isEdit ? 'Updating...' : 'Uploading & Creating...'
-          ) : (
-            <>
-              <Plus size={20} />
-              {isEdit ? 'Save Changes' : 'Create Post'}
-            </>
-          )}
-        </button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          <label htmlFor="f-description" style={labelStyle}>Description *{changedTag('description')}</label>
+          <textarea id="f-description" name="description" value={formData.description} onChange={handleChange} rows={5} maxLength={4000}
+            placeholder="Describe the instrument, accessories included, history and current condition..."
+            style={{ ...changedStyle('description'), resize: 'vertical' }} />
+        </div>
+
+        {submitting && (
+          <p style={{ color: 'var(--text-secondary)', margin: 0, textAlign: 'right' }}>
+            Saving{(!isEdit || changedFields.some((k) => AI_FIELDS.includes(k)) || photosChanged) ? ' and running the AI price and trust checks – this can take up to 2 minutes' : ''}…
+          </p>
+        )}
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
+          <button type="button" className="btn btn-outline" onClick={() => (isEdit ? goToMyListings() : navigate(-1))} disabled={submitting}>
+            Cancel
+          </button>
+          <button type="submit" className="btn btn-primary" data-testid="submit-listing"
+            disabled={submitting || (isEdit && !isDirty)}
+            title={isEdit && !isDirty ? 'Change something first' : undefined}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.8rem 1.8rem', opacity: submitting || (isEdit && !isDirty) ? 0.6 : 1 }}>
+            {submitting ? <Loader size={18} className="animate-spin" /> : isEdit ? <Save size={18} /> : <Plus size={18} />}
+            {submitting ? (isEdit ? 'Saving...' : 'Creating...') : isEdit ? 'Save Changes' : 'Create Post'}
+          </button>
+        </div>
       </form>
+
+      {/* Unsaved-changes prompt for in-app navigation */}
+      {blocker.state === 'blocked' && (
+        <div role="dialog" aria-modal="true" style={{ position: 'fixed', inset: 0, background: 'rgba(8, 6, 15, 0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999 }}>
+          <div className="glass-panel" style={{ maxWidth: '420px', padding: '2rem', borderRadius: '20px', textAlign: 'center' }}>
+            <AlertTriangle size={40} style={{ color: '#ffd43b', marginBottom: '0.75rem' }} />
+            <h3 style={{ margin: '0 0 0.5rem 0' }}>Leave without saving?</h3>
+            <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>Your changes will be lost.</p>
+            <div style={{ display: 'flex', gap: '1rem' }}>
+              <button type="button" className="btn btn-outline" style={{ flex: 1 }} onClick={() => blocker.reset()}>Stay</button>
+              <button type="button" className="btn btn-primary" style={{ flex: 1, background: '#ff6b6b' }} onClick={() => blocker.proceed()}>Leave</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

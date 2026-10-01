@@ -1,9 +1,7 @@
+import { Link } from 'react-router-dom';
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { 
-  ShieldAlert, Image as ImageIcon, CheckCircle, XCircle, RefreshCw, 
-  AlertTriangle, Check, Loader2, DollarSign, User as UserIcon, Tag
-} from 'lucide-react';
+import { ShieldAlert, Image as ImageIcon, CheckCircle, XCircle, RefreshCw, AlertTriangle, Check, Loader2, User as UserIcon } from 'lucide-react';
 import { apiCall } from '../../services/api';
 
 const AdminFlaggedListings = () => {
@@ -36,6 +34,7 @@ const AdminFlaggedListings = () => {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchListings();
   }, []);
 
@@ -277,7 +276,9 @@ const AdminFlaggedListings = () => {
                             </span>
                           )}
                         </div>
-                        <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: '700' }}>{item.title}</h3>
+                        <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: '700' }}>
+                          <Link to={`/dashboard/listings/${item.id}`} style={{ color: 'inherit' }} title="Open details (view / delete)">{item.title}</Link>
+                        </h3>
                         <p style={{ margin: '0.25rem 0', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
                           {item.category} • {item.brand} {item.model}
                         </p>

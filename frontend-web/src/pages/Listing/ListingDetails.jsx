@@ -1,8 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { apiCall } from '../../services/api';
+import { useDashboard, isAdminUser } from '../../hooks/useDashboard';
+import { ErrorState, Skeleton } from '../../components/ui';
 import {
-  MapPin, CheckCircle, Shield, AlertTriangle, ArrowLeft, Trash2, Heart,
+  MapPin, Shield, AlertTriangle, ArrowLeft, Trash2, Heart,
   Phone, MessageCircle, Info, Edit2
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker } from 'react-leaflet';
@@ -24,107 +27,115 @@ const ListingDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
 
+  const { currentUser } = useDashboard();
+  const userId = currentUser?.id ?? null;
+  const isAdmin = isAdminUser(currentUser);
+
   const [listing, setListing] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [userRole, setUserRole] = useState(null);
-  const [userId, setUserId] = useState(null);
-  const [wishlist, setWishlist] = useState([]);
-  
+  const [inWishlist, setInWishlist] = useState(false);
+  const [wishlistBusy, setWishlistBusy] = useState(false);
+
   const [mainImage, setMainImage] = useState('');
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteReason, setDeleteReason] = useState('');
+  const [deleteError, setDeleteError] = useState('');
 
-  useEffect(() => {
-    fetchListing();
-    fetchUserAndWishlist();
-  }, [id]);
-
-  const fetchUserAndWishlist = async () => {
-    try {
-      const user = await apiCall('/auth/me');
-      if (user) {
-        setUserRole(user.role?.toLowerCase());
-        setUserId(user.id);
-        const wl = await apiCall('/wishlist');
-        setWishlist((wl || []).map(w => w.listingId));
-      }
-    } catch (err) {
-      console.log('Not logged in or error fetching user', err);
-    }
-  };
-
-  const fetchListing = async () => {
-    setLoading(true);
+  const fetchListing = useCallback(async () => {
     try {
       const data = await apiCall(`/listings/${id}`);
       setListing(data);
-      if (data.images && data.images.length > 0) {
-        setMainImage(data.images[0].url);
-      }
+      setMainImage(data.images?.[0]?.url || '');
+      setError('');
     } catch (err) {
-      setError('Failed to load listing details.');
+      setError(err.status === 404 ? 'This listing is not available.' : (err.message || 'Failed to load listing details.'));
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
+
+  const fetchWishlist = useCallback(async () => {
+    try {
+      const wl = await apiCall('/wishlist');
+      setInWishlist((wl || []).some((w) => w.listingId === Number(id)));
+    } catch (err) {
+      toast.error(`Could not load your wishlist: ${err.message}`);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchListing();
+  }, [fetchListing]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (currentUser && !isAdmin) fetchWishlist();
+  }, [currentUser, isAdmin, fetchWishlist]);
 
   const toggleWishlist = async () => {
-    if (!userId) {
-      navigate('/login');
-      return;
-    }
+    setWishlistBusy(true);
     try {
-      const listingIdInt = parseInt(id);
-      if (wishlist.includes(listingIdInt)) {
-        await apiCall(`/wishlist/${listingIdInt}`, { method: 'DELETE' });
-        setWishlist(wishlist.filter(w => w !== listingIdInt));
-      } else {
-        await apiCall(`/wishlist/${listingIdInt}`, { method: 'POST' });
-        setWishlist([...wishlist, listingIdInt]);
-      }
+      await apiCall(`/wishlist/${id}`, { method: inWishlist ? 'DELETE' : 'POST' });
+      toast.success(inWishlist ? 'Removed from wishlist' : 'Added to wishlist – you will be told about price drops');
+      setInWishlist(!inWishlist);
     } catch (err) {
-      alert(err.message || 'Failed to update wishlist');
+      toast.error(err.message || 'Failed to update wishlist');
+    } finally {
+      setWishlistBusy(false);
     }
   };
 
-  const handleDelete = async () => {
-    setIsDeleting(true);
-    try {
-      await apiCall(`/listings/${id}${isAdmin && deleteReason ? `?reason=${encodeURIComponent(deleteReason)}` : ''}`, { method: 'DELETE' });
-      alert('Listing deleted successfully');
-      navigate(-1);
-    } catch (err) {
-      alert(err.message || 'Failed to delete listing');
-      setIsDeleting(false);
-      setShowConfirmDelete(false);
-    }
+  const retry = () => {
+    setLoading(true);
+    fetchListing();
   };
 
   if (loading) {
     return (
-      <div style={{ textAlign: 'center', padding: '4rem 0', color: 'var(--text-secondary)' }}>
-        <div className="spinner" style={{ margin: '0 auto 1rem auto' }}></div>
-        <p>Loading details...</p>
+      <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '1rem 0', display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
+        <div style={{ flex: '1 1 400px' }}><Skeleton height="400px" borderRadius="12px" /></div>
+        <div style={{ flex: '1 1 400px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <Skeleton height="40px" width="70%" /><Skeleton height="32px" width="40%" /><Skeleton height="120px" /><Skeleton height="160px" />
+        </div>
       </div>
     );
   }
 
   if (error || !listing) {
     return (
-      <div style={{ padding: '2rem', textAlign: 'center' }}>
-        <h2 style={{ color: '#ff6b6b' }}>{error || 'Listing not found'}</h2>
-        <button className="btn btn-outline" onClick={() => navigate(-1)} style={{ marginTop: '1rem' }}>
-          Go Back
-        </button>
+      <div style={{ maxWidth: '700px', margin: '2rem auto' }}>
+        <ErrorState message={error || 'Listing not found'} onRetry={retry} />
+        <button className="btn btn-outline" onClick={() => navigate(-1)} style={{ marginTop: '1rem' }}>Go Back</button>
       </div>
     );
   }
 
-  const isOwner = userId === listing.sellerId;
-  const isAdmin = userRole === 'admin';
+  const isOwner = userId != null && userId === listing.sellerId;
   const canDelete = isOwner || isAdmin;
+  // Trust score and fair-price verdict: only the owner and admins (the API hides them for others).
+  const showAi = isOwner || isAdmin;
+  const adminDeletingOthers = isAdmin && !isOwner;
+
+  const handleDelete = async () => {
+    if (adminDeletingOthers && !deleteReason.trim()) {
+      setDeleteError('Please give a reason. The seller will see it.');
+      return;
+    }
+    setIsDeleting(true);
+    setDeleteError('');
+    try {
+      const query = adminDeletingOthers ? `?reason=${encodeURIComponent(deleteReason.trim())}` : '';
+      await apiCall(`/listings/${id}${query}`, { method: 'DELETE' });
+      toast.success('Listing deleted');
+      navigate(isAdmin ? '/dashboard/items' : '/dashboard/items?tab=mine', { replace: true });
+    } catch (err) {
+      setDeleteError(err.message || 'Failed to delete listing');
+      setIsDeleting(false);
+    }
+  };
 
   const fmt = (n) => Math.round(n).toLocaleString('en-LK');
 
@@ -155,8 +166,8 @@ const ListingDetails = () => {
 
   return (
     <div className="animate-fade-in-up" style={{ padding: '1rem 0', maxWidth: '1000px', margin: '0 auto' }}>
-      <button 
-        onClick={() => navigate(-1)} 
+      <button
+        onClick={() => navigate(-1)}
         style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', marginBottom: '1.5rem' }}
       >
         <ArrowLeft size={18} /> Back
@@ -187,31 +198,35 @@ const ListingDetails = () => {
             )}
             {userId && !isOwner && !isAdmin && listing.status === 'LIVE' && (
               <button
+                type="button"
+                data-testid="wishlist-toggle"
+                aria-label={inWishlist ? 'Remove from wishlist' : 'Add to wishlist'}
+                disabled={wishlistBusy}
                 onClick={toggleWishlist}
                 style={{
                   position: 'absolute', top: '16px', right: '16px',
                   background: 'rgba(0,0,0,0.5)', border: 'none', borderRadius: '50%',
                   width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: wishlist.includes(listing.id) ? '#ff006e' : '#fff',
+                  color: inWishlist ? '#ff006e' : '#fff',
                   cursor: 'pointer', transition: 'transform 0.2s'
                 }}
               >
-                <Heart size={22} fill={wishlist.includes(listing.id) ? '#ff006e' : 'none'} />
+                <Heart size={22} fill={inWishlist ? '#ff006e' : 'none'} />
               </button>
             )}
           </div>
           {listing.images && listing.images.length > 1 && (
             <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '8px' }}>
               {listing.images.map(img => (
-                <img 
-                  key={img.id} 
-                  src={img.url} 
-                  alt="Thumbnail" 
+                <img
+                  key={img.id}
+                  src={img.url}
+                  alt="Thumbnail"
                   onClick={() => setMainImage(img.url)}
                   style={{
                     width: '80px', height: '80px', objectFit: 'cover', borderRadius: '8px', cursor: 'pointer',
                     border: mainImage === img.url ? '2px solid var(--primary)' : '2px solid transparent'
-                  }} 
+                  }}
                 />
               ))}
             </div>
@@ -250,9 +265,10 @@ const ListingDetails = () => {
             </div>
           </div>
 
-          {/* AI Info */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {listing.fairPrice && (
+          {/* AI Info: owner and admin only */}
+          {showAi && (
+          <div data-testid="ai-info" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {listing.priceVerdict && (
               <div className="glass-panel" style={{ padding: '1.2rem', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
                   <Info size={18} style={{ color: 'var(--primary-hover)' }} />
@@ -264,7 +280,9 @@ const ListingDetails = () => {
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
                   <div>
                     <div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>Fair Range</div>
-                    <div style={{ fontWeight: 'bold' }}>LKR {fmt(listing.fairPriceMin)} - {fmt(listing.fairPriceMax)}</div>
+                    <div style={{ fontWeight: 'bold' }}>
+                      {listing.fairPriceMin != null ? `LKR ${fmt(listing.fairPriceMin)} - ${fmt(listing.fairPriceMax)}` : 'No reference price found'}
+                    </div>
                   </div>
                 </div>
                 {listing.priceExplanation && (
@@ -274,17 +292,25 @@ const ListingDetails = () => {
                 )}
               </div>
             )}
-            
+
             {listing.trustScore != null && (
               <div className="glass-panel" style={{ padding: '1rem 1.2rem', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <Shield size={24} style={{ color: listing.trustScore >= 70 ? '#10b981' : listing.trustScore >= 40 ? '#f59e0b' : '#ef4444' }} />
                 <div>
                   <div style={{ fontWeight: 'bold' }}>Trust Score: {listing.trustScore}/100</div>
-                  <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Based on listing details and seller history</div>
+                  <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                    {listing.trustWarning ? 'Live with a low-trust warning. ' : ''}Only the owner and admins can see this.
+                  </div>
                 </div>
               </div>
             )}
+            {isAdmin && listing.aiReason && (
+              <div className="glass-panel" style={{ padding: '1rem 1.2rem', borderRadius: '12px', whiteSpace: 'pre-wrap', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                {listing.aiReason}
+              </div>
+            )}
           </div>
+          )}
 
           {/* Description */}
           <div>
@@ -319,11 +345,11 @@ const ListingDetails = () => {
               <div>
                 <div style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>{listing.sellerName}</div>
                 <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', textTransform: 'capitalize' }}>
-                  {listing.sellerRole} • Member since {new Date(listing.sellerMemberSince).getFullYear()}
+                  {listing.sellerRole}{listing.sellerMemberSince ? ` • Member since ${new Date(listing.sellerMemberSince).getFullYear()}` : ''}
                 </div>
               </div>
             </div>
-            
+
             {listing.sellerPhone && !isAdmin && (
               <div style={{ display: 'flex', gap: '1rem', marginTop: '1.2rem' }}>
                 <a href={`tel:${listing.sellerPhone}`} className="btn" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', background: 'rgba(255,255,255,0.1)', color: '#fff', textDecoration: 'none' }}>
@@ -359,21 +385,23 @@ const ListingDetails = () => {
                   </button>
                 )}
               </div>
-            ) : listing.status === 'LIVE' && !isAdmin && (
-              <button 
-                className="btn btn-primary" 
+            ) : listing.status === 'LIVE' && !isAdmin && userId && (
+              <button
+                data-testid="buy-now"
+                className="btn btn-primary"
                 style={{ flex: 1, fontWeight: 'bold' }}
                 onClick={() => navigate(`/dashboard/checkout/${listing.id}`)}
               >
                 Buy now
               </button>
             )}
-            
+
             {canDelete && (
-              <button 
-                className="btn btn-outline" 
+              <button
+                className="btn btn-outline"
                 style={{ flex: 1, color: '#ff6b6b', borderColor: '#ff6b6b' }}
-                onClick={() => setShowConfirmDelete(true)}
+                data-testid="delete-listing"
+                onClick={() => { setDeleteError(''); setShowConfirmDelete(true); }}
               >
                 <Trash2 size={18} style={{ marginRight: '8px' }} /> Delete Listing
               </button>
@@ -399,18 +427,21 @@ const ListingDetails = () => {
             <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
               This cannot be undone. Are you sure you want to permanently delete this listing?
             </p>
-            {isAdmin && !isOwner && (
+            {adminDeletingOthers && (
               <input
                 type="text"
-                placeholder="Reason for deletion (optional)"
+                data-testid="delete-reason"
+                aria-label="Reason for deletion"
+                placeholder="Reason for deletion (required, sent to the seller)"
                 value={deleteReason}
                 onChange={e => setDeleteReason(e.target.value)}
                 style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.2)', background: 'transparent', color: '#fff', marginBottom: '1.5rem' }}
               />
             )}
+            {deleteError && <ErrorState compact message={deleteError} />}
             <div style={{ display: 'flex', gap: '1rem' }}>
               <button className="btn btn-outline" onClick={() => setShowConfirmDelete(false)} style={{ flex: 1 }} disabled={isDeleting}>Cancel</button>
-              <button className="btn btn-primary" style={{ flex: 1, background: '#ff6b6b' }} onClick={handleDelete} disabled={isDeleting}>
+              <button className="btn btn-primary" data-testid="confirm-delete" style={{ flex: 1, background: '#ff6b6b' }} onClick={handleDelete} disabled={isDeleting}>
                 {isDeleting ? 'Deleting...' : 'Yes, Delete'}
               </button>
             </div>

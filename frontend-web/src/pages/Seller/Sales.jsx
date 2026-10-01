@@ -1,26 +1,30 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { apiCall } from '../../services/api';
+import { ErrorState } from '../../components/ui';
 import { Banknote, Loader2, Package, Truck, CheckCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 const Sales = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  useEffect(() => {
-    fetchSales();
-  }, []);
-
-  const fetchSales = async () => {
+  const fetchSales = useCallback(async () => {
     try {
       const data = await apiCall('/orders/sales');
-      setOrders(data || []);
+      setOrders(Array.isArray(data) ? data : []);
+      setError('');
     } catch (err) {
-      console.error(err);
+      setError(err.message || 'Could not load your sales.');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchSales();
+  }, [fetchSales]);
 
   if (loading) {
     return (
@@ -40,7 +44,9 @@ const Sales = () => {
         <h1 className="text-gradient" style={{ fontSize: '2.2rem', margin: 0, fontWeight: '800' }}>My Sales</h1>
       </div>
 
-      {orders.length === 0 ? (
+      {error && <ErrorState compact message={error} onRetry={() => { setLoading(true); fetchSales(); }} />}
+
+      {orders.length === 0 && !error ? (
         <div className="glass-panel" style={{ padding: '4rem 2rem', textAlign: 'center', borderRadius: '24px' }}>
           <Package size={64} style={{ opacity: 0.2, margin: '0 auto 1.5rem', color: 'var(--text-secondary)' }} />
           <h2 style={{ marginBottom: '1rem' }}>No sales yet</h2>
@@ -77,7 +83,7 @@ const Sales = () => {
                 <Link to={`/dashboard/listings/${order.listingId}`} style={{ flexShrink: 0 }}>
                   <img src={order.listingImage || 'https://placehold.co/200x200?text=No+Photo'} alt="Item" style={{ width: '100px', height: '100px', borderRadius: '12px', objectFit: 'cover' }} />
                 </Link>
-                
+
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                   <Link to={`/dashboard/listings/${order.listingId}`} style={{ textDecoration: 'none', color: 'inherit' }}>
                     <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.2rem' }}>{order.listingTitle}</h3>
@@ -86,7 +92,7 @@ const Sales = () => {
                     <CheckCircle size={14} /> {order.status === 'PAID' ? 'Payment Received' : 'COD Requested'}
                   </div>
                 </div>
-                
+
                 <div style={{ width: '300px', background: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: '12px' }}>
                   <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Truck size={16} /> Ship to Buyer

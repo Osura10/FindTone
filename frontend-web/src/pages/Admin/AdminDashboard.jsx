@@ -1,9 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Users, Store, ShieldCheck, CheckCircle2, Clock, 
-  ArrowRight, Shield, UserCheck, AlertCircle, RefreshCw, Loader2, UserPlus, Check, ShieldAlert
-} from 'lucide-react';
+import { Users, Store, ShieldCheck, CheckCircle2, Clock, ArrowRight, Shield, AlertCircle, RefreshCw, Loader2, UserPlus, Check, ShieldAlert } from 'lucide-react';
 import { apiCall } from '../../services/api';
 import AddAdminModal from '../../components/AddAdminModal';
 
@@ -35,6 +32,7 @@ const AdminDashboard = () => {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchStats();
   }, []);
 

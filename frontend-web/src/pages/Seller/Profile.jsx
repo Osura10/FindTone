@@ -1,10 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import {
-  Mail, Phone, MapPin, Briefcase, User, Key, Map, X,
-  Camera, Trash2, AlertTriangle, Shield, Sparkles, Store, Check, Loader2
-} from 'lucide-react';
+import { Mail, Phone, MapPin, Briefcase, User, Key, Map, X, Camera, Trash2, AlertTriangle, Shield, Store, Check, Loader2 } from 'lucide-react';
 import { apiCall } from '../../services/api';
 
 const dummyItems = [
@@ -45,6 +42,7 @@ const Profile = () => {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchProfile();
   }, []);
 
@@ -55,7 +53,7 @@ const Profile = () => {
       setPhoneInput(data.phoneNumber || '');
       setLocationInput(data.address || '');
     } catch (err) {
-      console.error(err);
+      showToast('error', err.message || 'Could not refresh your profile.');
     }
   };
 

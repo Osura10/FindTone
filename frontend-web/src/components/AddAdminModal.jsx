@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ShieldCheck, User, Mail, Phone, CreditCard, X, Loader2, KeyRound, Check } from 'lucide-react';
+import { ShieldCheck, User, Mail, Phone, CreditCard, X, Loader2, KeyRound } from 'lucide-react';
 import { apiCall } from '../services/api';
 
 const AddAdminModal = ({ isOpen, onClose, onAdminCreated }) => {

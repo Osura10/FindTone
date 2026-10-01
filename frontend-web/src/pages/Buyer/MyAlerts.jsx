@@ -1,5 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import toast from 'react-hot-toast';
 import { apiCall } from '../../services/api';
+import { useDashboard } from '../../hooks/useDashboard';
+import { ErrorState, Skeleton } from '../../components/ui';
 import { BellPlus, Sparkles, Loader2, Edit2, Trash2, CheckCircle, XCircle, Clock } from 'lucide-react';
 
 const CONDITIONS = [
@@ -12,50 +15,57 @@ const CONDITIONS = [
   { value: 'for_parts', label: 'For Parts' }
 ];
 
+const EMPTY_ALERT = { name: '', queryText: '', category: '', brand: '', modelKeyword: '', minPrice: '', maxPrice: '', conditions: [], location: '' };
+
 const MyAlerts = () => {
+  const { refreshUnread } = useDashboard();
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [catalog, setCatalog] = useState([]);
-  
+  const [catalogError, setCatalogError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+
   // AI Parse State
   const [parseText, setParseText] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState('');
   const [aiSuccessNote, setAiSuccessNote] = useState('');
   const [highlightFields, setHighlightFields] = useState(false);
-  
+
   // Form State
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [form, setForm] = useState({
-    name: '', queryText: '', category: '', brand: '', modelKeyword: '', 
-    minPrice: '', maxPrice: '', conditions: [], location: ''
-  });
+  const [form, setForm] = useState(EMPTY_ALERT);
 
-  const fetchAlerts = async () => {
+  const fetchAlerts = useCallback(async () => {
     try {
       const data = await apiCall('/alerts');
-      setAlerts(data || []);
+      setAlerts(Array.isArray(data) ? data : []);
+      setLoadError('');
     } catch (err) {
-      console.error('Failed to load alerts', err);
+      setLoadError(err.message || 'Could not load your alerts.');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const fetchCatalog = async () => {
+  const fetchCatalog = useCallback(async () => {
     try {
       const data = await apiCall('/catalog');
-      setCatalog(data || []);
+      setCatalog(Array.isArray(data) ? data : []);
+      setCatalogError('');
     } catch (err) {
-      console.error('Failed to load catalog', err);
+      setCatalogError(`Suggestions are not available (${err.message}). You can still type any value.`);
     }
-  };
+  }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchAlerts();
     fetchCatalog();
-  }, []);
+  }, [fetchAlerts, fetchCatalog]);
 
   const categories = [...new Set(catalog.map(c => c.category))];
   const brands = [...new Set(catalog.map(c => c.brand))];
@@ -80,12 +90,8 @@ const MyAlerts = () => {
           return;
         }
 
-        // Helper for case-insensitive match against catalog
-        const matchCatalog = (val, list) => {
-          if (!val) return '';
-          const found = list.find(x => x.toLowerCase() === val.toLowerCase());
-          return found || val;
-        };
+        // Use the catalog spelling when the AI value matches it (ignoring case).
+        const matchCatalog = (val, list) => list.find((x) => x.toLowerCase() === val.toLowerCase()) || val;
 
         const parsedName = res.name || parseText;
         const suggestedName = parsedName.charAt(0).toUpperCase() + parsedName.slice(1);
@@ -99,10 +105,10 @@ const MyAlerts = () => {
           modelKeyword: res.model_keyword || prev.modelKeyword,
           minPrice: res.min_price != null ? res.min_price : prev.minPrice,
           maxPrice: res.max_price != null ? res.max_price : prev.maxPrice,
-          conditions: res.conditions ? res.conditions.split(',').map(s => s.trim()) : prev.conditions,
+          conditions: res.conditions ? res.conditions.split(',').map(c => c.trim()).filter(c => CONDITIONS.some(k => k.value === c)) : prev.conditions,
           location: res.location || prev.location
         }));
-        
+
         setShowForm(true);
         setEditingId(null);
         setAiSuccessNote(res.used_fallback ? 'Filled by keyword matching' : 'Filled by AI');
@@ -118,50 +124,66 @@ const MyAlerts = () => {
 
   const saveAlert = async (e) => {
     e.preventDefault();
-    try {
-      const payload = {
-        name: form.name,
-        queryText: form.queryText || null,
-        category: form.category || null,
-        brand: form.brand || null,
-        modelKeyword: form.modelKeyword || null,
-        minPrice: form.minPrice ? parseFloat(form.minPrice) : null,
-        maxPrice: form.maxPrice ? parseFloat(form.maxPrice) : null,
-        conditions: form.conditions.length > 0 ? form.conditions.join(',') : null,
-        location: form.location || null
-      };
+    if (saving) return;
+    const min = form.minPrice === '' ? null : Number(form.minPrice);
+    const max = form.maxPrice === '' ? null : Number(form.maxPrice);
+    if (min != null && max != null && max < min) {
+      setSaveError('Max price must be greater than or equal to min price.');
+      return;
+    }
+    const payload = {
+      name: form.name.trim() || null,
+      queryText: form.queryText.trim() || null,
+      category: form.category.trim() || null,
+      brand: form.brand.trim() || null,
+      modelKeyword: form.modelKeyword.trim() || null,
+      minPrice: min,
+      maxPrice: max,
+      conditions: form.conditions.length > 0 ? form.conditions.join(',') : null,
+      location: form.location.trim() || null
+    };
+    const hasFilter = payload.category || payload.brand || payload.modelKeyword || payload.location || payload.conditions || min != null || max != null;
+    if (!hasFilter) {
+      setSaveError('Set at least one filter: category, brand, model, price, condition or location.');
+      return;
+    }
 
-      if (editingId) {
-        await apiCall(`/alerts/${editingId}`, {
-          method: 'PUT',
-          body: JSON.stringify(payload)
-        });
-      } else {
-        await apiCall('/alerts', {
-          method: 'POST',
-          body: JSON.stringify(payload)
-        });
-      }
-      
-      setForm({ name: '', queryText: '', category: '', brand: '', modelKeyword: '', minPrice: '', maxPrice: '', conditions: [], location: '' });
+    setSaving(true);
+    setSaveError('');
+    try {
+      const saved = await apiCall(editingId ? `/alerts/${editingId}` : '/alerts', {
+        method: editingId ? 'PUT' : 'POST',
+        body: JSON.stringify(payload)
+      });
+      const matches = saved?.newMatches ?? 0;
+      toast.success(matches > 0
+        ? `Alert saved. ${matches} listing${matches === 1 ? '' : 's'} already match – see Notifications.`
+        : 'Alert saved. We will notify you about new matches.', { duration: 6000 });
+      if (matches > 0) refreshUnread();
+      setForm(EMPTY_ALERT);
       setShowForm(false);
       setEditingId(null);
       setParseText('');
       fetchAlerts();
     } catch (err) {
-      alert(err.message || 'Failed to save alert');
+      setSaveError(err.message || 'Failed to save the alert.');
+    } finally {
+      setSaving(false);
     }
   };
 
   const toggleAlert = async (id, currentStatus) => {
     try {
-      await apiCall(`/alerts/${id}/toggle`, {
+      const saved = await apiCall(`/alerts/${id}/toggle`, {
         method: 'PATCH',
         body: JSON.stringify({ isActive: !currentStatus })
       });
+      const matches = saved?.newMatches ?? 0;
+      toast.success(currentStatus ? 'Alert paused' : `Alert resumed${matches > 0 ? ` – ${matches} listing${matches === 1 ? '' : 's'} match now` : ''}`);
+      if (matches > 0) refreshUnread();
       fetchAlerts();
     } catch (err) {
-      alert('Failed to toggle alert');
+      toast.error(err.message || 'Failed to change the alert.');
     }
   };
 
@@ -169,9 +191,10 @@ const MyAlerts = () => {
     if (!window.confirm('Delete this alert?')) return;
     try {
       await apiCall(`/alerts/${id}`, { method: 'DELETE' });
+      toast.success('Alert deleted');
       fetchAlerts();
     } catch (err) {
-      alert('Failed to delete alert');
+      toast.error(err.message || 'Failed to delete the alert.');
     }
   };
 
@@ -182,12 +205,13 @@ const MyAlerts = () => {
       category: alert.category || '',
       brand: alert.brand || '',
       modelKeyword: alert.modelKeyword || '',
-      minPrice: alert.minPrice || '',
-      maxPrice: alert.maxPrice || '',
+      minPrice: alert.minPrice ?? '',
+      maxPrice: alert.maxPrice ?? '',
       conditions: alert.conditions ? alert.conditions.split(',') : [],
       location: alert.location || ''
     });
     setEditingId(alert.id);
+    setSaveError('');
     setShowForm(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -204,16 +228,18 @@ const MyAlerts = () => {
       <div className="glass-panel" style={{ padding: '2rem', borderRadius: '20px', marginBottom: '2rem' }}>
         <h3 style={{ margin: '0 0 1rem 0' }}>Describe what you're looking for</h3>
         <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-          <input 
-            type="text" 
-            className="input-field" 
-            placeholder="e.g. used Yamaha acoustic guitar under 40k in Colombo" 
+          <input
+            type="text"
+            className="input-field"
+            placeholder="e.g. used Yamaha acoustic guitar under 40k in Colombo"
             value={parseText}
             onChange={(e) => setParseText(e.target.value)}
             style={{ flex: 1, minWidth: '250px' }}
           />
-          <button 
-            className="btn" 
+          <button
+            type="button"
+            data-testid="fill-with-ai"
+            className="btn"
             onClick={handleParseAi}
             disabled={aiLoading}
             style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'linear-gradient(45deg, #833ab4, #fd1d1d, #fcb045)', color: '#fff' }}
@@ -222,6 +248,11 @@ const MyAlerts = () => {
             {aiLoading ? 'AI is reading your request...' : '✨ Fill with AI'}
           </button>
         </div>
+        {!showForm && (
+          <button type="button" className="btn btn-outline" style={{ marginTop: '1rem' }} onClick={() => { setForm(EMPTY_ALERT); setEditingId(null); setSaveError(''); setShowForm(true); }}>
+            Or create an alert manually
+          </button>
+        )}
         {aiError && <p style={{ color: '#ef4444', fontSize: '0.9rem', marginTop: '0.5rem' }}>{aiError}</p>}
         {aiSuccessNote && <p style={{ color: '#10b981', fontSize: '0.9rem', marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}><CheckCircle size={16} /> {aiSuccessNote}</p>}
       </div>
@@ -229,25 +260,21 @@ const MyAlerts = () => {
       {showForm && (
         <form onSubmit={saveAlert} className="glass-panel" style={{ padding: '2rem', borderRadius: '20px', marginBottom: '2rem', transition: 'box-shadow 0.5s', boxShadow: highlightFields ? '0 0 20px rgba(16, 185, 129, 0.4)' : undefined }}>
           <h3 style={{ margin: '0 0 1.5rem 0' }}>{editingId ? 'Edit Alert' : 'Alert Details'}</h3>
-          
+
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
             <div>
-              <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>Alert Name *</label>
-              <input type="text" className="input-field" style={{ transition: 'border-color 0.5s', borderColor: highlightFields ? '#10b981' : undefined }} required value={form.name} onChange={e => setForm({...form, name: e.target.value})} />
+              <label htmlFor="a-name" style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>Alert Name</label>
+              <input id="a-name" type="text" className="input-field" placeholder="Made from the filters if empty" style={{ transition: 'border-color 0.5s', borderColor: highlightFields ? '#10b981' : undefined }} value={form.name} onChange={e => setForm({...form, name: e.target.value})} />
             </div>
             <div>
-              <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>Category</label>
-              <select className="input-field" style={{ transition: 'border-color 0.5s', borderColor: highlightFields ? '#10b981' : undefined }} value={form.category} onChange={e => setForm({...form, category: e.target.value})}>
-                <option value="">Any</option>
-                {categories.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
+              <label htmlFor="a-category" style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>Category</label>
+              <input id="a-category" type="text" list="alert-categories" placeholder="Any" autoComplete="off" className="input-field" style={{ transition: 'border-color 0.5s', borderColor: highlightFields ? '#10b981' : undefined }} value={form.category} onChange={e => setForm({...form, category: e.target.value})} />
+              <datalist id="alert-categories">{categories.map(c => <option key={c} value={c} />)}</datalist>
             </div>
             <div>
-              <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>Brand</label>
-              <select className="input-field" style={{ transition: 'border-color 0.5s', borderColor: highlightFields ? '#10b981' : undefined }} value={form.brand} onChange={e => setForm({...form, brand: e.target.value})}>
-                <option value="">Any</option>
-                {brands.map(b => <option key={b} value={b}>{b}</option>)}
-              </select>
+              <label htmlFor="a-brand" style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>Brand</label>
+              <input id="a-brand" type="text" list="alert-brands" placeholder="Any" autoComplete="off" className="input-field" style={{ transition: 'border-color 0.5s', borderColor: highlightFields ? '#10b981' : undefined }} value={form.brand} onChange={e => setForm({...form, brand: e.target.value})} />
+              <datalist id="alert-brands">{brands.map(b => <option key={b} value={b} />)}</datalist>
             </div>
             <div>
               <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>Model / Keyword</label>
@@ -266,14 +293,14 @@ const MyAlerts = () => {
               <input type="text" className="input-field" style={{ transition: 'border-color 0.5s', borderColor: highlightFields ? '#10b981' : undefined }} value={form.location} onChange={e => setForm({...form, location: e.target.value})} />
             </div>
           </div>
-          
+
           <div style={{ marginTop: '1.5rem' }}>
             <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>Conditions (Any of)</label>
             <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
               {CONDITIONS.map(c => (
                 <label key={c.value} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer' }}>
-                  <input 
-                    type="checkbox" 
+                  <input
+                    type="checkbox"
                     checked={form.conditions.includes(c.value)}
                     onChange={(e) => {
                       if (e.target.checked) setForm({...form, conditions: [...form.conditions, c.value]});
@@ -286,22 +313,26 @@ const MyAlerts = () => {
             </div>
           </div>
 
+          {catalogError && <p style={{ color: '#ffd43b', fontSize: '0.85rem' }}>{catalogError}</p>}
+          {saveError && <div style={{ marginTop: '1rem' }}><ErrorState compact message={saveError} /></div>}
           <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem' }}>
-            <button type="button" className="btn btn-outline" onClick={() => { setShowForm(false); setEditingId(null); }}>Cancel</button>
-            <button type="submit" className="btn btn-primary">Save Alert</button>
+            <button type="button" className="btn btn-outline" onClick={() => { setShowForm(false); setEditingId(null); setForm(EMPTY_ALERT); setSaveError(''); }} disabled={saving}>Cancel</button>
+            <button type="submit" className="btn btn-primary" data-testid="save-alert" disabled={saving}>{saving ? 'Saving...' : 'Save Alert'}</button>
           </div>
         </form>
       )}
 
+      {loadError && <ErrorState compact message={loadError} onRetry={() => { setLoading(true); fetchAlerts(); }} />}
+
       {loading ? (
-        <div style={{ textAlign: 'center', padding: '3rem' }}>
-          <Loader2 size={32} className="animate-spin" style={{ color: 'var(--primary-color)', margin: '0 auto' }} />
+        <div style={{ display: 'grid', gap: '1.5rem' }}>
+          {Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} height="130px" borderRadius="20px" />)}
         </div>
-      ) : alerts.length === 0 ? (
+      ) : alerts.length === 0 && !loadError ? (
         <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center', borderRadius: '20px' }}>
           <BellPlus size={48} style={{ opacity: 0.3, margin: '0 auto 1rem' }} />
           <h3 style={{ color: 'var(--text-secondary)' }}>You don't have any alerts yet.</h3>
-          {!showForm && <button className="btn btn-primary" onClick={() => setShowForm(true)} style={{ marginTop: '1rem' }}>Create Alert manually</button>}
+          {!showForm && <button className="btn btn-primary" onClick={() => { setForm(EMPTY_ALERT); setEditingId(null); setShowForm(true); }} style={{ marginTop: '1rem' }}>Create Alert manually</button>}
         </div>
       ) : (
         <div style={{ display: 'grid', gap: '1.5rem' }}>
@@ -311,7 +342,7 @@ const MyAlerts = () => {
                 <h3 style={{ margin: '0 0 0.5rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   {alert.name} {!alert.isActive && <span style={{ fontSize: '0.7rem', background: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: '10px' }}>INACTIVE</span>}
                 </h3>
-                
+
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '1rem' }}>
                   {alert.category && <span className="chip">Category: {alert.category}</span>}
                   {alert.brand && <span className="chip">Brand: {alert.brand}</span>}
@@ -323,29 +354,29 @@ const MyAlerts = () => {
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '1rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                  <Clock size={14} /> 
+                  <Clock size={14} />
                   Last notified: {alert.lastNotifiedAt ? new Date(alert.lastNotifiedAt).toLocaleString() : 'Never'}
                 </div>
               </div>
 
               <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button 
-                  className="btn btn-outline" 
+                <button
+                  className="btn btn-outline"
                   onClick={() => toggleAlert(alert.id, alert.isActive)}
                   style={{ padding: '0.5rem' }}
                   title={alert.isActive ? "Pause alert" : "Resume alert"}
                 >
                   {alert.isActive ? <XCircle size={18} /> : <CheckCircle size={18} />}
                 </button>
-                <button 
-                  className="btn btn-outline" 
+                <button
+                  className="btn btn-outline"
                   onClick={() => handleEdit(alert)}
                   style={{ padding: '0.5rem' }}
                 >
                   <Edit2 size={18} />
                 </button>
-                <button 
-                  className="btn btn-outline" 
+                <button
+                  className="btn btn-outline"
                   onClick={() => deleteAlert(alert.id)}
                   style={{ padding: '0.5rem', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.3)' }}
                 >

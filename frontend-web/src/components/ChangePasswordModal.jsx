@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { KeyRound, X, Loader2, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { KeyRound, X, Loader2 } from 'lucide-react';
 import { apiCall } from '../services/api';
 
 const ChangePasswordModal = ({ isOpen, onClose, onPasswordChanged }) => {

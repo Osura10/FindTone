@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { User, Store, ShoppingBag, ArrowLeft, ShieldCheck } from 'lucide-react';
+import { Store, ShoppingBag, ArrowLeft } from 'lucide-react';
 import './Register.css';
 
 const RegisterSelection = () => {

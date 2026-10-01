@@ -22,7 +22,7 @@ export const apiCall = async (endpoint, options = {}) => {
       headers,
     });
   } catch (networkError) {
-    const err = new Error('Unable to connect to the backend server. Please ensure the backend is running on http://localhost:5036.');
+    const err = new Error('Unable to connect to the backend server. Please ensure the backend is running on http://localhost:5036.', { cause: networkError });
     err.status = 0;
     throw err;
   }
@@ -37,8 +37,8 @@ export const apiCall = async (endpoint, options = {}) => {
       } catch {
         errorMessage = text || response.statusText;
       }
-    } catch (e) {
-      errorMessage = response.statusText;
+    } catch (readError) {
+      errorMessage = response.statusText || readError.message;
     }
     const err = new Error(errorMessage);
     err.status = response.status;

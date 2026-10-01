@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Sparkles, ArrowRight, Music, Play } from 'lucide-react';
+import { Sparkles, ArrowRight, Play } from 'lucide-react';
 import './Hero.css';
 
 import img1 from '../../assets/item_01.png';

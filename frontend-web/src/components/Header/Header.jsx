@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Guitar, Search, Menu, User, LogIn } from 'lucide-react';
+import { Guitar, Menu, User, LogIn } from 'lucide-react';
 import './Header.css';
 
 const Header = () => {

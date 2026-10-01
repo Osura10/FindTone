@@ -1,26 +1,30 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { apiCall } from '../../services/api';
-import { ShoppingBag, Loader2, Package, MapPin, Truck } from 'lucide-react';
+import { ErrorState } from '../../components/ui';
+import { ShoppingBag, Loader2, Package, Truck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 const MyOrders = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  useEffect(() => {
-    fetchOrders();
-  }, []);
-
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async () => {
     try {
       const data = await apiCall('/orders/mine');
-      setOrders(data || []);
+      setOrders(Array.isArray(data) ? data : []);
+      setError('');
     } catch (err) {
-      console.error(err);
+      setError(err.message || 'Could not load your orders.');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchOrders();
+  }, [fetchOrders]);
 
   if (loading) {
     return (
@@ -40,7 +44,9 @@ const MyOrders = () => {
         <h1 className="text-gradient" style={{ fontSize: '2.2rem', margin: 0, fontWeight: '800' }}>My Orders</h1>
       </div>
 
-      {orders.length === 0 ? (
+      {error && <ErrorState compact message={error} onRetry={() => { setLoading(true); fetchOrders(); }} />}
+
+      {orders.length === 0 && !error ? (
         <div className="glass-panel" style={{ padding: '4rem 2rem', textAlign: 'center', borderRadius: '24px' }}>
           <Package size={64} style={{ opacity: 0.2, margin: '0 auto 1.5rem', color: 'var(--text-secondary)' }} />
           <h2 style={{ marginBottom: '1rem' }}>No orders yet</h2>
@@ -72,20 +78,20 @@ const MyOrders = () => {
                 <Link to={`/dashboard/listings/${order.listingId}`} style={{ flexShrink: 0 }}>
                   <img src={order.listingImage || 'https://placehold.co/200x200?text=No+Photo'} alt="Item" style={{ width: '120px', height: '120px', borderRadius: '12px', objectFit: 'cover' }} />
                 </Link>
-                
+
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                   <Link to={`/dashboard/listings/${order.listingId}`} style={{ textDecoration: 'none', color: 'inherit' }}>
                     <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.3rem' }}>{order.listingTitle}</h3>
                   </Link>
-                  
+
                   <div style={{ display: 'flex', gap: '1rem', marginTop: 'auto' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-                      <Truck size={16} /> 
+                      <Truck size={16} />
                       {order.status === 'PAID' ? 'Preparing for delivery' : 'Pending COD Confirmation'}
                     </div>
                   </div>
                 </div>
-                
+
                 <div style={{ width: '250px', background: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: '12px' }}>
                   <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.95rem' }}>Delivery Address</h4>
                   <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>

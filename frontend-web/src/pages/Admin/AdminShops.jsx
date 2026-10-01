@@ -1,11 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
-import { 
-  Store, Trash2, Phone, CreditCard, Search, MapPin, 
-  FileText, CheckCircle2, Clock, AlertTriangle, Check, 
-  Loader2, RefreshCw, User as UserIcon, ShieldCheck, XCircle
-} from 'lucide-react';
+import { Store, Trash2, Phone, CreditCard, Search, MapPin, FileText, CheckCircle2, Clock, AlertTriangle, Check, Loader2, RefreshCw, ShieldCheck, XCircle } from 'lucide-react';
 import { apiCall } from '../../services/api';
 
 const AdminShops = () => {
@@ -38,12 +34,14 @@ const AdminShops = () => {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchShops();
   }, []);
 
   useEffect(() => {
     const status = searchParams.get('status');
     if (status) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setStatusFilter(status);
     }
   }, [searchParams]);
