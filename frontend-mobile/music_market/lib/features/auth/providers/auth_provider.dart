@@ -16,11 +16,13 @@ class AuthProvider with ChangeNotifier {
   String? _role;
   bool _pendingApproval = false;
   String? _errorMessage;
+  Map<String, dynamic>? _userProfile;
 
   bool get isAuthenticated => _token != null;
   String? get role => _role;
   bool get pendingApproval => _pendingApproval;
   String? get errorMessage => _errorMessage;
+  Map<String, dynamic>? get userProfile => _userProfile;
 
   int? get userId {
     if (_token == null) return null;
@@ -102,9 +104,50 @@ class AuthProvider with ChangeNotifier {
     return false;
   }
 
+  Future<void> fetchProfile() async {
+    try {
+      final response = await _apiClient.dio.get('/auth/me');
+      _userProfile = response.data;
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  Future<void> updatePhone(String phone) async {
+    await _apiClient.dio.put('/auth/profile/phone', data: {'phoneNumber': phone});
+    await fetchProfile();
+  }
+
+  Future<void> updateLocation(String location) async {
+    await _apiClient.dio.put('/auth/profile/location', data: {'address': location});
+    await fetchProfile();
+  }
+
+  Future<void> updatePassword(String password) async {
+    await _apiClient.dio.put('/auth/profile/password', data: {'newPassword': password});
+  }
+
+  Future<void> uploadAvatar(String imagePath) async {
+    final formData = FormData.fromMap({
+      'profileImage': await MultipartFile.fromFile(imagePath),
+    });
+    await _apiClient.dio.put('/auth/profile/image', data: formData);
+    await fetchProfile();
+  }
+
+  Future<void> deleteAvatar() async {
+    await _apiClient.dio.delete('/auth/profile/image');
+    await fetchProfile();
+  }
+
+  Future<void> deleteAccount() async {
+    await _apiClient.dio.delete('/auth/account');
+    await logout();
+  }
+
   Future<void> logout() async {
     _token = null;
     _role = null;
+    _userProfile = null;
     await _secureStorage.delete(key: 'jwt_token');
     await _secureStorage.delete(key: 'user_role');
     notifyListeners();

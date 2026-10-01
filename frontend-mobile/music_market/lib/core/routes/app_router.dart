@@ -11,6 +11,7 @@ import '../../features/buyer/screens/my_orders_screen.dart';
 import '../../features/shop/models/order_model.dart';
 import '../../features/marketplace/models/listing_model.dart';
 import '../../features/alerts/screens/my_alerts_screen.dart';
+import '../../features/shop/screens/sales_screen.dart';
 
 class AppRouter {
   static final router = GoRouter(
@@ -58,6 +59,10 @@ class AppRouter {
       GoRoute(
         path: '/my_alerts',
         builder: (context, state) => const MyAlertsScreen(),
+      ),
+      GoRoute(
+        path: '/sales',
+        builder: (context, state) => const SalesScreen(),
       ),
     ],
   );

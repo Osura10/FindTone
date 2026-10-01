@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../marketplace/screens/marketplace_screen.dart';
 import 'my_listings_screen.dart';
 import 'sales_screen.dart';
+import 'shop_profile_screen.dart';
+import '../../assistant/screens/assistant_screen.dart';
 
 class ShopHomeScreen extends StatefulWidget {
   const ShopHomeScreen({super.key});
@@ -17,8 +19,8 @@ class _ShopHomeScreenState extends State<ShopHomeScreen> {
     const MarketplaceScreen(),
     const MyListingsScreen(),
     const SalesScreen(),
-    const Center(child: Text('Assistant Placeholder')),
-    const Center(child: Text('Profile Placeholder')),
+    const AssistantScreen(),
+    const ShopProfileScreen(),
   ];
 
   @override

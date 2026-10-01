@@ -87,7 +87,17 @@ uvicorn api:app --host 127.0.0.1 --port 8000 --reload
 ```bash
 cd frontend-mobile/music_market
 flutter pub get
-flutter run
+```
+
+**Running on an Emulator (e.g. Android 10.0.2.2):**
+```bash
+flutter run -d emulator-5554 --dart-define=API_BASE_URL=http://10.0.2.2:5036/api
+```
+
+**Running on a Real Phone:**
+Ensure the backend is running with `--urls http://0.0.0.0:5036` and your phone and laptop are on the same Wi-Fi. Add a Windows Firewall rule to allow port 5036. Then, use your laptop's IPv4 address:
+```bash
+flutter run -d <device-id> --dart-define=API_BASE_URL=http://<laptop-ip>:5036/api
 ```
 
 ---
