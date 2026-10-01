@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Navigation, Loader2, MapPin } from 'lucide-react';
+import { Navigation, Loader2, MapPin, Search } from 'lucide-react';
 import icon from 'leaflet/dist/images/marker-icon.png';
 import iconShadow from 'leaflet/dist/images/marker-shadow.png';
 
@@ -38,7 +38,7 @@ const FollowPin = ({ position }) => {
  * One location section: search box, map pin (click or drag), "current location" button and an
  * editable label. Moving the pin fills the label using Nominatim reverse geocoding.
  */
-const LocationPicker = ({ position, onPositionChange, label, onLabelChange, inputStyle }) => {
+const LocationPicker = ({ position, onPositionChange, label, onLabelChange, changed = false }) => {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
@@ -114,38 +114,36 @@ const LocationPicker = ({ position, onPositionChange, label, onLabelChange, inpu
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-      <div style={{ position: 'relative', display: 'flex', gap: '8px' }}>
-        <input
-          type="text"
-          placeholder="Search a town or area..."
-          value={query}
-          onChange={(e) => handleSearch(e.target.value)}
-          style={inputStyle}
-          aria-label="Search location"
-        />
-        <button type="button" onClick={useMyLocation} style={{ ...inputStyle, width: 'auto', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-          <Navigation size={16} /> Current location
+    <div className="stack-sm">
+      <div className="loc-search">
+        <div className="input-icon-wrap grow">
+          <Search size={16} aria-hidden="true" />
+          <input
+            type="text"
+            className="input"
+            placeholder="Search a town or area…"
+            value={query}
+            onChange={(e) => handleSearch(e.target.value)}
+            aria-label="Search location"
+          />
+        </div>
+        <button type="button" className="btn btn-secondary" onClick={useMyLocation}>
+          <Navigation size={16} aria-hidden="true" /> <span className="hide-sm">Current location</span>
         </button>
         {(searching || results.length > 0) && (
-          <div style={{ position: 'absolute', top: '48px', left: 0, right: 0, background: '#1f1b2e', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px', zIndex: 1000, maxHeight: '220px', overflowY: 'auto' }}>
-            {searching && <div style={{ padding: '8px 12px', color: 'var(--text-secondary)' }}>Searching...</div>}
+          <div className="loc-results" role="listbox" aria-label="Places">
+            {searching && <div className="menu-item muted">Searching…</div>}
             {results.map((r) => (
-              <button
-                type="button"
-                key={r.place_id}
-                onClick={() => choose(r)}
-                style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', background: 'none', border: 'none', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#fff', cursor: 'pointer' }}
-              >
-                {r.display_name}
+              <button type="button" role="option" aria-selected="false" key={r.place_id} className="menu-item" onClick={() => choose(r)}>
+                <MapPin size={14} aria-hidden="true" style={{ flexShrink: 0 }} /> <span className="truncate">{r.display_name}</span>
               </button>
             ))}
           </div>
         )}
       </div>
 
-      <div style={{ height: '280px', width: '100%', borderRadius: '8px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.3)' }}>
-        <MapContainer center={position ? [position.lat, position.lng] : COLOMBO} zoom={12} style={{ height: '100%', width: '100%', zIndex: 1 }}>
+      <div className="map-box" style={{ height: 300 }}>
+        <MapContainer center={position ? [position.lat, position.lng] : COLOMBO} zoom={12} style={{ height: '100%', width: '100%' }}>
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' />
           <ClickToPin onPick={pick} />
           {position && (
@@ -158,22 +156,27 @@ const LocationPicker = ({ position, onPositionChange, label, onLabelChange, inpu
           <FollowPin position={position} />
         </MapContainer>
       </div>
+      <span className="field-hint">Click the map or drag the pin to set the exact spot.</span>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <MapPin size={16} style={{ color: 'var(--text-secondary)', flexShrink: 0 }} />
-        <input
-          type="text"
-          name="location"
-          value={label}
-          onChange={(e) => onLabelChange(e.target.value)}
-          placeholder={position ? 'Location name' : 'Click the map to drop a pin'}
-          style={inputStyle}
-          aria-label="Location name"
-          maxLength={120}
-        />
-        {geoBusy && <Loader2 size={16} className="animate-spin" style={{ flexShrink: 0 }} />}
+      <div className={`field ${changed ? 'changed' : ''}`}>
+        <label className="field-label" htmlFor="f-location">Location name<span className="req" aria-hidden="true">*</span></label>
+        <div className="input-icon-wrap">
+          <MapPin size={16} aria-hidden="true" />
+          <input
+            id="f-location"
+            type="text"
+            className="input"
+            name="location"
+            value={label}
+            onChange={(e) => onLabelChange(e.target.value)}
+            placeholder={position ? 'Location name' : 'Click the map to drop a pin'}
+            aria-label="Location name"
+            maxLength={120}
+          />
+        </div>
+        {geoBusy && <span className="field-hint row" style={{ gap: 6 }}><Loader2 size={14} className="animate-spin" aria-hidden="true" /> Looking up the place name…</span>}
       </div>
-      {message && <div style={{ color: '#ffd43b', fontSize: '0.85rem' }}>{message}</div>}
+      {message && <div className="alert alert-warning" role="status">{message}</div>}
     </div>
   );
 };

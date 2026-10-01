@@ -57,7 +57,7 @@ const ChangePasswordModal = ({ isOpen, onClose, onPasswordChanged }) => {
         left: 0,
         right: 0,
         bottom: 0,
-        background: 'rgba(8, 6, 15, 0.8)',
+        background: 'var(--overlay)',
         backdropFilter: 'blur(8px)',
         WebkitBackdropFilter: 'blur(8px)',
         display: 'flex',
@@ -77,9 +77,9 @@ const ChangePasswordModal = ({ isOpen, onClose, onPasswordChanged }) => {
           padding: '2.5rem',
           position: 'relative',
           borderRadius: '24px',
-          border: '1px solid rgba(254, 228, 64, 0.4)',
-          background: 'linear-gradient(145deg, rgba(30, 24, 45, 0.98), rgba(18, 14, 28, 0.99))',
-          boxShadow: '0 25px 60px rgba(0, 0, 0, 0.8), 0 0 30px rgba(254, 228, 64, 0.2)'
+          border: '1px solid color-mix(in srgb, var(--warning) 50%, transparent)',
+          background: 'var(--surface)',
+          boxShadow: 'var(--shadow-lg)'
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -90,7 +90,7 @@ const ChangePasswordModal = ({ isOpen, onClose, onPasswordChanged }) => {
           left: 0,
           right: 0,
           height: '4px',
-          background: 'linear-gradient(90deg, #fee440, #ff006e)'
+          background: 'linear-gradient(90deg, var(--warning), var(--primary-text))'
         }} />
 
         {/* Close button */}
@@ -101,8 +101,8 @@ const ChangePasswordModal = ({ isOpen, onClose, onPasswordChanged }) => {
             position: 'absolute',
             top: '1.25rem',
             right: '1.25rem',
-            background: 'rgba(255, 255, 255, 0.06)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
+            background: 'var(--surface-2)',
+            border: '1px solid var(--border-strong)',
             color: 'var(--text-secondary)',
             borderRadius: '50%',
             width: '36px',
@@ -114,11 +114,11 @@ const ChangePasswordModal = ({ isOpen, onClose, onPasswordChanged }) => {
             transition: 'all 0.2s ease'
           }}
           onMouseOver={(e) => {
-            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)';
+            e.currentTarget.style.background = 'var(--border-strong)';
             e.currentTarget.style.color = '#fff';
           }}
           onMouseOut={(e) => {
-            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+            e.currentTarget.style.background = 'var(--surface-2)';
             e.currentTarget.style.color = 'var(--text-secondary)';
           }}
         >
@@ -130,9 +130,9 @@ const ChangePasswordModal = ({ isOpen, onClose, onPasswordChanged }) => {
           <div style={{
             padding: '0.75rem',
             borderRadius: '14px',
-            background: 'rgba(254, 228, 64, 0.15)',
-            color: '#fee440',
-            border: '1px solid rgba(254, 228, 64, 0.3)'
+            background: 'var(--warning-soft)',
+            color: 'var(--warning)',
+            border: '1px solid color-mix(in srgb, var(--warning) 40%, transparent)'
           }}>
             <KeyRound size={26} />
           </div>
@@ -146,12 +146,12 @@ const ChangePasswordModal = ({ isOpen, onClose, onPasswordChanged }) => {
 
         {error && (
           <div style={{
-            backgroundColor: 'rgba(255, 77, 79, 0.15)',
-            color: '#ff4d4f',
+            backgroundColor: 'var(--danger-soft)',
+            color: 'var(--danger)',
             padding: '0.85rem 1rem',
             borderRadius: '10px',
             marginBottom: '1.25rem',
-            border: '1px solid rgba(255, 77, 79, 0.35)',
+            border: '1px solid color-mix(in srgb, var(--danger) 45%, transparent)',
             fontSize: '0.88rem'
           }}>
             {error}
@@ -173,9 +173,9 @@ const ChangePasswordModal = ({ isOpen, onClose, onPasswordChanged }) => {
               style={{
                 padding: '0.8rem 1rem',
                 borderRadius: '12px',
-                background: 'rgba(255, 255, 255, 0.05)',
-                border: '1px solid rgba(255, 255, 255, 0.15)',
-                color: '#fff',
+                background: 'var(--surface-2)',
+                border: '1px solid var(--border-strong)',
+                color: 'var(--text)',
                 fontSize: '0.95rem'
               }}
             />
@@ -195,9 +195,9 @@ const ChangePasswordModal = ({ isOpen, onClose, onPasswordChanged }) => {
               style={{
                 padding: '0.8rem 1rem',
                 borderRadius: '12px',
-                background: 'rgba(255, 255, 255, 0.05)',
-                border: '1px solid rgba(255, 255, 255, 0.15)',
-                color: '#fff',
+                background: 'var(--surface-2)',
+                border: '1px solid var(--border-strong)',
+                color: 'var(--text)',
                 fontSize: '0.95rem'
               }}
             />

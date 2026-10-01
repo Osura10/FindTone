@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, LogIn, Eye, EyeOff, Clock, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { LogIn, Clock, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { apiCall } from '../../services/api';
-import '../Register/Register.css'; // Reusing the premium form styles
+import { AuthLayout } from '../../components/AuthLayout';
+import { Button, Input, PasswordInput } from '../../components/ui';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -10,7 +11,6 @@ const Login = () => {
   const [errors, setErrors] = useState({});
   const [pendingApprovalMsg, setPendingApprovalMsg] = useState('');
   const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -76,155 +76,76 @@ const Login = () => {
   };
 
   return (
-    <div className="register-page">
-      <div className="bg-gradients">
-        <div className="gradient-sphere sphere-1"></div>
-        <div className="gradient-sphere sphere-2"></div>
-      </div>
-      
-      <div className="container">
-        <div className="register-form-container glass-panel">
-          <Link to="/" className="back-btn" style={{ position: 'absolute', top: '2rem', left: '2rem' }}>
-            <ArrowLeft size={16} />
-            Back to Home
-          </Link>
-          <div className="text-center mb-4 mt-4">
-            <h2>Welcome Back</h2>
-            <p className="register-subtitle mt-2">Sign in to your MusicMarket account.</p>
-          </div>
-          
-          {/* Info banner from registration (e.g. Shop/Admin pending approval) */}
-          {infoMessage && !pendingApprovalMsg && !errors.global && (
-            <div style={{
-              backgroundColor: 'rgba(254, 228, 64, 0.12)',
-              color: '#fee440',
-              padding: '1rem',
-              borderRadius: '10px',
-              marginBottom: '1.5rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.75rem',
-              border: '1px solid rgba(254, 228, 64, 0.35)',
-              fontSize: '0.9rem'
-            }}>
-              <Clock size={20} style={{ flexShrink: 0 }} />
-              <span>{infoMessage}</span>
-            </div>
-          )}
-
-          {/* Success banner from registration (e.g. Buyer success) */}
-          {successMessage && !errors.global && !pendingApprovalMsg && (
-            <div style={{
-              backgroundColor: 'rgba(0, 245, 212, 0.12)',
-              color: '#00f5d4',
-              padding: '1rem',
-              borderRadius: '10px',
-              marginBottom: '1.5rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.75rem',
-              border: '1px solid rgba(0, 245, 212, 0.35)',
-              fontSize: '0.9rem'
-            }}>
-              <CheckCircle2 size={20} style={{ flexShrink: 0 }} />
-              <span>{successMessage}</span>
-            </div>
-          )}
-
-          {/* Pending Approval / Verification Error Banner */}
-          {pendingApprovalMsg && (
-            <div style={{
-              backgroundColor: 'rgba(254, 228, 64, 0.15)',
-              color: '#fff',
-              padding: '1.1rem',
-              borderRadius: '10px',
-              marginBottom: '1.5rem',
-              display: 'flex',
-              alignItems: 'flex-start',
-              gap: '0.85rem',
-              border: '1px solid rgba(254, 228, 64, 0.5)',
-              boxShadow: '0 4px 20px rgba(254, 228, 64, 0.15)'
-            }}>
-              <Clock size={24} color="#fee440" style={{ flexShrink: 0, marginTop: '2px' }} />
-              <div>
-                <strong style={{ color: '#fee440', display: 'block', marginBottom: '0.25rem', fontSize: '0.95rem' }}>
-                  Account Pending Verification
-                </strong>
-                <p style={{ margin: 0, fontSize: '0.88rem', color: 'rgba(255, 255, 255, 0.9)', lineHeight: 1.4 }}>
-                  {pendingApprovalMsg}
-                </p>
-              </div>
-            </div>
-          )}
-          
-          {/* General Login Error */}
-          {errors.global && (
-            <div style={{
-              backgroundColor: 'rgba(255, 77, 79, 0.15)',
-              color: '#ff4d4f',
-              padding: '1rem',
-              borderRadius: '10px',
-              marginBottom: '1.5rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.75rem',
-              border: '1px solid rgba(255, 77, 79, 0.35)',
-              fontSize: '0.9rem'
-            }}>
-              <AlertTriangle size={20} style={{ flexShrink: 0 }} />
-              <span>{errors.global}</span>
-            </div>
-          )}
-          
-          <form onSubmit={handleLogin} noValidate>
-            <div className="form-group">
-              <label>Email</label>
-              <input 
-                type="email" 
-                className="form-control" 
-                placeholder="Enter your email" 
-                value={email}
-                onChange={(e) => {
-                  setEmail(e.target.value);
-                  setErrors((current) => ({ ...current, email: '', global: '' }));
-                }}
-              />
-              {errors.email && <small style={{ color: 'red' }}>{errors.email}</small>}
-            </div>
-            <div className="form-group">
-              <label>Password</label>
-              <div className="password-input-wrapper">
-                <input 
-                  type={showPassword ? "text" : "password"} 
-                  className="form-control" 
-                  placeholder="Enter your password" 
-                  value={password}
-                  onChange={(e) => {
-                    setPassword(e.target.value);
-                    setErrors((current) => ({ ...current, password: '', global: '' }));
-                  }}
-                />
-                <button type="button" className="password-toggle-btn" onClick={() => setShowPassword(!showPassword)}>
-                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                </button>
-              </div>
-              {errors.password && <small style={{ color: 'red' }}>{errors.password}</small>}
-            </div>
-            
-            <button type="submit" className="btn btn-primary w-100 mt-4 d-flex justify-content-center gap-2" disabled={loading || Object.keys(errors).some((field) => errors[field])}>
-              <LogIn size={20} />
-              {loading ? 'Logging in...' : 'Login'}
-            </button>
-            
-            <div className="text-center" style={{ marginTop: '3rem' }}>
-              <p style={{ color: 'var(--text-secondary)' }}>
-                Don't have an account? <Link to="/register" style={{ color: 'var(--primary-color)', textDecoration: 'none' }}>Sign up</Link>
-              </p>
-            </div>
-          </form>
+    <AuthLayout
+      title="Welcome back"
+      subtitle="Log in to your MusicMarket account."
+      footer={<>Don&apos;t have an account? <Link to="/register">Sign up</Link></>}
+    >
+      {/* Info banner from registration (e.g. Shop/Admin pending approval) */}
+      {infoMessage && !pendingApprovalMsg && !errors.global && (
+        <div className="alert alert-info" role="status">
+          <Clock size={18} aria-hidden="true" style={{ flexShrink: 0, marginTop: 1 }} />
+          <span>{infoMessage}</span>
         </div>
-      </div>
-    </div>
+      )}
+
+      {/* Success banner from registration (e.g. Buyer success) */}
+      {successMessage && !errors.global && !pendingApprovalMsg && (
+        <div className="alert alert-success" role="status">
+          <CheckCircle2 size={18} aria-hidden="true" style={{ flexShrink: 0, marginTop: 1 }} />
+          <span>{successMessage}</span>
+        </div>
+      )}
+
+      {/* Pending Approval / Verification Error Banner */}
+      {pendingApprovalMsg && (
+        <div className="alert alert-warning" role="alert">
+          <Clock size={18} aria-hidden="true" style={{ flexShrink: 0, marginTop: 1 }} />
+          <div>
+            <strong style={{ display: 'block', marginBottom: 2 }}>Account pending verification</strong>
+            <span>{pendingApprovalMsg}</span>
+          </div>
+        </div>
+      )}
+
+      {/* General Login Error */}
+      {errors.global && (
+        <div className="alert alert-danger" role="alert">
+          <AlertTriangle size={18} aria-hidden="true" style={{ flexShrink: 0, marginTop: 1 }} />
+          <span>{errors.global}</span>
+        </div>
+      )}
+
+      <form onSubmit={handleLogin} noValidate className="auth-form">
+        <Input
+          label="Email"
+          type="email"
+          autoComplete="email"
+          placeholder="you@example.com"
+          value={email}
+          error={errors.email}
+          onChange={(e) => {
+            setEmail(e.target.value);
+            setErrors((current) => ({ ...current, email: '', global: '' }));
+          }}
+        />
+        <PasswordInput
+          label="Password"
+          autoComplete="current-password"
+          placeholder="Enter your password"
+          value={password}
+          error={errors.password}
+          onChange={(e) => {
+            setPassword(e.target.value);
+            setErrors((current) => ({ ...current, password: '', global: '' }));
+          }}
+        />
+
+        <Button type="submit" size="lg" block icon={LogIn} loading={loading} disabled={Object.keys(errors).some((field) => errors[field])}>
+          {loading ? 'Logging in…' : 'Log in'}
+        </Button>
+      </form>
+    </AuthLayout>
   );
 };
 

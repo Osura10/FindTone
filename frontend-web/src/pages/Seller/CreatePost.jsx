@@ -1,11 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useBlocker, useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { Upload, Plus, X, TrendingUp, Loader, Save, AlertTriangle } from 'lucide-react';
+import { Upload, Plus, X, TrendingUp, Save, AlertTriangle, Check, Sparkles } from 'lucide-react';
 import { apiCall } from '../../services/api';
 import { useDashboard, isAdminUser } from '../../hooks/useDashboard';
 import LocationPicker from '../../components/LocationPicker';
-import { Skeleton, ErrorState } from '../../components/ui';
+import {
+  Badge, Button, Card, EmptyState, ErrorState, Input, Modal, PageHeader, Select, Skeleton, StatusBadge, Textarea,
+  formatLKR, verdictInfo
+} from '../../components/ui';
 
 const CONDITIONS = [
   { value: 'new', label: 'Brand New (Unopened)' },
@@ -16,15 +19,6 @@ const CONDITIONS = [
   { value: 'poor', label: 'Poor (Heavy wear, needs setup)' },
   { value: 'for_parts', label: 'For Parts / Not Working' }
 ];
-
-const VERDICT_STYLES = {
-  SUSPICIOUSLY_LOW: { bg: 'rgba(255,107,107,0.2)', color: '#ff6b6b', border: 'rgba(255,107,107,0.4)', label: 'Suspiciously Low' },
-  GREAT_DEAL:       { bg: 'rgba(81,207,102,0.2)',  color: '#51cf66', border: 'rgba(81,207,102,0.4)',  label: 'Great Deal' },
-  FAIR:             { bg: 'rgba(81,207,102,0.2)',  color: '#51cf66', border: 'rgba(81,207,102,0.4)',  label: 'Fair Price' },
-  SLIGHTLY_HIGH:    { bg: 'rgba(255,212,59,0.2)',  color: '#ffd43b', border: 'rgba(255,212,59,0.4)',  label: 'Slightly High' },
-  OVERPRICED:       { bg: 'rgba(255,107,107,0.2)', color: '#ff6b6b', border: 'rgba(255,107,107,0.4)', label: 'Overpriced' },
-  UNKNOWN:          { bg: 'rgba(134,142,150,0.2)', color: '#adb5bd', border: 'rgba(134,142,150,0.4)', label: 'Unknown' },
-};
 
 const EMPTY_FORM = {
   title: '', category: '', brand: '', model: '', condition: 'good', year: '',
@@ -45,7 +39,6 @@ const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const MAX_YEAR = new Date().getFullYear() + 1;
 
-const fmt = (n) => Math.round(n).toLocaleString('en-LK');
 const clean = (v) => String(v ?? '').trim().replace(/\s+/g, ' ');
 const samePlace = (a, b) => !!a && !!b && Math.abs(a.lat - b.lat) < 1e-6 && Math.abs(a.lng - b.lng) < 1e-6;
 
@@ -66,7 +59,7 @@ const listingToForm = (l) => ({
 const aiSummary = (dto) => {
   const parts = [`Status: ${dto.status}`];
   if (dto.trustScore != null) parts.push(`Trust ${dto.trustScore}/100${dto.trustWarning ? ' (warning)' : ''}`);
-  if (dto.priceVerdict) parts.push(`Price: ${(VERDICT_STYLES[dto.priceVerdict] || VERDICT_STYLES.UNKNOWN).label}`);
+  if (dto.priceVerdict) parts.push(`Price: ${verdictInfo(dto.priceVerdict).label}`);
   return parts.join(' · ');
 };
 
@@ -353,45 +346,49 @@ const CreatePost = () => {
     }
   };
 
-  // ── Styles ─────────────────────────────────────────────────────────────────
+  // ── Presentation helpers ───────────────────────────────────────────────────
 
-  const inputStyle = {
-    padding: '0.8rem 1rem',
-    borderRadius: '8px',
-    background: 'rgba(255, 255, 255, 0.12)',
-    border: '1px solid rgba(255, 255, 255, 0.35)',
-    color: '#ffffff',
-    outline: 'none',
-    fontSize: '1rem',
-    width: '100%',
-    boxSizing: 'border-box'
-  };
-  const changedStyle = (k) => (isChanged(k) ? { ...inputStyle, border: '1px solid #a855f7', boxShadow: '0 0 0 1px #a855f7' } : inputStyle);
-  const selectStyle = (k) => ({ ...changedStyle(k), background: '#1f1b2e', cursor: 'pointer' });
-  const labelStyle = { fontSize: '0.95rem', color: '#eaeaea', fontWeight: '500' };
-  const changedTag = (field) => (isChanged(field) ? <span style={{ color: '#c084fc', fontSize: '0.75rem', marginLeft: '6px' }}>• changed</span> : null);
+  const changedTag = (field) => (isChanged(field) ? <span className="changed-tag">• changed</span> : null);
+  const fieldClass = (k) => (isChanged(k) ? 'changed' : '');
+  const verdict = priceCheckResult ? verdictInfo(priceCheckResult.verdict) : null;
 
-  const verdictStyle = priceCheckResult ? (VERDICT_STYLES[priceCheckResult.verdict] || VERDICT_STYLES.UNKNOWN) : VERDICT_STYLES.UNKNOWN;
+  // Progress shown in the step bar (purely visual).
+  const steps = [
+    { id: 'sec-photos', label: 'Photos', done: photoCount > 0 },
+    { id: 'sec-details', label: 'Details', done: !!(clean(formData.title) && clean(formData.category) && clean(formData.brand) && clean(formData.model)) },
+    { id: 'sec-price', label: 'Price', done: Number(formData.price) > 0 },
+    { id: 'sec-location', label: 'Location', done: !!position && !!clean(formData.location) },
+    { id: 'sec-description', label: 'Description', done: !!formData.description.trim() }
+  ];
+  const sectionHead = (n, title, hint) => (
+    <div className="section-head">
+      <div className="row" style={{ gap: 12, flexWrap: 'nowrap', alignItems: 'flex-start' }}>
+        <span className={`step-badge ${steps[n - 1].done ? 'done' : ''}`} aria-hidden="true">{steps[n - 1].done ? <Check size={14} /> : n}</span>
+        <div>
+          <h2 className="section-title">{title}</h2>
+          {hint && <p className="text-sm muted">{hint}</p>}
+        </div>
+      </div>
+    </div>
+  );
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
   if (isEdit && loadState === 'loading') {
     return (
-      <div data-testid="edit-skeleton" style={{ maxWidth: '800px', margin: '0 auto', padding: '1rem 0', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-        <Skeleton height="44px" width="50%" />
-        <Skeleton height="180px" />
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-          {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} height="48px" />)}
-        </div>
-        <Skeleton height="280px" />
+      <div data-testid="edit-skeleton" className="page page-narrow" aria-busy="true">
+        <Skeleton height="40px" width="45%" />
+        <Skeleton height="44px" radius="var(--radius-full)" />
+        <Skeleton height="200px" radius="var(--radius-lg)" />
+        <Skeleton height="320px" radius="var(--radius-lg)" />
       </div>
     );
   }
 
   if (isEdit && loadState === 'error') {
     return (
-      <div style={{ maxWidth: '800px', margin: '2rem auto' }}>
-        <ErrorState message={loadError} onRetry={() => { setLoadState('loading'); loadListing(); }} />
+      <div className="page page-narrow">
+        <Card><ErrorState message={loadError} onRetry={() => { setLoadState('loading'); loadListing(); }} /></Card>
       </div>
     );
   }
@@ -399,25 +396,36 @@ const CreatePost = () => {
   const notOwner = isEdit && currentUser && sellerId != null && currentUser.id !== sellerId;
   if (isEdit && (listingStatus === 'SOLD' || notOwner)) {
     return (
-      <div style={{ maxWidth: '800px', margin: '2rem auto' }}>
-        <ErrorState message={listingStatus === 'SOLD' ? 'This item is sold, so it cannot be edited.' : 'You can only edit your own listings.'} />
-        <button type="button" className="btn btn-outline" style={{ marginTop: '1rem' }} onClick={goToMyListings}>Back to My Listings</button>
+      <div className="page page-narrow">
+        <Card>
+          <EmptyState
+            icon={AlertTriangle}
+            title={listingStatus === 'SOLD' ? 'This item is sold' : 'Not your listing'}
+            description={listingStatus === 'SOLD' ? 'This item is sold, so it cannot be edited.' : 'You can only edit your own listings.'}
+            action={<Button variant="secondary" onClick={goToMyListings}>Back to My Listings</Button>}
+          />
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="animate-fade-in-up" style={{ padding: '1rem 0', maxWidth: '800px', margin: '0 auto' }}>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '2rem' }}>
-        <h1 className="text-gradient" style={{ fontSize: '2.5rem', margin: 0 }}>{isEdit ? 'Edit Post' : 'Create New Post'}</h1>
-        <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
-          {isEdit ? 'Change only what you need. Only changed fields are saved.' : 'List your instrument for sale, trade, or rent in Sri Lanka'}
-        </p>
-      </div>
+    <div className="page page-narrow">
+      <PageHeader
+        title={isEdit ? 'Edit listing' : 'Sell an instrument'}
+        subtitle={isEdit ? 'Change only what you need – only changed fields are saved.' : 'List your instrument for sale, trade or rent anywhere in Sri Lanka.'}
+        actions={isEdit && listingStatus && <StatusBadge status={listingStatus} />}
+      />
 
-      {error && <ErrorState compact message={error} />}
+      <nav className="stepper" aria-label="Form sections">
+        {steps.map((s, i) => (
+          <a key={s.id} href={`#${s.id}`} className={`step ${s.done ? 'done' : ''}`}>
+            <span className="num">{s.done ? <Check size={12} aria-hidden="true" /> : i + 1}</span>{s.label}
+          </a>
+        ))}
+      </nav>
 
-      <form onSubmit={handleSubmit} noValidate className="glass-panel" style={{ padding: '2.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      <form onSubmit={handleSubmit} noValidate className="stack" style={{ gap: 'var(--space-5)' }}>
         <input
           type="file"
           ref={fileInputRef}
@@ -428,230 +436,221 @@ const CreatePost = () => {
           data-testid="photo-input"
         />
 
-        {/* Photos */}
-        <div
-          onClick={() => fileInputRef.current?.click()}
-          onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-          onDragLeave={() => setIsDragging(false)}
-          onDrop={(e) => { e.preventDefault(); setIsDragging(false); if (e.dataTransfer.files?.length) addFiles(e.dataTransfer.files); }}
-          style={{
-            minHeight: '160px', borderRadius: '12px', padding: '1.5rem', cursor: 'pointer',
-            border: isDragging ? '2px dashed #a855f7' : `2px dashed ${photosChanged && isEdit ? '#a855f7' : 'rgba(255, 255, 255, 0.3)'}`,
-            backgroundColor: isDragging ? 'rgba(168, 85, 247, 0.15)' : 'rgba(0,0,0,0.25)',
-            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'
-          }}
-        >
-          {photoCount === 0 ? (
-            <>
-              <Upload size={42} style={{ color: 'var(--text-secondary)', marginBottom: '0.75rem' }} />
-              <p style={{ color: '#fff', margin: 0 }}>Click to browse or drag &amp; drop photos here</p>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '0.35rem' }}>1 to 6 photos (JPG, PNG, WebP up to 5 MB each)</p>
-            </>
-          ) : (
-            <div style={{ width: '100%' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                <span style={{ color: '#eaeaea', fontSize: '0.9rem' }}>{photoCount} / {MAX_PHOTOS} photos</span>
-                {photoCount < MAX_PHOTOS && (
-                  <button type="button" onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
-                    style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', padding: '4px 12px', borderRadius: '6px', cursor: 'pointer' }}>
-                    + Add photos
-                  </button>
-                )}
+        {/* 1. Photos */}
+        <Card as="section" id="sec-photos" className="form-section">
+          {sectionHead(1, 'Photos', `1 to ${MAX_PHOTOS} photos · JPG, PNG or WebP up to 5 MB each. The first photo is the cover.`)}
+          <div
+            className={`dropzone ${isDragging ? 'dragging' : ''}`}
+            style={photosChanged && isEdit ? { borderColor: 'var(--primary)' } : undefined}
+            role="button"
+            tabIndex={0}
+            aria-label="Add photos"
+            onClick={() => fileInputRef.current?.click()}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInputRef.current?.click(); } }}
+            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={(e) => { e.preventDefault(); setIsDragging(false); if (e.dataTransfer.files?.length) addFiles(e.dataTransfer.files); }}
+          >
+            {photoCount === 0 ? (
+              <div className="stack-sm" style={{ alignItems: 'center' }}>
+                <span className="page-icon"><Upload size={22} aria-hidden="true" /></span>
+                <strong>Click to browse or drag &amp; drop photos here</strong>
+                <span className="text-sm muted">Clear, real photos make your listing trusted faster.</span>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: '12px' }}>
-                {keptImages.map((img) => (
-                  <div key={`old-${img.id}`} style={{ position: 'relative', height: '100px', borderRadius: '8px', overflow: 'hidden' }}>
-                    <img src={img.url} alt="Listing" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    <button type="button" aria-label="Remove photo" title="Remove photo" onClick={(e) => removeExistingImage(img.id, e)}
-                      style={{ position: 'absolute', top: '4px', right: '4px', background: 'rgba(0,0,0,0.7)', border: 'none', color: '#ff6b6b', borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-                      <X size={14} />
-                    </button>
-                  </div>
-                ))}
-                {newPhotos.map((p, idx) => (
-                  <div key={p.preview} style={{ position: 'relative', height: '100px', borderRadius: '8px', overflow: 'hidden', outline: isEdit ? '2px solid #a855f7' : 'none' }}>
-                    <img src={p.preview} alt={`New photo ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    <button type="button" aria-label="Remove photo" title="Remove photo" onClick={(e) => removeNewPhoto(idx, e)}
-                      style={{ position: 'absolute', top: '4px', right: '4px', background: 'rgba(0,0,0,0.7)', border: 'none', color: '#ff6b6b', borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-                      <X size={14} />
-                    </button>
-                  </div>
-                ))}
+            ) : (
+              <div className="stack-sm" style={{ textAlign: 'left' }}>
+                <div className="row-between">
+                  <span className="text-sm muted">{photoCount} / {MAX_PHOTOS} photos{isEdit && photosChanged ? ' · changed' : ''}</span>
+                  {photoCount < MAX_PHOTOS && (
+                    <Button variant="secondary" size="sm" icon={Plus} onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}>Add photos</Button>
+                  )}
+                </div>
+                <div className="photo-grid">
+                  {keptImages.map((img, i) => (
+                    <div key={`old-${img.id}`} className="photo-tile">
+                      <img src={img.url} alt={`Photo ${i + 1}`} />
+                      {i === 0 && <span className="badge media-badge photo-cover">Cover</span>}
+                      <button type="button" className="remove" aria-label="Remove photo" title="Remove photo" onClick={(e) => removeExistingImage(img.id, e)}>
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                  {newPhotos.map((p, idx) => (
+                    <div key={p.preview} className={`photo-tile ${isEdit ? 'new' : ''}`}>
+                      <img src={p.preview} alt={`New photo ${idx + 1}`} />
+                      {keptImages.length === 0 && idx === 0 && <span className="badge media-badge photo-cover">Cover</span>}
+                      <button type="button" className="remove" aria-label="Remove photo" title="Remove photo" onClick={(e) => removeNewPhoto(idx, e)}>
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', gridColumn: 'span 2' }}>
-            <label htmlFor="f-title" style={labelStyle}>Listing Title *{changedTag('title')}</label>
-            <input id="f-title" type="text" name="title" value={formData.title} onChange={handleChange} maxLength={120}
-              placeholder="e.g. Fender Player Stratocaster Polar White" style={changedStyle('title')} />
+            )}
           </div>
+        </Card>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            <label htmlFor="f-category" style={labelStyle}>Category *{changedTag('category')}</label>
-            <input id="f-category" type="text" name="category" list="category-suggestions" value={formData.category} onChange={handleChange}
-              placeholder="e.g. Electric Guitar, Sitar, Ukulele" maxLength={50} style={changedStyle('category')} autoComplete="off" />
+        {/* 2. Details */}
+        <Card as="section" id="sec-details" className="form-section">
+          {sectionHead(2, 'Details', 'What are you selling?')}
+          <div className="form-grid">
+            <Input
+              id="f-title" name="title" label="Listing title" required extra={changedTag('title')} fieldClassName={`span-2 ${fieldClass('title')}`}
+              value={formData.title} onChange={handleChange} maxLength={120} placeholder="e.g. Fender Player Stratocaster Polar White"
+            />
+            <Input
+              id="f-category" name="category" label="Category" required extra={changedTag('category')} fieldClassName={fieldClass('category')}
+              list="category-suggestions" value={formData.category} onChange={handleChange} placeholder="e.g. Electric Guitar, Sitar, Ukulele" maxLength={50} autoComplete="off"
+            />
             <datalist id="category-suggestions">
               {suggestions.categories.map((c) => <option key={c} value={c} />)}
             </datalist>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            <label htmlFor="f-brand" style={labelStyle}>Brand *{changedTag('brand')}</label>
-            <input id="f-brand" type="text" name="brand" list="brand-suggestions" value={formData.brand} onChange={handleChange}
-              placeholder="e.g. Fender, Yamaha, any brand" maxLength={50} style={changedStyle('brand')} autoComplete="off" />
+            <Input
+              id="f-brand" name="brand" label="Brand" required extra={changedTag('brand')} fieldClassName={fieldClass('brand')}
+              list="brand-suggestions" value={formData.brand} onChange={handleChange} placeholder="e.g. Fender, Yamaha, any brand" maxLength={50} autoComplete="off"
+            />
             <datalist id="brand-suggestions">
               {suggestions.brands.map((b) => <option key={b} value={b} />)}
             </datalist>
-          </div>
 
-          {suggestionError && (
-            <div style={{ gridColumn: 'span 2', color: '#ffd43b', fontSize: '0.85rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-              {suggestionError}
-              <button type="button" className="btn btn-outline" style={{ padding: '2px 10px' }} onClick={loadSuggestions}>Retry</button>
+            {suggestionError && (
+              <div className="alert alert-warning span-2">
+                <span className="grow">{suggestionError}</span>
+                <Button variant="secondary" size="sm" onClick={loadSuggestions}>Retry</Button>
+              </div>
+            )}
+
+            <Input
+              id="f-model" name="model" label="Model" required extra={changedTag('model')} fieldClassName={fieldClass('model')}
+              value={formData.model} onChange={handleChange} maxLength={80} placeholder="e.g. Stratocaster, F310"
+            />
+            <Select
+              id="f-condition" name="condition" label="Condition" required extra={changedTag('condition')} fieldClassName={fieldClass('condition')}
+              value={formData.condition} onChange={handleChange} options={CONDITIONS}
+            />
+            <Input
+              id="f-year" name="year" type="number" label="Year" hint="Optional" extra={changedTag('year')} fieldClassName={fieldClass('year')}
+              value={formData.year} onChange={handleChange} placeholder="e.g. 2022" min="1900" max={MAX_YEAR}
+            />
+            <Select
+              id="f-type" name="listingType" label="Listing type" required extra={changedTag('listingType')} fieldClassName={fieldClass('listingType')}
+              value={formData.listingType} onChange={handleChange} options={['Sell', 'Trade', 'Rent']}
+            />
+          </div>
+        </Card>
+
+        {/* 3. Price */}
+        <Card as="section" id="sec-price" className="form-section">
+          {sectionHead(3, 'Price', 'Not sure? Let our AI check the market price for you.')}
+          <div className={`field ${fieldClass('price')}`}>
+            <label className="field-label" htmlFor="f-price">Price (LKR)<span className="req" aria-hidden="true">*</span>{changedTag('price')}</label>
+            <div className="price-row">
+              <div className="input-prefix grow">
+                <span aria-hidden="true">LKR</span>
+                <input id="f-price" className="input" type="number" name="price" value={formData.price} onChange={handleChange} placeholder="e.g. 185000" min="1" />
+              </div>
+              <Button variant="secondary" id="btn-price-check" icon={TrendingUp} loading={priceChecking} onClick={handlePriceCheck}>
+                {priceChecking ? 'Checking…' : 'Check price'}
+              </Button>
+            </div>
+            {priceChecking && <span className="field-hint">Checking the market price… this can take up to a minute.</span>}
+          </div>
+          {priceCheckError && <div style={{ marginTop: 'var(--space-3)' }}><ErrorState compact message={priceCheckError} onRetry={handlePriceCheck} /></div>}
+
+          {priceCheckResult && (
+            <div data-testid="price-check-result" className="price-result">
+              <div className="row-between">
+                <strong className="row" style={{ gap: 6 }}><Sparkles size={16} aria-hidden="true" color="var(--primary-text)" /> AI price analysis</strong>
+                <Badge variant={verdict.variant}>{verdict.label}</Badge>
+              </div>
+              {priceCheckResult.fair_price > 0 ? (
+                <dl className="spec-grid">
+                  <div className="spec"><dt>Fair range</dt><dd>{formatLKR(priceCheckResult.fair_range.min)} – {formatLKR(priceCheckResult.fair_range.max)}</dd></div>
+                  <div className="spec"><dt>Suggested price</dt><dd style={{ color: 'var(--primary-text)' }}>{formatLKR(priceCheckResult.fair_price)}</dd></div>
+                  {priceCheckResult.verdict !== 'UNKNOWN' && formData.price && (
+                    <div className="spec"><dt>Your price vs fair</dt><dd style={{ color: `var(--${verdict.variant === 'neutral' ? 'text' : verdict.variant})` }}>
+                      {priceCheckResult.deviation_percent > 0 ? '+' : ''}{Number(priceCheckResult.deviation_percent).toFixed(1)}%
+                    </dd></div>
+                  )}
+                </dl>
+              ) : (
+                <p className="text-sm muted">No reference price was found for this item, so there is no suggested price.</p>
+              )}
+              {priceCheckResult.explanation && <p className="text-sm" style={{ color: 'var(--text-2)', lineHeight: 1.6 }}>{priceCheckResult.explanation}</p>}
+              {priceCheckResult.fair_price > 0 && (
+                <div>
+                  <Button variant="secondary" size="sm" id="btn-use-suggested-price"
+                    onClick={() => setFormData((prev) => ({ ...prev, price: String(Math.round(priceCheckResult.fair_price)) }))}>
+                    Use suggested price ({formatLKR(priceCheckResult.fair_price)})
+                  </Button>
+                </div>
+              )}
             </div>
           )}
+        </Card>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            <label htmlFor="f-model" style={labelStyle}>Model *{changedTag('model')}</label>
-            <input id="f-model" type="text" name="model" value={formData.model} onChange={handleChange} maxLength={80}
-              placeholder="e.g. Stratocaster, F310" style={changedStyle('model')} />
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            <label htmlFor="f-condition" style={labelStyle}>Condition *{changedTag('condition')}</label>
-            <select id="f-condition" name="condition" value={formData.condition} onChange={handleChange} style={selectStyle('condition')}>
-              {CONDITIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-            </select>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            <label htmlFor="f-year" style={labelStyle}>Year (optional){changedTag('year')}</label>
-            <input id="f-year" type="number" name="year" value={formData.year} onChange={handleChange}
-              placeholder="e.g. 2022" min="1900" max={MAX_YEAR} style={changedStyle('year')} />
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            <label htmlFor="f-type" style={labelStyle}>Listing Type *{changedTag('listingType')}</label>
-            <select id="f-type" name="listingType" value={formData.listingType} onChange={handleChange} style={selectStyle('listingType')}>
-              <option value="Sell">Sell</option>
-              <option value="Trade">Trade</option>
-              <option value="Rent">Rent</option>
-            </select>
-          </div>
-
-          {/* Price + Check Price */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', gridColumn: 'span 2' }}>
-            <label htmlFor="f-price" style={labelStyle}>Price (LKR) *{changedTag('price')}</label>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <input id="f-price" type="number" name="price" value={formData.price} onChange={handleChange}
-                placeholder="e.g. 185000" min="1" style={{ ...changedStyle('price'), flex: 1 }} />
-              <button type="button" id="btn-price-check" onClick={handlePriceCheck} disabled={priceChecking}
-                style={{ background: 'linear-gradient(135deg, #7c3aed, #a855f7)', border: 'none', borderRadius: '8px', color: '#fff', padding: '0 14px', cursor: priceChecking ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '600', whiteSpace: 'nowrap', opacity: priceChecking ? 0.7 : 1 }}>
-                {priceChecking ? <><Loader size={15} className="animate-spin" /> Checking...</> : <><TrendingUp size={15} /> Check Price</>}
-              </button>
-            </div>
-            {priceChecking && <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', margin: '4px 0 0 0' }}>Checking the market price… this can take up to a minute.</p>}
-            {priceCheckError && <ErrorState compact message={priceCheckError} onRetry={handlePriceCheck} />}
-          </div>
-        </div>
-
-        {priceCheckResult && (
-          <div data-testid="price-check-result" style={{ background: 'rgba(255,255,255,0.05)', border: `1px solid ${verdictStyle.border}`, borderRadius: '12px', padding: '1.25rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-              <span style={{ fontWeight: '700', color: '#fff' }}>AI Price Analysis</span>
-              <span style={{ background: verdictStyle.bg, color: verdictStyle.color, border: `1px solid ${verdictStyle.border}`, padding: '4px 14px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: '700' }}>
-                {verdictStyle.label}
-              </span>
-            </div>
-            {priceCheckResult.fair_price > 0 ? (
-              <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
-                <div>
-                  <div style={{ color: 'var(--text-secondary)', fontSize: '0.78rem' }}>Fair Range</div>
-                  <div style={{ color: '#fff', fontWeight: '700' }}>LKR {fmt(priceCheckResult.fair_range.min)} – {fmt(priceCheckResult.fair_range.max)}</div>
-                </div>
-                <div>
-                  <div style={{ color: 'var(--text-secondary)', fontSize: '0.78rem' }}>Suggested Price</div>
-                  <div style={{ color: '#a855f7', fontWeight: '700' }}>LKR {fmt(priceCheckResult.fair_price)}</div>
-                </div>
-                {priceCheckResult.verdict !== 'UNKNOWN' && formData.price && (
-                  <div>
-                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.78rem' }}>Your price vs fair</div>
-                    <div style={{ color: verdictStyle.color, fontWeight: '700' }}>
-                      {priceCheckResult.deviation_percent > 0 ? '+' : ''}{Number(priceCheckResult.deviation_percent).toFixed(1)}%
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div style={{ color: 'var(--text-secondary)' }}>No reference price was found for this item, so there is no suggested price.</div>
-            )}
-            {priceCheckResult.explanation && <p style={{ color: '#c8c8c8', fontSize: '0.88rem', margin: 0, lineHeight: 1.6 }}>{priceCheckResult.explanation}</p>}
-            {priceCheckResult.fair_price > 0 && (
-              <button type="button" id="btn-use-suggested-price"
-                onClick={() => setFormData((prev) => ({ ...prev, price: String(Math.round(priceCheckResult.fair_price)) }))}
-                style={{ alignSelf: 'flex-start', background: 'rgba(168,85,247,0.2)', border: '1px solid rgba(168,85,247,0.5)', color: '#c084fc', borderRadius: '8px', padding: '6px 14px', cursor: 'pointer', fontWeight: '600' }}>
-                Use Suggested Price (LKR {fmt(priceCheckResult.fair_price)})
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* One location section */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-          <span style={labelStyle}>Location *{changedTag('location')}{pinChanged && <span style={{ color: '#c084fc', fontSize: '0.75rem', marginLeft: '6px' }}>• pin moved</span>}</span>
+        {/* 4. Location */}
+        <Card as="section" id="sec-location" className="form-section">
+          {sectionHead(4, 'Location', 'Where can buyers see or collect it?')}
+          {pinChanged && <p className="changed-tag" style={{ marginLeft: 0, marginBottom: 8 }}>• pin moved</p>}
           <LocationPicker
             position={position}
             onPositionChange={setPosition}
             label={formData.location}
             onLabelChange={(value) => setFormData((prev) => ({ ...prev, location: value }))}
-            inputStyle={changedStyle('location')}
+            changed={isChanged('location')}
           />
-        </div>
+        </Card>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-          <label htmlFor="f-description" style={labelStyle}>Description *{changedTag('description')}</label>
-          <textarea id="f-description" name="description" value={formData.description} onChange={handleChange} rows={5} maxLength={4000}
-            placeholder="Describe the instrument, accessories included, history and current condition..."
-            style={{ ...changedStyle('description'), resize: 'vertical' }} />
-        </div>
+        {/* 5. Description */}
+        <Card as="section" id="sec-description" className="form-section">
+          {sectionHead(5, 'Description', 'Accessories, history, repairs and current condition.')}
+          <Textarea
+            id="f-description" name="description" label="Description" required extra={changedTag('description')} fieldClassName={fieldClass('description')}
+            value={formData.description} onChange={handleChange} rows={6} maxLength={4000}
+            placeholder="Describe the instrument, accessories included, history and current condition…"
+            hint={`${formData.description.length} / 4000`}
+          />
+        </Card>
 
-        {submitting && (
-          <p style={{ color: 'var(--text-secondary)', margin: 0, textAlign: 'right' }}>
-            Saving{(!isEdit || changedFields.some((k) => AI_FIELDS.includes(k)) || photosChanged) ? ' and running the AI price and trust checks – this can take up to 2 minutes' : ''}…
-          </p>
-        )}
+        {error && <ErrorState compact message={error} />}
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
-          <button type="button" className="btn btn-outline" onClick={() => (isEdit ? goToMyListings() : navigate(-1))} disabled={submitting}>
-            Cancel
-          </button>
-          <button type="submit" className="btn btn-primary" data-testid="submit-listing"
-            disabled={submitting || (isEdit && !isDirty)}
+        <div className="sticky-actions">
+          {submitting && (
+            <span className="text-sm muted grow" role="status">
+              Saving{(!isEdit || changedFields.some((k) => AI_FIELDS.includes(k)) || photosChanged) ? ' and running the AI price and trust checks – this can take up to 2 minutes' : ''}…
+            </span>
+          )}
+          {!submitting && isEdit && <span className="text-sm muted grow">{isDirty ? 'You have unsaved changes.' : 'No changes yet.'}</span>}
+          <Button variant="secondary" onClick={() => (isEdit ? goToMyListings() : navigate(-1))} disabled={submitting}>Cancel</Button>
+          <Button
+            type="submit"
+            data-testid="submit-listing"
+            icon={isEdit ? Save : Plus}
+            loading={submitting}
+            disabled={isEdit && !isDirty}
             title={isEdit && !isDirty ? 'Change something first' : undefined}
-            style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0.8rem 1.8rem', opacity: submitting || (isEdit && !isDirty) ? 0.6 : 1 }}>
-            {submitting ? <Loader size={18} className="animate-spin" /> : isEdit ? <Save size={18} /> : <Plus size={18} />}
-            {submitting ? (isEdit ? 'Saving...' : 'Creating...') : isEdit ? 'Save Changes' : 'Create Post'}
-          </button>
+          >
+            {submitting ? (isEdit ? 'Saving…' : 'Creating…') : isEdit ? 'Save changes' : 'Create post'}
+          </Button>
         </div>
       </form>
 
       {/* Unsaved-changes prompt for in-app navigation */}
-      {blocker.state === 'blocked' && (
-        <div role="dialog" aria-modal="true" style={{ position: 'fixed', inset: 0, background: 'rgba(8, 6, 15, 0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999 }}>
-          <div className="glass-panel" style={{ maxWidth: '420px', padding: '2rem', borderRadius: '20px', textAlign: 'center' }}>
-            <AlertTriangle size={40} style={{ color: '#ffd43b', marginBottom: '0.75rem' }} />
-            <h3 style={{ margin: '0 0 0.5rem 0' }}>Leave without saving?</h3>
-            <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>Your changes will be lost.</p>
-            <div style={{ display: 'flex', gap: '1rem' }}>
-              <button type="button" className="btn btn-outline" style={{ flex: 1 }} onClick={() => blocker.reset()}>Stay</button>
-              <button type="button" className="btn btn-primary" style={{ flex: 1, background: '#ff6b6b' }} onClick={() => blocker.proceed()}>Leave</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <Modal
+        isOpen={blocker.state === 'blocked'}
+        onClose={() => blocker.reset?.()}
+        title="Leave without saving?"
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => blocker.reset()}>Stay</Button>
+            <Button variant="danger" onClick={() => blocker.proceed()}>Leave</Button>
+          </>
+        }
+      >
+        <p>Your changes will be lost.</p>
+      </Modal>
     </div>
   );
 };

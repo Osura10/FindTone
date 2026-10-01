@@ -20,7 +20,7 @@ class ErrorBoundary extends React.Component {
       return (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
           <div className="glass-panel" style={{ padding: '3rem', borderRadius: '20px', textAlign: 'center', maxWidth: '400px' }}>
-            <AlertTriangle size={48} style={{ color: '#ff6b6b', margin: '0 auto 1rem auto' }} />
+            <AlertTriangle size={48} style={{ color: 'var(--danger)', margin: '0 auto 1rem auto' }} />
             <h2 style={{ margin: '0 0 1rem 0' }}>Something went wrong</h2>
             <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem' }}>
               We encountered an unexpected error while rendering this page.

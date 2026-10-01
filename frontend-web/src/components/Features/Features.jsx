@@ -1,59 +1,48 @@
 import React from 'react';
 import { FileCheck, Search, MessageSquare, Sparkles } from 'lucide-react';
-import './Features.css';
 
 const features = [
   {
-    icon: <FileCheck className="feature-icon" />,
+    icon: FileCheck,
     title: 'Listing Creation & Verification Agent',
-    description: 'Helps shops create complete and accurate instrument listings from the details they provide. It verifies the information using available tools, identifies missing or incorrect details, and prepares the listing for human approval before publishing.',
-    delay: 'delay-100'
+    description: 'Helps sellers create complete and accurate instrument listings. It verifies the details, spots missing or incorrect information, checks photos and price, and sends risky listings to an admin before they go live.'
   },
   {
-    icon: <Search className="feature-icon" />,
+    icon: Search,
     title: 'Smart Item Search & Matching Agent',
-    description: 'Helps buyers find suitable instruments based on their search or requirements. It understands the buyer\'s request and searches the MusicMarket database to find relevant items based on category, price, condition, location, and other requirements.',
-    delay: 'delay-200'
+    description: "Helps buyers find suitable instruments. It understands the buyer's request and searches MusicMarket by category, price, condition, location and other needs."
   },
   {
-    icon: <MessageSquare className="feature-icon" />,
+    icon: MessageSquare,
     title: 'MusicMarket Information & RAG Agent',
-    description: 'Acts as an AI assistant for the website. It uses RAG to answer questions about MusicMarket and its features, and web search to provide useful information about musical instruments, brands, models, and other music-related topics.',
-    delay: 'delay-300'
+    description: 'An AI assistant for the website. It uses RAG to answer questions about MusicMarket, and web search for information about instruments, brands and models.'
   },
   {
-    icon: <Sparkles className="feature-icon" />,
+    icon: Sparkles,
     title: 'User Interest & Personalized Recommendation Agent',
-    description: 'Learns from users\' searches and interactions to understand their interests. It stores and updates these interests and recommends relevant instrument listings to each user based on their interests and previous activity.',
-    delay: 'delay-400'
+    description: "Learns from users' searches and saved alerts to understand their interests, and recommends relevant listings to each user."
   }
 ];
 
-const Features = () => {
-  return (
-    <section className="features-section" id="about">
-      <div className="container">
-        <div className="section-header">
-          <h2 className="section-title">Powered by <span className="text-gradient">4 AI Agents</span></h2>
-          <p className="section-subtitle">
-            Our intelligent ecosystem works tirelessly in the background to ensure every trade is fair, safe, and exactly what you're looking for.
-          </p>
-        </div>
-        
-        <div className="features-grid">
-          {features.map((feature, index) => (
-            <div key={index} className={`feature-card glass-panel animate-fade-in-up ${feature.delay}`}>
-              <div className="feature-icon-wrapper">
-                {feature.icon}
-              </div>
-              <h3 className="feature-title">{feature.title}</h3>
-              <p className="feature-desc">{feature.description}</p>
-            </div>
-          ))}
-        </div>
+const Features = () => (
+  <section className="lp-section" id="about">
+    <div className="lp-container">
+      <div className="lp-section-head">
+        <span className="lp-kicker">Under the hood</span>
+        <h2 className="lp-h2">Powered by 4 AI agents</h2>
+        <p className="lp-lead">They work in the background so every trade is fair, safe and exactly what you are looking for.</p>
       </div>
-    </section>
-  );
-};
+      <div className="lp-features">
+        {features.map((f) => (
+          <article key={f.title} className="card lp-feature">
+            <span className="lp-icon"><f.icon size={22} aria-hidden="true" /></span>
+            <h3>{f.title}</h3>
+            <p>{f.description}</p>
+          </article>
+        ))}
+      </div>
+    </div>
+  </section>
+);
 
 export default Features;

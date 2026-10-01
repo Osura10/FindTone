@@ -1,5 +1,5 @@
 import { createBrowserRouter, createRoutesFromElements, RouterProvider, Route, Navigate } from 'react-router-dom';
-import { Toaster } from 'react-hot-toast';
+import { AppToaster } from './components/ui';
 import Landing from './pages/Landing/Landing';
 import Login from './pages/Login/Login';
 import RegisterSelection from './pages/Register/RegisterSelection';
@@ -63,14 +63,7 @@ const router = createBrowserRouter(
 function App() {
   return (
     <>
-      <Toaster
-        position="top-right"
-        toastOptions={{
-          style: { background: 'var(--color-bg-surface)', color: '#fff', border: '1px solid var(--color-border-glass)' },
-          success: { iconTheme: { primary: 'var(--color-success)', secondary: '#fff' } },
-          error: { iconTheme: { primary: 'var(--color-danger)', secondary: '#fff' } }
-        }}
-      />
+      <AppToaster />
       <RouterProvider router={router} />
     </>
   );

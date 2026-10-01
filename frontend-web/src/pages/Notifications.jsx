@@ -1,17 +1,18 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { Bell, CheckCircle2, Check, ExternalLink } from 'lucide-react';
+import { Bell, CheckCircle2, Check, ExternalLink, Sparkles, TrendingDown, BadgeDollarSign, Package, Trash2 } from 'lucide-react';
 import { apiCall } from '../services/api';
 import { useDashboard } from '../hooks/useDashboard';
-import { ErrorState, Skeleton } from '../components/ui';
+import { Button, Card, EmptyState, ErrorState, PageHeader, Skeleton, Tabs, formatLKR } from '../components/ui';
 
-const ICONS = {
-  NEW_MATCH: '🎸',
-  PRICE_DROP: '📉',
-  ITEM_SOLD: '💰',
-  ORDER_PLACED: '📦',
-  LISTING_REMOVED: '🗑️'
+// Icon + colour per notification type.
+const TYPE_META = {
+  NEW_MATCH: { icon: Sparkles, tone: 'primary' },
+  PRICE_DROP: { icon: TrendingDown, tone: 'success' },
+  ITEM_SOLD: { icon: BadgeDollarSign, tone: 'warning' },
+  ORDER_PLACED: { icon: Package, tone: 'info' },
+  LISTING_REMOVED: { icon: Trash2, tone: 'danger' }
 };
 
 const timeAgo = (dateStr) => {
@@ -28,6 +29,7 @@ const Notifications = () => {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [filter, setFilter] = useState('all'); // 'all' | 'unread' (view only)
 
   const fetchNotifications = useCallback(async () => {
     try {
@@ -73,97 +75,95 @@ const Notifications = () => {
   };
 
   const unread = notifications.filter((n) => !n.isRead).length;
+  const shown = filter === 'unread' ? notifications.filter((n) => !n.isRead) : notifications;
 
   return (
-    <div className="animate-fade-in-up" style={{ padding: '1rem 0 4rem 0', maxWidth: '800px', margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', gap: '1rem', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <div style={{ padding: '0.5rem', background: 'rgba(255, 0, 110, 0.15)', borderRadius: '10px', color: '#ff006e' }}>
-            <Bell size={24} />
-          </div>
-          <h1 className="text-gradient" style={{ fontSize: '2.2rem', margin: 0, fontWeight: '800' }}>Notifications</h1>
-          {unread > 0 && <span style={{ color: 'var(--text-secondary)' }}>{unread} unread</span>}
-        </div>
-        {unread > 0 && (
-          <button type="button" className="btn btn-outline" data-testid="mark-all-read" onClick={markAllAsRead} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <CheckCircle2 size={18} /> Mark all as read
-          </button>
+    <div className="page page-narrow">
+      <PageHeader
+        icon={Bell}
+        title="Notifications"
+        subtitle={unread > 0 ? `${unread} unread` : 'You are all caught up.'}
+        actions={unread > 0 && (
+          <Button variant="secondary" icon={CheckCircle2} data-testid="mark-all-read" onClick={markAllAsRead}>Mark all as read</Button>
         )}
-      </div>
+      />
+
+      <Tabs
+        ariaLabel="Filter notifications"
+        value={filter}
+        onChange={setFilter}
+        tabs={[
+          { id: 'all', label: 'All', count: notifications.length || undefined },
+          { id: 'unread', label: 'Unread', count: unread || undefined }
+        ]}
+      />
 
       {error && <ErrorState compact message={error} onRetry={() => { setLoading(true); fetchNotifications(); }} />}
 
       {loading ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} height="110px" borderRadius="16px" />)}
+        <div className="stack-sm" aria-busy="true" aria-label="Loading notifications">
+          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} height="92px" radius="var(--radius-lg)" />)}
         </div>
-      ) : notifications.length === 0 && !error ? (
-        <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center', borderRadius: '20px' }}>
-          <Bell size={48} style={{ opacity: 0.3, margin: '0 auto 1rem' }} />
-          <h3 style={{ color: 'var(--text-secondary)' }}>You don't have any notifications.</h3>
-          <p style={{ color: 'var(--text-secondary)' }}>Add items to your wishlist or create an alert to get price drops and new matches.</p>
-        </div>
+      ) : shown.length === 0 && !error ? (
+        <Card>
+          <EmptyState
+            icon={Bell}
+            title={filter === 'unread' ? 'No unread notifications' : "You don't have any notifications"}
+            description="Add items to your wishlist or create an alert to get price drops and new matches."
+            action={filter === 'all' && <Button variant="secondary" onClick={() => navigate('/dashboard/alerts')}>Create an alert</Button>}
+          />
+        </Card>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          {notifications.map((n) => {
+        <Card padded={false} className="notif-list">
+          {shown.map((n) => {
             const hasListing = Boolean(n.listingId ?? n.listing?.id);
+            const meta = TYPE_META[n.type] || { icon: Bell, tone: 'primary' };
             return (
               <div
                 key={n.id}
                 data-testid={`notification-${n.type}`}
-                className="glass-panel"
+                className={`notif ${n.isRead ? '' : 'unread'} ${hasListing ? 'clickable' : ''}`}
                 role={hasListing ? 'button' : undefined}
                 tabIndex={hasListing ? 0 : undefined}
                 onClick={() => open(n)}
                 onKeyDown={(e) => { if (hasListing && e.key === 'Enter') open(n); }}
-                style={{
-                  padding: '1.25rem 1.5rem',
-                  borderRadius: '16px',
-                  display: 'flex',
-                  gap: '1.25rem',
-                  cursor: hasListing ? 'pointer' : 'default',
-                  background: !n.isRead ? 'linear-gradient(145deg, rgba(255,0,110,0.1), rgba(0,0,0,0.2))' : undefined,
-                  border: !n.isRead ? '1px solid rgba(255,0,110,0.3)' : undefined
-                }}
               >
-                {n.listing?.firstImageUrl ? (
-                  <img src={n.listing.firstImageUrl} alt="" style={{ width: '64px', height: '64px', borderRadius: '10px', objectFit: 'cover', flexShrink: 0 }} />
-                ) : (
-                  <div style={{ fontSize: '2rem', width: '64px', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, background: 'rgba(255,255,255,0.05)', borderRadius: '10px' }}>
-                    {ICONS[n.type] || '🔔'}
-                  </div>
-                )}
+                <div className="notif-visual">
+                  {n.listing?.firstImageUrl
+                    ? <img src={n.listing.firstImageUrl} alt="" />
+                    : <span className="notif-icon" style={{ background: `var(--${meta.tone}-soft)`, color: `var(--${meta.tone === 'primary' ? 'primary-text' : meta.tone})` }}><meta.icon size={20} aria-hidden="true" /></span>}
+                  {n.listing?.firstImageUrl && (
+                    <span className="notif-type" style={{ background: `var(--${meta.tone === 'primary' ? 'primary' : meta.tone})` }}><meta.icon size={11} aria-hidden="true" /></span>
+                  )}
+                </div>
 
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem' }}>
-                    <h4 style={{ margin: '0 0 0.4rem 0', fontSize: '1.05rem', fontWeight: !n.isRead ? '700' : '500' }}>
-                      <span aria-hidden="true">{ICONS[n.type] || '🔔'} </span>{n.title || n.type.replace('_', ' ')}
-                    </h4>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }} title={new Date(n.createdAt).toLocaleString()}>
+                <div className="grow" style={{ minWidth: 0 }}>
+                  <div className="row-between" style={{ alignItems: 'flex-start', flexWrap: 'nowrap' }}>
+                    <h3 className="notif-title">{n.title || n.type.replace('_', ' ')}</h3>
+                    <time className="text-xs muted" style={{ whiteSpace: 'nowrap' }} dateTime={n.createdAt} title={new Date(n.createdAt).toLocaleString()}>
                       {timeAgo(n.createdAt)}
-                    </span>
+                    </time>
                   </div>
-                  <p style={{ margin: 0, color: !n.isRead ? '#fff' : 'var(--text-secondary)', fontSize: '0.95rem' }}>{n.message}</p>
-                  <div style={{ display: 'flex', gap: '1rem', marginTop: '0.75rem', fontSize: '0.85rem' }}>
+                  <p className="notif-msg">{n.message}</p>
+                  <div className="row" style={{ gap: 'var(--space-4)', marginTop: 6 }}>
                     {hasListing && (
-                      <span style={{ color: 'var(--primary-hover)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <ExternalLink size={14} /> Open listing{n.listing?.price != null ? ` · LKR ${Math.round(n.listing.price).toLocaleString()}` : ''}
+                      <span className="text-xs row" style={{ gap: 4, color: 'var(--primary-text)', fontWeight: 600 }}>
+                        <ExternalLink size={13} aria-hidden="true" /> Open listing{n.listing?.price != null ? ` · ${formatLKR(n.listing.price)}` : ''}
                       </span>
                     )}
                     {!n.isRead && (
-                      <button type="button" onClick={(e) => { e.stopPropagation(); markAsRead(n.id); }}
-                        style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', padding: 0 }}>
-                        <Check size={14} /> Mark as read
+                      <button type="button" className="link-btn" onClick={(e) => { e.stopPropagation(); markAsRead(n.id); }}>
+                        <Check size={13} aria-hidden="true" /> Mark as read
                       </button>
                     )}
                   </div>
                 </div>
 
-                {!n.isRead && <div aria-label="Unread" style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#ff006e', alignSelf: 'center', flexShrink: 0 }} />}
+                {!n.isRead && <span className="unread-dot" aria-label="Unread" />}
               </div>
             );
           })}
-        </div>
+        </Card>
       )}
     </div>
   );

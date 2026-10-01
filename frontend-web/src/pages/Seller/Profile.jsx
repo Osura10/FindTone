@@ -195,9 +195,9 @@ const Profile = () => {
   if (error || !user) {
     return (
       <div className="animate-fade-in-up" style={{ padding: '4rem 2rem', textAlign: 'center' }}>
-        <div className="glass-panel" style={{ maxWidth: '500px', margin: '0 auto', padding: '2.5rem', border: '1px solid rgba(255, 77, 79, 0.3)' }}>
-          <AlertTriangle size={48} color="#ff4d4f" style={{ margin: '0 auto 1rem' }} />
-          <h2 style={{ color: '#ff4d4f', marginBottom: '1rem' }}>Failed to Load Profile</h2>
+        <div className="glass-panel" style={{ maxWidth: '500px', margin: '0 auto', padding: '2.5rem', border: '1px solid color-mix(in srgb, var(--danger) 40%, transparent)' }}>
+          <AlertTriangle size={48} color="var(--danger)" style={{ margin: '0 auto 1rem' }} />
+          <h2 style={{ color: 'var(--danger)', marginBottom: '1rem' }}>Failed to Load Profile</h2>
           <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>{error || 'Unable to fetch your profile information.'}</p>
           <button className="btn btn-primary" onClick={fetchProfile}>Retry</button>
         </div>
@@ -226,17 +226,17 @@ const Profile = () => {
           zIndex: 9999,
           background: feedback.type === 'error'
             ? 'linear-gradient(135deg, rgba(220, 38, 38, 0.9), rgba(185, 28, 28, 0.95))'
-            : 'linear-gradient(135deg, rgba(16, 185, 129, 0.9), rgba(5, 150, 105, 0.95))',
+            : 'linear-gradient(135deg, var(--success), rgba(5, 150, 105, 0.95))',
           color: '#ffffff',
           padding: '1rem 1.5rem',
           borderRadius: '12px',
-          boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
+          boxShadow: 'var(--shadow-lg)',
           backdropFilter: 'blur(10px)',
           display: 'flex',
           alignItems: 'center',
           gap: '0.75rem',
           fontWeight: '500',
-          border: '1px solid rgba(255,255,255,0.2)',
+          border: '1px solid var(--border-strong)',
           animation: 'fadeInUp 0.3s ease'
         }}>
           {feedback.type === 'error' ? <AlertTriangle size={20} /> : <Check size={20} />}
@@ -250,9 +250,9 @@ const Profile = () => {
         overflow: 'hidden',
         padding: '3rem',
         borderRadius: '24px',
-        border: '1px solid rgba(255, 255, 255, 0.12)',
-        background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%)',
-        boxShadow: '0 20px 50px rgba(0, 0, 0, 0.3)'
+        border: '1px solid var(--border-strong)',
+        background: 'var(--surface-2)',
+        boxShadow: 'var(--shadow-lg)'
       }}>
         {/* Glow ambient background elements */}
         <div style={{
@@ -289,12 +289,12 @@ const Profile = () => {
                 height: '160px',
                 borderRadius: '50%',
                 overflow: 'hidden',
-                border: '3px solid rgba(255, 255, 255, 0.2)',
-                boxShadow: '0 0 30px rgba(123, 44, 191, 0.45)',
+                border: '3px solid var(--border-strong)',
+                boxShadow: '0 0 30px color-mix(in srgb, var(--primary) 55%, transparent)',
                 display: 'flex',
                 justifyContent: 'center',
                 alignItems: 'center',
-                background: 'linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02))',
+                background: 'var(--surface-2)',
                 cursor: 'pointer',
                 position: 'relative',
                 transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
@@ -305,7 +305,7 @@ const Profile = () => {
               }}
               onMouseOut={(e) => {
                 e.currentTarget.style.transform = 'scale(1)';
-                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                e.currentTarget.style.borderColor = 'var(--border-strong)';
               }}
               title="Click to change profile picture"
             >
@@ -316,7 +316,7 @@ const Profile = () => {
                   style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 />
               ) : (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', background: 'linear-gradient(135deg, rgba(123, 44, 191, 0.3), rgba(58, 12, 163, 0.3))' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', background: 'var(--primary-soft)' }}>
                   <User size={72} color="rgba(255,255,255,0.8)" />
                 </div>
               )}
@@ -325,7 +325,7 @@ const Profile = () => {
               <div style={{
                 position: 'absolute',
                 inset: 0,
-                background: 'rgba(0, 0, 0, 0.4)',
+                background: 'var(--surface-2)',
                 opacity: 0,
                 transition: 'opacity 0.25s ease',
                 display: 'flex',
@@ -333,7 +333,7 @@ const Profile = () => {
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: '0.25rem',
-                color: 'white',
+                color: 'var(--text)',
                 fontSize: '0.75rem',
                 fontWeight: '600'
               }}
@@ -357,8 +357,8 @@ const Profile = () => {
               fontWeight: '700',
               textTransform: 'uppercase',
               letterSpacing: '1px',
-              boxShadow: '0 4px 15px rgba(123, 44, 191, 0.35)',
-              border: '1px solid rgba(255,255,255,0.2)'
+              boxShadow: '0 4px 15px color-mix(in srgb, var(--primary) 45%, transparent)',
+              border: '1px solid var(--border-strong)'
             }}>
               {getRoleIcon()}
               <span>{displayRole}</span>
@@ -377,7 +377,7 @@ const Profile = () => {
               </div>
               {user.role === 'shop' && (
                 <p style={{ color: 'var(--text-secondary)', margin: '0.35rem 0 0 0', fontSize: '1.15rem', fontWeight: '500' }}>
-                  Shop Name: <span style={{ color: '#fff' }}>{user.name}</span>
+                  Shop Name: <span style={{ color: 'var(--text)' }}>{user.name}</span>
                 </p>
               )}
             </div>
@@ -391,8 +391,8 @@ const Profile = () => {
 
               {/* Email Card */}
               <div style={{
-                background: 'rgba(255, 255, 255, 0.03)',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
+                background: 'var(--surface-2)',
+                border: '1px solid var(--surface-2)',
                 padding: '1rem 1.25rem',
                 borderRadius: '14px',
                 display: 'flex',
@@ -401,7 +401,7 @@ const Profile = () => {
               }}>
                 <div style={{
                   padding: '0.75rem',
-                  background: 'linear-gradient(135deg, rgba(255, 0, 110, 0.15), rgba(255, 0, 110, 0.05))',
+                  background: 'var(--primary-soft)',
                   borderRadius: '12px',
                   color: 'var(--accent-color)'
                 }}>
@@ -415,8 +415,8 @@ const Profile = () => {
 
               {/* Phone Card */}
               <div style={{
-                background: 'rgba(255, 255, 255, 0.03)',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
+                background: 'var(--surface-2)',
+                border: '1px solid var(--surface-2)',
                 padding: '1rem 1.25rem',
                 borderRadius: '14px',
                 display: 'flex',
@@ -425,9 +425,9 @@ const Profile = () => {
               }}>
                 <div style={{
                   padding: '0.75rem',
-                  background: 'linear-gradient(135deg, rgba(0, 245, 212, 0.15), rgba(0, 245, 212, 0.05))',
+                  background: 'var(--success-soft)',
                   borderRadius: '12px',
-                  color: '#00f5d4'
+                  color: 'var(--success)'
                 }}>
                   <Phone size={20} />
                 </div>
@@ -441,8 +441,8 @@ const Profile = () => {
               {user.role === 'shop' && (
                 <>
                   <div style={{
-                    background: 'rgba(255, 255, 255, 0.03)',
-                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    background: 'var(--surface-2)',
+                    border: '1px solid var(--surface-2)',
                     padding: '1rem 1.25rem',
                     borderRadius: '14px',
                     display: 'flex',
@@ -451,9 +451,9 @@ const Profile = () => {
                   }}>
                     <div style={{
                       padding: '0.75rem',
-                      background: 'linear-gradient(135deg, rgba(254, 228, 64, 0.15), rgba(254, 228, 64, 0.05))',
+                      background: 'var(--warning-soft)',
                       borderRadius: '12px',
-                      color: '#fee440'
+                      color: 'var(--warning)'
                     }}>
                       <MapPin size={20} />
                     </div>
@@ -464,8 +464,8 @@ const Profile = () => {
                   </div>
 
                   <div style={{
-                    background: 'rgba(255, 255, 255, 0.03)',
-                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    background: 'var(--surface-2)',
+                    border: '1px solid var(--surface-2)',
                     padding: '1rem 1.25rem',
                     borderRadius: '14px',
                     display: 'flex',
@@ -474,9 +474,9 @@ const Profile = () => {
                   }}>
                     <div style={{
                       padding: '0.75rem',
-                      background: 'linear-gradient(135deg, rgba(155, 93, 229, 0.15), rgba(155, 93, 229, 0.05))',
+                      background: 'var(--primary-soft)',
                       borderRadius: '12px',
-                      color: '#9b5de5'
+                      color: 'var(--primary)'
                     }}>
                       <Briefcase size={20} />
                     </div>
@@ -495,7 +495,7 @@ const Profile = () => {
               flexDirection: 'column',
               gap: '1rem',
               paddingTop: '0.75rem',
-              borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+              borderTop: '1px solid var(--surface-2)',
               width: '100%'
             }}>
               {/* Primary Actions Row (Single Line) */}
@@ -513,8 +513,8 @@ const Profile = () => {
                     borderRadius: '12px',
                     fontSize: '0.85rem',
                     padding: '0.65rem 0.75rem',
-                    background: 'rgba(255, 255, 255, 0.04)',
-                    borderColor: 'rgba(255, 255, 255, 0.15)',
+                    background: 'var(--surface-2)',
+                    borderColor: 'var(--border-strong)',
                     whiteSpace: 'nowrap'
                   }}
                 >
@@ -529,8 +529,8 @@ const Profile = () => {
                     borderRadius: '12px',
                     fontSize: '0.85rem',
                     padding: '0.65rem 0.75rem',
-                    background: 'rgba(255, 255, 255, 0.04)',
-                    borderColor: 'rgba(255, 255, 255, 0.15)',
+                    background: 'var(--surface-2)',
+                    borderColor: 'var(--border-strong)',
                     whiteSpace: 'nowrap'
                   }}
                 >
@@ -546,8 +546,8 @@ const Profile = () => {
                       borderRadius: '12px',
                       fontSize: '0.85rem',
                       padding: '0.65rem 0.75rem',
-                      background: 'rgba(255, 255, 255, 0.04)',
-                      borderColor: 'rgba(255, 255, 255, 0.15)',
+                      background: 'var(--surface-2)',
+                      borderColor: 'var(--border-strong)',
                       whiteSpace: 'nowrap'
                     }}
                   >
@@ -565,20 +565,20 @@ const Profile = () => {
                     borderRadius: '12px',
                     fontSize: '0.85rem',
                     padding: '0.6rem 1.75rem',
-                    background: 'rgba(239, 68, 68, 0.1)',
-                    color: '#f87171',
-                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                    background: 'var(--danger-soft)',
+                    color: 'var(--danger)',
+                    border: '1px solid color-mix(in srgb, var(--danger) 40%, transparent)',
                     transition: 'all 0.25s ease'
                   }}
                   onMouseOver={(e) => {
-                    e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
-                    e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.6)';
+                    e.currentTarget.style.background = 'var(--danger-soft)';
+                    e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--danger) 70%, transparent)';
                     e.currentTarget.style.color = '#ffffff';
                   }}
                   onMouseOut={(e) => {
-                    e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
-                    e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.3)';
-                    e.currentTarget.style.color = '#f87171';
+                    e.currentTarget.style.background = 'var(--danger-soft)';
+                    e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--danger) 40%, transparent)';
+                    e.currentTarget.style.color = 'var(--danger)';
                   }}
                 >
                   <Trash2 size={16} /> Delete Account
@@ -621,16 +621,16 @@ const Profile = () => {
                   transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                   cursor: 'pointer',
                   borderRadius: '16px',
-                  border: '1px solid rgba(255, 255, 255, 0.08)'
+                  border: '1px solid var(--surface-2)'
                 }}
                 onMouseOver={(e) => {
                   e.currentTarget.style.transform = 'translateY(-6px)';
-                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.25)';
-                  e.currentTarget.style.boxShadow = '0 12px 30px rgba(0,0,0,0.4)';
+                  e.currentTarget.style.borderColor = 'var(--border-strong)';
+                  e.currentTarget.style.boxShadow = 'var(--shadow-lg)';
                 }}
                 onMouseOut={(e) => {
                   e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)';
+                  e.currentTarget.style.borderColor = 'var(--surface-2)';
                   e.currentTarget.style.boxShadow = 'none';
                 }}
               >
@@ -640,14 +640,14 @@ const Profile = () => {
                     position: 'absolute',
                     top: '12px',
                     right: '12px',
-                    background: 'rgba(18, 16, 24, 0.85)',
+                    background: 'var(--overlay)',
                     backdropFilter: 'blur(8px)',
                     padding: '0.35rem 0.75rem',
                     borderRadius: '20px',
                     fontSize: '0.75rem',
                     fontWeight: '700',
-                    color: item.condition === 'Brand New' ? '#00f5d4' : item.condition === 'Rent' ? '#fee440' : '#f15bb5',
-                    border: '1px solid rgba(255,255,255,0.1)'
+                    color: item.condition === 'Brand New' ? 'var(--success)' : item.condition === 'Rent' ? 'var(--warning)' : 'var(--primary-text)',
+                    border: '1px solid var(--border-strong)'
                   }}>
                     {item.condition}
                   </div>
@@ -672,7 +672,7 @@ const Profile = () => {
           bottom: 0,
           width: '100vw',
           height: '100vh',
-          background: 'rgba(8, 6, 15, 0.65)',
+          background: 'var(--overlay)',
           backdropFilter: 'blur(8px)',
           WebkitBackdropFilter: 'blur(8px)',
           display: 'flex',
@@ -692,9 +692,9 @@ const Profile = () => {
               padding: '2.5rem',
               position: 'relative',
               borderRadius: '24px',
-              border: '1px solid rgba(255, 255, 255, 0.16)',
-              background: 'linear-gradient(145deg, rgba(30, 24, 45, 0.95), rgba(18, 14, 28, 0.98))',
-              boxShadow: '0 25px 60px rgba(0, 0, 0, 0.6), 0 0 30px rgba(123, 44, 191, 0.2)',
+              border: '1px solid var(--border-strong)',
+              background: 'var(--surface)',
+              boxShadow: 'var(--shadow-lg)',
               overflow: 'hidden'
             }}
             onClick={(e) => e.stopPropagation()}
@@ -707,7 +707,7 @@ const Profile = () => {
               right: 0,
               height: '4px',
               background: activeModal === 'delete'
-                ? 'linear-gradient(90deg, #ef4444, #f87171)'
+                ? 'linear-gradient(90deg, var(--danger), var(--danger))'
                 : 'linear-gradient(90deg, var(--primary-color), var(--accent-color))'
             }} />
 
@@ -719,8 +719,8 @@ const Profile = () => {
                 position: 'absolute',
                 top: '1.25rem',
                 right: '1.25rem',
-                background: 'rgba(255, 255, 255, 0.06)',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
+                background: 'var(--surface-2)',
+                border: '1px solid var(--border-strong)',
                 color: 'var(--text-secondary)',
                 borderRadius: '50%',
                 width: '36px',
@@ -732,11 +732,11 @@ const Profile = () => {
                 transition: 'all 0.2s ease'
               }}
               onMouseOver={(e) => {
-                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)';
+                e.currentTarget.style.background = 'var(--border-strong)';
                 e.currentTarget.style.color = '#fff';
               }}
               onMouseOut={(e) => {
-                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+                e.currentTarget.style.background = 'var(--surface-2)';
                 e.currentTarget.style.color = 'var(--text-secondary)';
               }}
             >
@@ -747,7 +747,7 @@ const Profile = () => {
             {activeModal === 'phone' && (
               <form onSubmit={handleUpdatePhone} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-                  <div style={{ padding: '0.65rem', borderRadius: '12px', background: 'rgba(0, 245, 212, 0.15)', color: '#00f5d4' }}>
+                  <div style={{ padding: '0.65rem', borderRadius: '12px', background: 'var(--success-soft)', color: 'var(--success)' }}>
                     <Phone size={22} />
                   </div>
                   <div>
@@ -768,15 +768,15 @@ const Profile = () => {
                     style={{
                       padding: '0.85rem 1rem',
                       borderRadius: '12px',
-                      background: 'rgba(255, 255, 255, 0.05)',
-                      border: '1px solid rgba(255, 255, 255, 0.15)',
-                      color: 'white',
+                      background: 'var(--surface-2)',
+                      border: '1px solid var(--border-strong)',
+                      color: 'var(--text)',
                       fontSize: '1rem',
                       outline: 'none',
                       transition: 'border-color 0.2s ease'
                     }}
                     onFocus={(e) => e.target.style.borderColor = 'var(--primary-color)'}
-                    onBlur={(e) => e.target.style.borderColor = 'rgba(255, 255, 255, 0.15)'}
+                    onBlur={(e) => e.target.style.borderColor = 'var(--border-strong)'}
                   />
                 </div>
 
@@ -795,7 +795,7 @@ const Profile = () => {
             {activeModal === 'password' && (
               <form onSubmit={handleUpdatePassword} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-                  <div style={{ padding: '0.65rem', borderRadius: '12px', background: 'rgba(123, 44, 191, 0.2)', color: 'var(--primary-hover)' }}>
+                  <div style={{ padding: '0.65rem', borderRadius: '12px', background: 'var(--primary-soft)', color: 'var(--primary-hover)' }}>
                     <Key size={22} />
                   </div>
                   <div>
@@ -816,14 +816,14 @@ const Profile = () => {
                     style={{
                       padding: '0.85rem 1rem',
                       borderRadius: '12px',
-                      background: 'rgba(255, 255, 255, 0.05)',
-                      border: '1px solid rgba(255, 255, 255, 0.15)',
-                      color: 'white',
+                      background: 'var(--surface-2)',
+                      border: '1px solid var(--border-strong)',
+                      color: 'var(--text)',
                       fontSize: '1rem',
                       outline: 'none'
                     }}
                     onFocus={(e) => e.target.style.borderColor = 'var(--primary-color)'}
-                    onBlur={(e) => e.target.style.borderColor = 'rgba(255, 255, 255, 0.15)'}
+                    onBlur={(e) => e.target.style.borderColor = 'var(--border-strong)'}
                   />
                 </div>
 
@@ -839,14 +839,14 @@ const Profile = () => {
                     style={{
                       padding: '0.85rem 1rem',
                       borderRadius: '12px',
-                      background: 'rgba(255, 255, 255, 0.05)',
-                      border: '1px solid rgba(255, 255, 255, 0.15)',
-                      color: 'white',
+                      background: 'var(--surface-2)',
+                      border: '1px solid var(--border-strong)',
+                      color: 'var(--text)',
                       fontSize: '1rem',
                       outline: 'none'
                     }}
                     onFocus={(e) => e.target.style.borderColor = 'var(--primary-color)'}
-                    onBlur={(e) => e.target.style.borderColor = 'rgba(255, 255, 255, 0.15)'}
+                    onBlur={(e) => e.target.style.borderColor = 'var(--border-strong)'}
                   />
                 </div>
 
@@ -865,7 +865,7 @@ const Profile = () => {
             {activeModal === 'location' && (
               <form onSubmit={handleUpdateLocation} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-                  <div style={{ padding: '0.65rem', borderRadius: '12px', background: 'rgba(254, 228, 64, 0.15)', color: '#fee440' }}>
+                  <div style={{ padding: '0.65rem', borderRadius: '12px', background: 'var(--warning-soft)', color: 'var(--warning)' }}>
                     <MapPin size={22} />
                   </div>
                   <div>
@@ -886,14 +886,14 @@ const Profile = () => {
                     style={{
                       padding: '0.85rem 1rem',
                       borderRadius: '12px',
-                      background: 'rgba(255, 255, 255, 0.05)',
-                      border: '1px solid rgba(255, 255, 255, 0.15)',
-                      color: 'white',
+                      background: 'var(--surface-2)',
+                      border: '1px solid var(--border-strong)',
+                      color: 'var(--text)',
                       fontSize: '1rem',
                       outline: 'none'
                     }}
                     onFocus={(e) => e.target.style.borderColor = 'var(--primary-color)'}
-                    onBlur={(e) => e.target.style.borderColor = 'rgba(255, 255, 255, 0.15)'}
+                    onBlur={(e) => e.target.style.borderColor = 'var(--border-strong)'}
                   />
                 </div>
 
@@ -912,7 +912,7 @@ const Profile = () => {
             {activeModal === 'image' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', textAlign: 'center' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem' }}>
-                  <div style={{ padding: '0.65rem', borderRadius: '12px', background: 'rgba(255, 0, 110, 0.15)', color: 'var(--accent-color)' }}>
+                  <div style={{ padding: '0.65rem', borderRadius: '12px', background: 'var(--primary-soft)', color: 'var(--accent-color)' }}>
                     <Camera size={22} />
                   </div>
                   <h3 style={{ margin: 0, fontSize: '1.35rem', fontWeight: '700' }}>Manage Profile Picture</h3>
@@ -924,12 +924,12 @@ const Profile = () => {
                   borderRadius: '50%',
                   margin: '0 auto',
                   overflow: 'hidden',
-                  border: '3px solid rgba(255,255,255,0.2)',
-                  boxShadow: '0 0 20px rgba(123, 44, 191, 0.4)',
+                  border: '3px solid var(--border-strong)',
+                  boxShadow: '0 0 20px color-mix(in srgb, var(--primary) 50%, transparent)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  background: 'rgba(255,255,255,0.05)'
+                  background: 'var(--surface-2)'
                 }}>
                   {user.profileImageUrl ? (
                     <img src={user.profileImageUrl} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -968,9 +968,9 @@ const Profile = () => {
                       style={{
                         borderRadius: '12px',
                         padding: '0.85rem',
-                        background: 'rgba(239, 68, 68, 0.1)',
-                        color: '#f87171',
-                        border: '1px solid rgba(239, 68, 68, 0.3)'
+                        background: 'var(--danger-soft)',
+                        color: 'var(--danger)',
+                        border: '1px solid color-mix(in srgb, var(--danger) 40%, transparent)'
                       }}
                     >
                       <Trash2 size={18} /> Remove Picture
@@ -996,24 +996,24 @@ const Profile = () => {
                   width: '64px',
                   height: '64px',
                   borderRadius: '50%',
-                  background: 'rgba(239, 68, 68, 0.15)',
-                  border: '1px solid rgba(239, 68, 68, 0.3)',
-                  color: '#ef4444',
+                  background: 'var(--danger-soft)',
+                  border: '1px solid color-mix(in srgb, var(--danger) 40%, transparent)',
+                  color: 'var(--danger)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   margin: '0 auto',
-                  boxShadow: '0 0 25px rgba(239, 68, 68, 0.3)'
+                  boxShadow: '0 0 25px color-mix(in srgb, var(--danger) 40%, transparent)'
                 }}>
                   <AlertTriangle size={32} />
                 </div>
 
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '1.45rem', fontWeight: '800', color: '#fff' }}>
+                  <h3 style={{ margin: 0, fontSize: '1.45rem', fontWeight: '800', color: 'var(--text)' }}>
                     Delete Your Account?
                   </h3>
                   <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '0.6rem', lineHeight: '1.5' }}>
-                    Are you sure you want to permanently delete your account? This will erase your profile data and delete your profile picture from Cloudinary. <strong style={{ color: '#f87171' }}>This action cannot be undone.</strong>
+                    Are you sure you want to permanently delete your account? This will erase your profile data and delete your profile picture from Cloudinary. <strong style={{ color: 'var(--danger)' }}>This action cannot be undone.</strong>
                   </p>
                 </div>
 
@@ -1036,11 +1036,11 @@ const Profile = () => {
                       flex: 1.2,
                       borderRadius: '12px',
                       padding: '0.85rem',
-                      background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                      background: 'linear-gradient(135deg, var(--danger), #dc2626)',
                       color: 'white',
                       border: 'none',
                       fontWeight: '700',
-                      boxShadow: '0 4px 15px rgba(239, 68, 68, 0.4)'
+                      boxShadow: '0 4px 15px color-mix(in srgb, var(--danger) 50%, transparent)'
                     }}
                   >
                     {actionLoading ? <Loader2 size={18} className="animate-spin" /> : 'Yes, Delete Account'}

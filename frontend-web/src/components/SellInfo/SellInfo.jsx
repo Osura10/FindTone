@@ -1,56 +1,33 @@
 import React from 'react';
 import { UploadCloud, CheckCircle, TrendingUp, Handshake } from 'lucide-react';
-import './SellInfo.css';
 
 const sellSteps = [
-  {
-    icon: <UploadCloud className="sell-icon" />,
-    title: 'Post a Listing',
-    desc: 'Snap a few photos and add a quick description. Our AI helps auto-fill model details to save you time.'
-  },
-  {
-    icon: <CheckCircle className="sell-icon" />,
-    title: 'AI Verification',
-    desc: 'The Listing Quality & Fair Price Agents review your post to ensure it looks great and is priced right.'
-  },
-  {
-    icon: <TrendingUp className="sell-icon" />,
-    title: 'Get Matched',
-    desc: 'We instantly notify buyers looking for your specific instrument and nearby shops that might want to trade.'
-  },
-  {
-    icon: <Handshake className="sell-icon" />,
-    title: 'Secure the Trade',
-    desc: 'Chat securely, finalize the deal, and rest easy knowing all buyers pass our Trust & Fraud Check.'
-  }
+  { icon: UploadCloud, title: 'Post a listing', desc: 'Snap a few photos and add a quick description. Our AI helps auto-fill model details to save you time.' },
+  { icon: CheckCircle, title: 'AI verification', desc: 'The Listing Quality & Fair Price agents review your post to make sure it looks great and is priced right.' },
+  { icon: TrendingUp, title: 'Get matched', desc: 'Buyers with a matching alert are told straight away, and people who saved it hear about price drops.' },
+  { icon: Handshake, title: 'Close the deal', desc: 'Buyers check out with cash on delivery or card, and you see every sale in your dashboard.' }
 ];
 
-const SellInfo = () => {
-  return (
-    <section className="sell-info-section" id="sell">
-      <div className="container">
-        <div className="sell-header">
-          <h2 className="section-title">How <span className="text-gradient">Selling</span> Works</h2>
-          <p className="section-subtitle">
-            Turn your unused gear into cash or trades seamlessly. Our AI handles the heavy lifting.
-          </p>
-        </div>
-
-        <div className="sell-steps-container">
-          {sellSteps.map((step, index) => (
-            <div key={index} className="sell-step animate-fade-in-up" style={{ animationDelay: `${index * 100}ms` }}>
-              <div className="sell-step-number glass-panel">{index + 1}</div>
-              <div className="sell-icon-wrapper">
-                {step.icon}
-              </div>
-              <h3 className="sell-step-title">{step.title}</h3>
-              <p className="sell-step-desc">{step.desc}</p>
-            </div>
-          ))}
-        </div>
+const SellInfo = () => (
+  <section className="lp-section" id="sell">
+    <div className="lp-container">
+      <div className="lp-section-head">
+        <span className="lp-kicker">Selling</span>
+        <h2 className="lp-h2">How selling works</h2>
+        <p className="lp-lead">Turn unused gear into cash. Our AI handles the heavy lifting.</p>
       </div>
-    </section>
-  );
-};
+      <ol className="lp-steps">
+        {sellSteps.map((step, index) => (
+          <li key={step.title} className="card lp-step">
+            <span className="lp-step-num" aria-hidden="true">{index + 1}</span>
+            <span className="lp-icon"><step.icon size={22} aria-hidden="true" /></span>
+            <h3>{step.title}</h3>
+            <p>{step.desc}</p>
+          </li>
+        ))}
+      </ol>
+    </div>
+  </section>
+);
 
 export default SellInfo;

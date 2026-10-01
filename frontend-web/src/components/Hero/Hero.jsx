@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Sparkles, ArrowRight, Play } from 'lucide-react';
-import './Hero.css';
+import { useNavigate } from 'react-router-dom';
+import { Sparkles, ArrowRight, ShieldCheck, BadgeCheck, Tag } from 'lucide-react';
 
 import img1 from '../../assets/item_01.png';
 import img2 from '../../assets/item_02.png';
@@ -11,6 +11,7 @@ import img5 from '../../assets/item_05.png';
 const images = [img1, img2, img3, img4, img5];
 
 const Hero = () => {
+  const navigate = useNavigate();
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
   useEffect(() => {
@@ -22,63 +23,52 @@ const Hero = () => {
   }, []);
 
   return (
-    <section className="hero" id="browse">
-      <div className="container hero-container">
-        <div className="hero-content">
-          <div className="badge animate-fade-in-up">
-            <Sparkles size={16} className="badge-icon" />
-            <span>AI-Powered Instrument Trading</span>
-          </div>
-          
-          <h1 className="hero-title animate-fade-in-up delay-100">
-            Find Your Perfect Tone <br />
-            <span className="text-gradient-accent">Smarter & Faster</span>
+    <section className="lp-hero" id="browse">
+      <div className="lp-container lp-hero-grid">
+        <div className="lp-hero-copy">
+          <span className="badge badge-primary lp-eyebrow">
+            <Sparkles size={14} aria-hidden="true" /> AI-powered instrument marketplace
+          </span>
+          <h1 className="lp-hero-title">
+            Find your perfect tone, <span className="lp-accent">smarter and safer.</span>
           </h1>
-          
-          <p className="hero-subtitle animate-fade-in-up delay-200">
-            The intelligent marketplace for buying, selling, and renting musical instruments. 
-            Backed by 4 AI Agents to ensure fair prices, quality listings, and secure trades.
+          <p className="lp-hero-sub">
+            Buy and sell musical instruments across Sri Lanka. Four AI agents check every listing for a fair price,
+            real photos and trusted sellers – before it goes live.
           </p>
-          
-          <div className="hero-cta animate-fade-in-up delay-300">
-            <button className="btn btn-primary btn-lg">
-              Start Exploring
-              <ArrowRight size={20} />
+          <div className="row" style={{ gap: 12 }}>
+            <button type="button" className="btn btn-primary btn-lg" onClick={() => navigate('/register')}>
+              Start exploring <ArrowRight size={18} aria-hidden="true" />
             </button>
-            <button className="btn btn-outline btn-lg">
-              <Play size={20} />
-              How it works
-            </button>
+            <a href="#sell" className="btn btn-secondary btn-lg">How it works</a>
           </div>
-
-          <div className="hero-stats animate-fade-in-up delay-300">
-            <div className="stat-item">
-              <span className="stat-number">10k+</span>
-              <span className="stat-label">Instruments</span>
-            </div>
-            <div className="stat-item">
-              <span className="stat-number">4</span>
-              <span className="stat-label">AI Agents</span>
-            </div>
-            <div className="stat-item">
-              <span className="stat-number">100%</span>
-              <span className="stat-label">Secure Trades</span>
-            </div>
-          </div>
+          <ul className="lp-trust-list">
+            <li><ShieldCheck size={16} aria-hidden="true" /> Trust-checked sellers</li>
+            <li><Tag size={16} aria-hidden="true" /> Fair-price verdicts</li>
+            <li><BadgeCheck size={16} aria-hidden="true" /> Cash on delivery</li>
+          </ul>
         </div>
 
-        <div className="hero-visual animate-fade-in-up delay-200">
-
-          
-          <div className="hero-image-wrapper">
+        <div className="lp-hero-visual">
+          <div className="lp-hero-frame">
             {images.map((img, index) => (
               <img
                 key={index}
                 src={img}
-                alt={`Instrument ${index + 1}`}
-                className={`slider-image ${index === currentImageIndex ? 'active' : ''}`}
+                alt={index === currentImageIndex ? 'Instrument for sale on MusicMarket' : ''}
+                aria-hidden={index === currentImageIndex ? undefined : 'true'}
+                className={`lp-slide ${index === currentImageIndex ? 'active' : ''}`}
               />
             ))}
+          </div>
+          <div className="lp-float-card lp-float-1 card">
+            <span className="badge badge-success badge-dot">Fair price</span>
+            <strong>Yamaha F310</strong>
+            <span className="price-tag sm"><span className="currency">LKR</span>33,000</span>
+          </div>
+          <div className="lp-float-card lp-float-2 card">
+            <span className="row" style={{ gap: 6 }}><ShieldCheck size={16} color="var(--success)" aria-hidden="true" /> <strong>Trust 92/100</strong></span>
+            <span className="text-xs muted">Verified by AI in 4s</span>
           </div>
         </div>
       </div>

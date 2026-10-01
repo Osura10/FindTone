@@ -2,8 +2,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { apiCall } from '../../services/api';
 import { useDashboard } from '../../hooks/useDashboard';
-import { ErrorState, Skeleton } from '../../components/ui';
-import { BellPlus, Sparkles, Loader2, Edit2, Trash2, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { Badge, Button, Card, EmptyState, ErrorState, Input, Modal, PageHeader, Skeleton, formatLKR } from '../../components/ui';
+import { BellPlus, Sparkles, Edit2, Trash2, CheckCircle, Clock, Check, Pause, Play, Plus } from 'lucide-react';
 
 const CONDITIONS = [
   { value: 'new', label: 'Brand New' },
@@ -38,6 +38,7 @@ const MyAlerts = () => {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(EMPTY_ALERT);
+  const [confirmDelete, setConfirmDelete] = useState(null); // alert waiting for delete confirmation
 
   const fetchAlerts = useCallback(async () => {
     try {
@@ -187,8 +188,8 @@ const MyAlerts = () => {
     }
   };
 
+  // Called after the user confirms in the dialog.
   const deleteAlert = async (id) => {
-    if (!window.confirm('Delete this alert?')) return;
     try {
       await apiCall(`/alerts/${id}`, { method: 'DELETE' });
       toast.success('Alert deleted');
@@ -216,188 +217,180 @@ const MyAlerts = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  return (
-    <div className="animate-fade-in-up" style={{ padding: '1rem 0 4rem 0', maxWidth: '1000px', margin: '0 auto' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '2rem' }}>
-        <div style={{ padding: '0.5rem', background: 'rgba(255, 0, 110, 0.15)', borderRadius: '10px', color: '#ff006e' }}>
-          <BellPlus size={24} />
-        </div>
-        <h1 className="text-gradient" style={{ fontSize: '2.2rem', margin: 0, fontWeight: '800' }}>My Alerts</h1>
-      </div>
+  const openManualForm = () => { setForm(EMPTY_ALERT); setEditingId(null); setSaveError(''); setShowForm(true); };
+  const setField = (key) => (e) => setForm({ ...form, [key]: e.target.value });
+  const aiField = highlightFields ? 'ai-filled' : '';
 
-      <div className="glass-panel" style={{ padding: '2rem', borderRadius: '20px', marginBottom: '2rem' }}>
-        <h3 style={{ margin: '0 0 1rem 0' }}>Describe what you're looking for</h3>
-        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-          <input
-            type="text"
-            className="input-field"
-            placeholder="e.g. used Yamaha acoustic guitar under 40k in Colombo"
-            value={parseText}
-            onChange={(e) => setParseText(e.target.value)}
-            style={{ flex: 1, minWidth: '250px' }}
-          />
-          <button
-            type="button"
-            data-testid="fill-with-ai"
-            className="btn"
-            onClick={handleParseAi}
-            disabled={aiLoading}
-            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'linear-gradient(45deg, #833ab4, #fd1d1d, #fcb045)', color: '#fff' }}
-          >
-            {aiLoading ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
-            {aiLoading ? 'AI is reading your request...' : '✨ Fill with AI'}
-          </button>
+  return (
+    <div className="page page-narrow">
+      <PageHeader
+        icon={BellPlus}
+        title="My Alerts"
+        subtitle="Tell us what you want – we notify you the moment a matching instrument is listed."
+        actions={!showForm && <Button variant="secondary" icon={Plus} onClick={openManualForm}>New alert</Button>}
+      />
+
+      {/* Describe in plain words → AI fills the form */}
+      <Card className="stack ai-card">
+        <div className="row" style={{ gap: 10, flexWrap: 'nowrap', alignItems: 'flex-start' }}>
+          <span className="page-icon" style={{ width: 38, height: 38 }}><Sparkles size={18} aria-hidden="true" /></span>
+          <div>
+            <h2 className="section-title">Describe what you&apos;re looking for</h2>
+            <p className="text-sm muted">Our AI turns your sentence into alert filters you can check before saving.</p>
+          </div>
+        </div>
+        <div className="row" style={{ gap: 8 }}>
+          <div className="grow" style={{ minWidth: 220 }}>
+            <label htmlFor="ai-text" className="sr-only">Describe the instrument you want</label>
+            <input
+              id="ai-text"
+              type="text"
+              className="input"
+              placeholder="e.g. used Yamaha acoustic guitar under 40k in Colombo"
+              value={parseText}
+              onChange={(e) => setParseText(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleParseAi(); } }}
+            />
+          </div>
+          <Button data-testid="fill-with-ai" icon={Sparkles} loading={aiLoading} onClick={handleParseAi}>
+            {aiLoading ? 'AI is reading your request…' : 'Fill with AI'}
+          </Button>
         </div>
         {!showForm && (
-          <button type="button" className="btn btn-outline" style={{ marginTop: '1rem' }} onClick={() => { setForm(EMPTY_ALERT); setEditingId(null); setSaveError(''); setShowForm(true); }}>
+          <button type="button" className="link-btn" style={{ alignSelf: 'flex-start', fontSize: 'var(--text-sm)' }} onClick={openManualForm}>
             Or create an alert manually
           </button>
         )}
-        {aiError && <p style={{ color: '#ef4444', fontSize: '0.9rem', marginTop: '0.5rem' }}>{aiError}</p>}
-        {aiSuccessNote && <p style={{ color: '#10b981', fontSize: '0.9rem', marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}><CheckCircle size={16} /> {aiSuccessNote}</p>}
-      </div>
+        {aiError && <ErrorState compact message={aiError} />}
+        {aiSuccessNote && <span className="text-sm row" style={{ gap: 6, color: 'var(--success)', fontWeight: 600 }}><CheckCircle size={16} aria-hidden="true" /> {aiSuccessNote} – check the filters below.</span>}
+      </Card>
 
       {showForm && (
-        <form onSubmit={saveAlert} className="glass-panel" style={{ padding: '2rem', borderRadius: '20px', marginBottom: '2rem', transition: 'box-shadow 0.5s', boxShadow: highlightFields ? '0 0 20px rgba(16, 185, 129, 0.4)' : undefined }}>
-          <h3 style={{ margin: '0 0 1.5rem 0' }}>{editingId ? 'Edit Alert' : 'Alert Details'}</h3>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
-            <div>
-              <label htmlFor="a-name" style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>Alert Name</label>
-              <input id="a-name" type="text" className="input-field" placeholder="Made from the filters if empty" style={{ transition: 'border-color 0.5s', borderColor: highlightFields ? '#10b981' : undefined }} value={form.name} onChange={e => setForm({...form, name: e.target.value})} />
-            </div>
-            <div>
-              <label htmlFor="a-category" style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>Category</label>
-              <input id="a-category" type="text" list="alert-categories" placeholder="Any" autoComplete="off" className="input-field" style={{ transition: 'border-color 0.5s', borderColor: highlightFields ? '#10b981' : undefined }} value={form.category} onChange={e => setForm({...form, category: e.target.value})} />
-              <datalist id="alert-categories">{categories.map(c => <option key={c} value={c} />)}</datalist>
-            </div>
-            <div>
-              <label htmlFor="a-brand" style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>Brand</label>
-              <input id="a-brand" type="text" list="alert-brands" placeholder="Any" autoComplete="off" className="input-field" style={{ transition: 'border-color 0.5s', borderColor: highlightFields ? '#10b981' : undefined }} value={form.brand} onChange={e => setForm({...form, brand: e.target.value})} />
-              <datalist id="alert-brands">{brands.map(b => <option key={b} value={b} />)}</datalist>
-            </div>
-            <div>
-              <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>Model / Keyword</label>
-              <input type="text" className="input-field" style={{ transition: 'border-color 0.5s', borderColor: highlightFields ? '#10b981' : undefined }} value={form.modelKeyword} onChange={e => setForm({...form, modelKeyword: e.target.value})} />
-            </div>
-            <div>
-              <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>Min Price (LKR)</label>
-              <input type="number" min="0" className="input-field" style={{ transition: 'border-color 0.5s', borderColor: highlightFields ? '#10b981' : undefined }} value={form.minPrice} onChange={e => setForm({...form, minPrice: e.target.value})} />
-            </div>
-            <div>
-              <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>Max Price (LKR)</label>
-              <input type="number" min="0" className="input-field" style={{ transition: 'border-color 0.5s', borderColor: highlightFields ? '#10b981' : undefined }} value={form.maxPrice} onChange={e => setForm({...form, maxPrice: e.target.value})} />
-            </div>
-            <div>
-              <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>Location</label>
-              <input type="text" className="input-field" style={{ transition: 'border-color 0.5s', borderColor: highlightFields ? '#10b981' : undefined }} value={form.location} onChange={e => setForm({...form, location: e.target.value})} />
-            </div>
+        <Card as="form" onSubmit={saveAlert} className={`stack ${highlightFields ? 'ai-glow' : ''}`} noValidate>
+          <div className="row-between">
+            <h2 className="section-title">{editingId ? 'Edit alert' : 'Alert details'}</h2>
+            <span className="text-xs muted">All filters are optional – set at least one.</span>
           </div>
 
-          <div style={{ marginTop: '1.5rem' }}>
-            <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>Conditions (Any of)</label>
-            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-              {CONDITIONS.map(c => (
-                <label key={c.value} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={form.conditions.includes(c.value)}
-                    onChange={(e) => {
-                      if (e.target.checked) setForm({...form, conditions: [...form.conditions, c.value]});
-                      else setForm({...form, conditions: form.conditions.filter(x => x !== c.value)});
-                    }}
-                  />
-                  {c.label}
-                </label>
-              ))}
-            </div>
+          <div className="form-grid">
+            <Input id="a-name" label="Alert name" placeholder="Made from the filters if empty" value={form.name} onChange={setField('name')} fieldClassName={`span-2 ${aiField}`} />
+            <Input id="a-category" label="Category" list="alert-categories" placeholder="Any" autoComplete="off" value={form.category} onChange={setField('category')} fieldClassName={aiField} />
+            <datalist id="alert-categories">{categories.map(c => <option key={c} value={c} />)}</datalist>
+            <Input id="a-brand" label="Brand" list="alert-brands" placeholder="Any" autoComplete="off" value={form.brand} onChange={setField('brand')} fieldClassName={aiField} />
+            <datalist id="alert-brands">{brands.map(b => <option key={b} value={b} />)}</datalist>
+            <Input label="Model / keyword" placeholder="e.g. F310" value={form.modelKeyword} onChange={setField('modelKeyword')} fieldClassName={aiField} />
+            <Input label="Location" placeholder="Anywhere" value={form.location} onChange={setField('location')} fieldClassName={aiField} />
+            <Input label="Min price (LKR)" type="number" min="0" placeholder="0" value={form.minPrice} onChange={setField('minPrice')} fieldClassName={aiField} />
+            <Input label="Max price (LKR)" type="number" min="0" placeholder="No limit" value={form.maxPrice} onChange={setField('maxPrice')} fieldClassName={aiField} />
           </div>
 
-          {catalogError && <p style={{ color: '#ffd43b', fontSize: '0.85rem' }}>{catalogError}</p>}
-          {saveError && <div style={{ marginTop: '1rem' }}><ErrorState compact message={saveError} /></div>}
-          <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem' }}>
-            <button type="button" className="btn btn-outline" onClick={() => { setShowForm(false); setEditingId(null); setForm(EMPTY_ALERT); setSaveError(''); }} disabled={saving}>Cancel</button>
-            <button type="submit" className="btn btn-primary" data-testid="save-alert" disabled={saving}>{saving ? 'Saving...' : 'Save Alert'}</button>
+          <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
+            <legend className="field-label" style={{ marginBottom: 8 }}>Conditions (any of)</legend>
+            <div className="row" style={{ gap: 8 }}>
+              {CONDITIONS.map(c => {
+                const on = form.conditions.includes(c.value);
+                return (
+                  <label key={c.value} className={`toggle-chip ${on ? 'on' : ''}`}>
+                    <input
+                      type="checkbox"
+                      className="sr-only"
+                      checked={on}
+                      onChange={(e) => {
+                        if (e.target.checked) setForm({ ...form, conditions: [...form.conditions, c.value] });
+                        else setForm({ ...form, conditions: form.conditions.filter(x => x !== c.value) });
+                      }}
+                    />
+                    {on && <Check size={13} aria-hidden="true" />} {c.label}
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
+
+          {catalogError && <div className="alert alert-warning">{catalogError}</div>}
+          {saveError && <ErrorState compact message={saveError} />}
+          <div className="row" style={{ justifyContent: 'flex-end', gap: 8 }}>
+            <Button variant="secondary" onClick={() => { setShowForm(false); setEditingId(null); setForm(EMPTY_ALERT); setSaveError(''); }} disabled={saving}>Cancel</Button>
+            <Button type="submit" data-testid="save-alert" icon={BellPlus} loading={saving}>{saving ? 'Saving…' : editingId ? 'Save changes' : 'Save alert'}</Button>
           </div>
-        </form>
+        </Card>
       )}
+
+      <div className="row-between">
+        <h2 className="section-title">Your alerts{!loading && alerts.length > 0 ? ` (${alerts.length})` : ''}</h2>
+      </div>
 
       {loadError && <ErrorState compact message={loadError} onRetry={() => { setLoading(true); fetchAlerts(); }} />}
 
       {loading ? (
-        <div style={{ display: 'grid', gap: '1.5rem' }}>
-          {Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} height="130px" borderRadius="20px" />)}
+        <div className="stack-sm" aria-busy="true" aria-label="Loading alerts">
+          {Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} height="120px" radius="var(--radius-lg)" />)}
         </div>
       ) : alerts.length === 0 && !loadError ? (
-        <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center', borderRadius: '20px' }}>
-          <BellPlus size={48} style={{ opacity: 0.3, margin: '0 auto 1rem' }} />
-          <h3 style={{ color: 'var(--text-secondary)' }}>You don't have any alerts yet.</h3>
-          {!showForm && <button className="btn btn-primary" onClick={() => { setForm(EMPTY_ALERT); setEditingId(null); setShowForm(true); }} style={{ marginTop: '1rem' }}>Create Alert manually</button>}
-        </div>
+        <Card>
+          <EmptyState
+            icon={BellPlus}
+            title="You don't have any alerts yet"
+            description="Describe what you want above, or set the filters yourself."
+            action={!showForm && <Button onClick={openManualForm}>Create an alert manually</Button>}
+          />
+        </Card>
       ) : (
-        <div style={{ display: 'grid', gap: '1.5rem' }}>
+        <div className="stack-sm">
           {alerts.map(alert => (
-            <div key={alert.id} className="glass-panel" style={{ padding: '1.5rem', borderRadius: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', opacity: alert.isActive ? 1 : 0.6 }}>
-              <div>
-                <h3 style={{ margin: '0 0 0.5rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  {alert.name} {!alert.isActive && <span style={{ fontSize: '0.7rem', background: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: '10px' }}>INACTIVE</span>}
-                </h3>
-
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '1rem' }}>
+            <Card key={alert.id} className={`alert-item ${alert.isActive ? '' : 'paused'}`}>
+              <div className="stack-sm grow" style={{ minWidth: 0, gap: 8 }}>
+                <div className="row" style={{ gap: 8 }}>
+                  <h3 style={{ fontSize: 'var(--text-base)', fontWeight: 700 }}>{alert.name}</h3>
+                  <Badge variant={alert.isActive ? 'success' : 'neutral'} dot>{alert.isActive ? 'Active' : 'Paused'}</Badge>
+                </div>
+                <div className="row" style={{ gap: 6 }}>
                   {alert.category && <span className="chip">Category: {alert.category}</span>}
                   {alert.brand && <span className="chip">Brand: {alert.brand}</span>}
                   {alert.modelKeyword && <span className="chip">Keyword: {alert.modelKeyword}</span>}
-                  {alert.minPrice != null && <span className="chip">Min LKR {alert.minPrice.toLocaleString()}</span>}
-                  {alert.maxPrice != null && <span className="chip">Max LKR {alert.maxPrice.toLocaleString()}</span>}
+                  {alert.minPrice != null && <span className="chip">Min {formatLKR(alert.minPrice)}</span>}
+                  {alert.maxPrice != null && <span className="chip">Max {formatLKR(alert.maxPrice)}</span>}
                   {alert.location && <span className="chip">Location: {alert.location}</span>}
-                  {alert.conditions && <span className="chip">Conditions: {alert.conditions.split(',').join(', ')}</span>}
+                  {alert.conditions && <span className="chip cap">Conditions: {alert.conditions.split(',').map((c) => c.replace('_', ' ')).join(', ')}</span>}
                 </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '1rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                  <Clock size={14} />
-                  Last notified: {alert.lastNotifiedAt ? new Date(alert.lastNotifiedAt).toLocaleString() : 'Never'}
-                </div>
+                <span className="text-xs muted row" style={{ gap: 6 }}>
+                  <Clock size={13} aria-hidden="true" />
+                  Last notified: {alert.lastNotifiedAt ? new Date(alert.lastNotifiedAt).toLocaleString() : 'never'}
+                </span>
               </div>
 
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button
-                  className="btn btn-outline"
+              <div className="row alert-actions" style={{ gap: 6 }}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={alert.isActive ? Pause : Play}
                   onClick={() => toggleAlert(alert.id, alert.isActive)}
-                  style={{ padding: '0.5rem' }}
-                  title={alert.isActive ? "Pause alert" : "Resume alert"}
+                  title={alert.isActive ? 'Pause alert' : 'Resume alert'}
                 >
-                  {alert.isActive ? <XCircle size={18} /> : <CheckCircle size={18} />}
-                </button>
-                <button
-                  className="btn btn-outline"
-                  onClick={() => handleEdit(alert)}
-                  style={{ padding: '0.5rem' }}
-                >
-                  <Edit2 size={18} />
-                </button>
-                <button
-                  className="btn btn-outline"
-                  onClick={() => deleteAlert(alert.id)}
-                  style={{ padding: '0.5rem', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.3)' }}
-                >
-                  <Trash2 size={18} />
-                </button>
+                  {alert.isActive ? 'Pause' : 'Resume'}
+                </Button>
+                <Button variant="secondary" size="sm" icon={Edit2} iconOnly aria-label="Edit alert" title="Edit alert" onClick={() => handleEdit(alert)} />
+                <Button variant="danger-outline" size="sm" icon={Trash2} iconOnly aria-label="Delete alert" title="Delete alert" onClick={() => setConfirmDelete(alert)} />
               </div>
-            </div>
+            </Card>
           ))}
         </div>
       )}
 
-      <style>{`
-        .chip {
-          background: rgba(255, 255, 255, 0.1);
-          border: 1px solid rgba(255, 255, 255, 0.15);
-          border-radius: 12px;
-          padding: 4px 10px;
-          font-size: 0.8rem;
-          color: rgba(255, 255, 255, 0.9);
+      <Modal
+        isOpen={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        title="Delete this alert?"
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setConfirmDelete(null)}>Cancel</Button>
+            <Button variant="danger" onClick={() => { const id = confirmDelete.id; setConfirmDelete(null); deleteAlert(id); }}>Delete</Button>
+          </>
         }
-      `}</style>
+      >
+        <p>“<strong>{confirmDelete?.name}</strong>” will stop sending you notifications.</p>
+      </Modal>
     </div>
   );
 };

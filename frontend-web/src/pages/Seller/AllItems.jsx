@@ -1,53 +1,19 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { Search, Package, PlusCircle, RefreshCw, ShoppingBag, Store, Heart, Edit2, XCircle, MapPin, Trash2, AlertTriangle, SlidersHorizontal } from 'lucide-react';
-import { MapContainer, TileLayer, Marker } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-import icon from 'leaflet/dist/images/marker-icon.png';
-import iconShadow from 'leaflet/dist/images/marker-shadow.png';
+import { Search, Package, PlusCircle, RefreshCw, ShoppingBag, Store, Heart, Edit2, MapPin, Trash2, AlertTriangle, SlidersHorizontal, Tag } from 'lucide-react';
 import { apiCall } from '../../services/api';
 import { useDashboard, isAdminUser } from '../../hooks/useDashboard';
-import { ErrorState, Skeleton } from '../../components/ui';
-
-L.Marker.prototype.options.icon = L.icon({ iconUrl: icon, shadowUrl: iconShadow, iconSize: [25, 41], iconAnchor: [12, 41] });
+import {
+  Button, Card, EmptyState, ErrorState, Input, Modal, PageHeader, PriceTag, Select, Skeleton,
+  StatusBadge, Tabs, TrustBadge, VerdictBadge, formatLKR, verdictInfo
+} from '../../components/ui';
 
 const PAGE_SIZE = 12;
 const CONDITIONS = ['new', 'like_new', 'excellent', 'good', 'fair', 'poor', 'for_parts'];
 const EMPTY_FILTERS = { q: '', category: '', brand: '', condition: '', minPrice: '', maxPrice: '' };
-
-const STATUS_BADGES = {
-  LIVE: { bg: 'rgba(81, 207, 102, 0.2)', color: '#51cf66', border: 'rgba(81, 207, 102, 0.4)', label: 'LIVE' },
-  PENDING: { bg: 'rgba(245, 158, 11, 0.2)', color: '#f59e0b', border: 'rgba(245, 158, 11, 0.4)', label: 'PENDING' },
-  FLAGGED: { bg: 'rgba(255, 146, 43, 0.2)', color: '#ff922b', border: 'rgba(255, 146, 43, 0.4)', label: 'Under Review' },
-  REJECTED: { bg: 'rgba(255, 107, 107, 0.2)', color: '#ff6b6b', border: 'rgba(255, 107, 107, 0.4)', label: 'REJECTED' },
-  SOLD: { bg: 'rgba(134, 142, 150, 0.2)', color: '#adb5bd', border: 'rgba(134, 142, 150, 0.4)', label: 'SOLD' }
-};
-
-const VERDICT_BADGES = {
-  SUSPICIOUSLY_LOW: { bg: 'rgba(255,107,107,0.2)', color: '#ff6b6b', border: 'rgba(255,107,107,0.4)', label: 'Suspiciously low' },
-  GREAT_DEAL: { bg: 'rgba(81,207,102,0.2)', color: '#51cf66', border: 'rgba(81,207,102,0.4)', label: 'Great deal' },
-  FAIR: { bg: 'rgba(81,207,102,0.2)', color: '#51cf66', border: 'rgba(81,207,102,0.4)', label: 'Fair price' },
-  SLIGHTLY_HIGH: { bg: 'rgba(255,212,59,0.2)', color: '#ffd43b', border: 'rgba(255,212,59,0.4)', label: 'Slightly high' },
-  OVERPRICED: { bg: 'rgba(255,107,107,0.2)', color: '#ff6b6b', border: 'rgba(255,107,107,0.4)', label: 'Overpriced' },
-  UNKNOWN: { bg: 'rgba(134,142,150,0.2)', color: '#adb5bd', border: 'rgba(134,142,150,0.4)', label: 'No price data' }
-};
-
-const trustBadge = (score) => {
-  if (score == null) return { bg: 'rgba(134,142,150,0.2)', color: '#adb5bd', border: 'rgba(134,142,150,0.4)', label: 'Not checked' };
-  if (score < 40) return { bg: 'rgba(239,68,68,0.2)', color: '#ef4444', border: 'rgba(239,68,68,0.4)', label: `Trust ${score}/100` };
-  if (score < 70) return { bg: 'rgba(245,158,11,0.2)', color: '#f59e0b', border: 'rgba(245,158,11,0.4)', label: `Trust ${score}/100 ⚠` };
-  return { bg: 'rgba(16,185,129,0.2)', color: '#10b981', border: 'rgba(16,185,129,0.4)', label: `Trust ${score}/100` };
-};
-
-const fmtLkr = (n) => (n != null ? `LKR ${Math.round(n).toLocaleString()}` : '');
-
-const Badge = ({ style, children }) => (
-  <div style={{ background: style.bg, color: style.color, border: `1px solid ${style.border}`, padding: '0.25rem 0.75rem', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 700 }}>
-    {children ?? style.label}
-  </div>
-);
+const PLACEHOLDER = 'https://placehold.co/400x300?text=No+Photo';
+const prettyCondition = (c) => (c ? c.replace('_', ' ') : '');
 
 const AllItems = () => {
   const navigate = useNavigate();
@@ -56,15 +22,17 @@ const AllItems = () => {
   const { currentUser } = useDashboard();
   const isAdmin = isAdminUser(currentUser);
   const activeTab = !isAdmin && searchParams.get('tab') === 'mine' ? 'mine' : 'marketplace';
+  const urlQuery = searchParams.get('q') || '';
 
   const [items, setItems] = useState([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [filters, setFilters] = useState(EMPTY_FILTERS);
-  const [appliedFilters, setAppliedFilters] = useState(EMPTY_FILTERS);
-  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState({ ...EMPTY_FILTERS, q: urlQuery });
+  const [appliedFilters, setAppliedFilters] = useState({ ...EMPTY_FILTERS, q: urlQuery });
+  const [showFilters, setShowFilters] = useState(false); // only matters on small screens
   const [mineSearch, setMineSearch] = useState('');
   const [wishlist, setWishlist] = useState([]);
   const [priceModal, setPriceModal] = useState(null);   // { listingId, currentPrice, newPrice, saving }
@@ -81,6 +49,7 @@ const AllItems = () => {
       setItems((prev) => (pageToLoad === 1 ? data.items : [...prev, ...data.items]));
       setPage(pageToLoad);
       setTotalPages(data.totalPages || 1);
+      setTotalCount(data.totalCount ?? null);
       setError('');
     } catch (err) {
       setError(err.message || 'Unable to load marketplace listings.');
@@ -123,6 +92,13 @@ const AllItems = () => {
     reload();
   }, [reload, location.key]);
 
+  // The navbar search sends "?q=..." – copy it into the search box and run the search.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setFilters((f) => (f.q === urlQuery ? f : { ...f, q: urlQuery }));
+    setAppliedFilters((f) => (f.q === urlQuery ? f : { ...f, q: urlQuery }));
+  }, [urlQuery]);
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (currentUser && !isAdmin) loadWishlist();
@@ -139,11 +115,13 @@ const AllItems = () => {
       return;
     }
     setAppliedFilters({ ...filters });
+    setShowFilters(false);
   };
 
   const clearFilters = () => {
     setFilters(EMPTY_FILTERS);
     setAppliedFilters(EMPTY_FILTERS);
+    if (urlQuery) setSearchParams({});
   };
 
   const toggleWishlist = async (listingId, e) => {
@@ -167,7 +145,7 @@ const AllItems = () => {
     setPriceModal((p) => ({ ...p, saving: true, error: '' }));
     try {
       const dto = await apiCall(`/listings/${priceModal.listingId}/price`, { method: 'PUT', body: JSON.stringify({ newPrice }) });
-      toast.success(`Price updated to ${fmtLkr(dto.price)}. Status: ${dto.status}${dto.priceVerdict ? ` · ${(VERDICT_BADGES[dto.priceVerdict] || VERDICT_BADGES.UNKNOWN).label}` : ''}`, { duration: 6000 });
+      toast.success(`Price updated to ${formatLKR(dto.price)}. Status: ${dto.status}${dto.priceVerdict ? ` · ${verdictInfo(dto.priceVerdict).label}` : ''}`, { duration: 6000 });
       setPriceModal(null);
       reload();
     } catch (err) {
@@ -194,248 +172,310 @@ const AllItems = () => {
     ? items.filter((i) => [i.title, i.brand, i.model, i.category].some((v) => v?.toLowerCase().includes(mineSearch.trim().toLowerCase())))
     : items;
 
-  const showAi = activeTab === 'mine' || isAdmin; // trust/verdict only for the owner and admins
-  const filterInput = { padding: '0.6rem 0.8rem', borderRadius: '8px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.25)', color: '#fff', width: '100%', boxSizing: 'border-box' };
+  const activeFilterCount = Object.entries(appliedFilters).filter(([k, v]) => k !== 'q' && String(v).trim() !== '').length;
+  const setFilter = (key) => (e) => setFilters({ ...filters, [key]: e.target.value });
+
+  // ── Pieces ─────────────────────────────────────────────────────────────────
+
+  const listingCard = (item) => {
+    const isOwn = currentUser && item.sellerId === currentUser.id;
+    const sold = item.status === 'SOLD';
+    const saved = wishlist.includes(item.id);
+    return (
+      <article
+        key={item.id}
+        data-testid={`listing-card-${item.id}`}
+        className={`card card-hover listing-card ${sold ? 'is-sold' : ''}`}
+        onClick={() => navigate(`/dashboard/listings/${item.id}`)}
+      >
+        <div className="listing-media">
+          <img src={item.firstImageUrl || PLACEHOLDER} alt={item.title} loading="lazy" />
+          {sold && <span className="sold-ribbon">SOLD OUT</span>}
+          <div className="overlay-top">
+            <div className="row" style={{ gap: 6 }}>
+              {item.condition && <span className="badge badge-neutral media-badge">{prettyCondition(item.condition)}</span>}
+              {isOwn && <span className="badge badge-primary media-badge">Your listing</span>}
+            </div>
+            {/* Wishlist heart: not for admins, not on your own listing */}
+            {currentUser && !isAdmin && !isOwn && item.status === 'LIVE' && (
+              <button
+                type="button"
+                className={`heart-btn ${saved ? 'on' : ''}`}
+                aria-label={saved ? 'Remove from wishlist' : 'Add to wishlist'}
+                aria-pressed={saved}
+                data-testid={`wishlist-${item.id}`}
+                onClick={(e) => toggleWishlist(item.id, e)}
+              >
+                <Heart size={17} fill={saved ? 'currentColor' : 'none'} />
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="listing-body">
+          <span className="text-xs muted truncate" style={{ textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            {[item.category, item.brand].filter(Boolean).join(' · ')}
+          </span>
+          <h3 className="listing-title" title={item.title}>{item.title}</h3>
+          <div className="row-between" style={{ marginTop: 'auto', paddingTop: 6, alignItems: 'baseline' }}>
+            <PriceTag amount={item.price} size="md" />
+            {item.listingType && item.listingType !== 'Sell' && <span className="text-xs muted">{item.listingType}</span>}
+          </div>
+          {item.location && (
+            <span className="listing-meta"><MapPin size={12} aria-hidden="true" /><span className="truncate">{item.location}</span></span>
+          )}
+          {isAdmin && (
+            <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+              <StatusBadge status={item.status} />
+              <TrustBadge score={item.trustScore} />
+              {item.priceVerdict && <VerdictBadge verdict={item.priceVerdict} />}
+            </div>
+          )}
+        </div>
+      </article>
+    );
+  };
+
+  // Owner row: status, trust, verdict and actions – only the seller (and admins) see these.
+  const ownerRow = (item) => {
+    const sold = item.status === 'SOLD';
+    return (
+      <article key={item.id} data-testid={`listing-card-${item.id}`} className="card owner-item" onClick={() => navigate(`/dashboard/listings/${item.id}`)}>
+        <div className="owner-thumb">
+          <img src={item.firstImageUrl || PLACEHOLDER} alt="" loading="lazy" />
+        </div>
+        <div className="owner-info">
+          <h3 className="listing-title" title={item.title}>{item.title}</h3>
+          <span className="text-xs muted truncate">{[item.category, item.brand, item.model].filter(Boolean).join(' · ')}</span>
+          <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+            <StatusBadge status={item.status} />
+            <TrustBadge score={item.trustScore} />
+            {item.priceVerdict && <VerdictBadge verdict={item.priceVerdict} />}
+          </div>
+          {item.trustScore != null && item.trustScore >= 40 && item.trustScore < 70 && (
+            <span className="text-xs row" style={{ gap: 4, color: 'var(--warning)' }}><AlertTriangle size={12} aria-hidden="true" /> Live with a low-trust warning</span>
+          )}
+        </div>
+        <div className="owner-price">
+          <PriceTag amount={item.price} size="md" />
+          {item.fairPriceMin != null && item.fairPriceMax != null && (
+            <span className="text-xs muted">Fair: {formatLKR(item.fairPriceMin)} – {formatLKR(item.fairPriceMax)}</span>
+          )}
+        </div>
+        <div className="owner-actions" onClick={(e) => e.stopPropagation()}>
+          {sold ? (
+            <span className="text-sm muted">Sold items cannot be edited.</span>
+          ) : (
+            <>
+              <Button variant="secondary" size="sm" icon={Edit2} data-testid={`edit-${item.id}`} onClick={() => navigate(`/dashboard/edit/${item.id}`)}>Edit</Button>
+              <Button variant="secondary" size="sm" icon={Tag} onClick={() => setPriceModal({ listingId: item.id, currentPrice: item.price, newPrice: String(item.price), saving: false, error: '' })}>Price</Button>
+              <Button variant="danger-outline" size="sm" icon={Trash2} iconOnly aria-label="Delete listing" onClick={() => setDeleteTarget(item)} />
+            </>
+          )}
+        </div>
+      </article>
+    );
+  };
+
+  const filterPanel = (
+    <aside className={`filter-panel ${showFilters ? '' : 'closed'}`} aria-label="Filters">
+      <Card as="form" onSubmit={applyFilters} className="stack">
+        <div className="row-between">
+          <h2 className="section-title" style={{ fontSize: 'var(--text-base)' }}>Filters</h2>
+          {activeFilterCount > 0 && <Button variant="ghost" size="sm" onClick={clearFilters}>Clear all</Button>}
+        </div>
+        <Input label="Category" placeholder="e.g. Acoustic Guitar" value={filters.category} onChange={setFilter('category')} />
+        <Input label="Brand" placeholder="e.g. Yamaha" value={filters.brand} onChange={setFilter('brand')} />
+        <Select
+          label="Condition"
+          value={filters.condition}
+          onChange={setFilter('condition')}
+          placeholder="Any condition"
+          options={CONDITIONS.map((c) => ({ value: c, label: prettyCondition(c) }))}
+        />
+        <div className="field">
+          <span className="field-label">Price (LKR)</span>
+          <div className="range-row">
+            <input className="input" type="number" min="0" placeholder="Min" value={filters.minPrice} onChange={setFilter('minPrice')} aria-label="Minimum price" />
+            <span className="muted" aria-hidden="true">–</span>
+            <input className="input" type="number" min="0" placeholder="Max" value={filters.maxPrice} onChange={setFilter('maxPrice')} aria-label="Maximum price" />
+          </div>
+        </div>
+        <div className="row" style={{ gap: 8 }}>
+          <Button type="submit" block>Apply filters</Button>
+          <Button variant="secondary" onClick={clearFilters}>Clear</Button>
+        </div>
+      </Card>
+    </aside>
+  );
+
+  const skeletonGrid = (
+    <div className="listing-grid" aria-busy="true" aria-label="Loading listings">
+      {Array.from({ length: 8 }).map((_, i) => (
+        <div key={i} className="card listing-card">
+          <Skeleton height="auto" style={{ aspectRatio: '4 / 3' }} radius="0" />
+          <div className="listing-body"><Skeleton width="50%" height="10px" /><Skeleton width="90%" /><Skeleton width="40%" height="20px" /></div>
+        </div>
+      ))}
+    </div>
+  );
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="animate-fade-in-up" style={{ padding: '1rem 0', maxWidth: '1200px', margin: '0 auto' }}>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '2rem', gap: '1.25rem' }}>
-        <h1 className="text-gradient" style={{ fontSize: '2.5rem', margin: 0, fontWeight: '800' }}>
-          {activeTab === 'mine' ? 'My Listings' : 'Marketplace'}
-        </h1>
-        <p style={{ color: 'var(--text-secondary)', margin: 0, textAlign: 'center' }}>
-          {activeTab === 'mine' ? 'Status, trust score and fair-price verdict of your listings (only you can see these)' : 'Browse instruments from sellers across Sri Lanka'}
-        </p>
+    <div className="page">
+      <PageHeader
+        title={activeTab === 'mine' ? 'My Listings' : isAdmin ? 'All listings' : 'Marketplace'}
+        subtitle={activeTab === 'mine'
+          ? 'Status, trust score and fair-price verdict of your listings – only you can see these.'
+          : 'Browse instruments from sellers across Sri Lanka'}
+        actions={
+          <>
+            <Button variant="secondary" icon={RefreshCw} onClick={reload} loading={loading} aria-label="Refresh listings">
+              <span className="hide-sm">Refresh</span>
+            </Button>
+            {!isAdmin && <Button icon={PlusCircle} onClick={() => navigate('/dashboard/create')}>Sell an instrument</Button>}
+          </>
+        }
+      />
 
-        {!isAdmin && (
-          <div role="tablist" style={{ display: 'flex', gap: '0.5rem', background: 'rgba(0,0,0,0.3)', padding: '0.4rem', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.1)' }}>
-            <button role="tab" aria-selected={activeTab === 'marketplace'} onClick={() => setTab('marketplace')}
-              className={`btn ${activeTab === 'marketplace' ? 'btn-primary' : ''}`} style={activeTab === 'marketplace' ? {} : { background: 'transparent', color: 'var(--text-secondary)' }}>
-              <ShoppingBag size={16} /> Marketplace
-            </button>
-            <button role="tab" aria-selected={activeTab === 'mine'} onClick={() => setTab('mine')}
-              className={`btn ${activeTab === 'mine' ? 'btn-primary' : ''}`} style={activeTab === 'mine' ? {} : { background: 'transparent', color: 'var(--text-secondary)' }}>
-              <Store size={16} /> My Listings
-            </button>
-          </div>
-        )}
-
-        {/* Search */}
-        <form onSubmit={applyFilters} style={{ display: 'flex', gap: '12px', width: '100%', maxWidth: '700px' }}>
-          <div className="glass-panel" style={{ display: 'flex', alignItems: 'center', padding: '0.75rem 1.5rem', flex: 1, borderRadius: '30px' }}>
-            <Search size={22} style={{ color: 'var(--text-secondary)', marginRight: '1rem' }} />
-            {activeTab === 'mine' ? (
-              <input type="text" placeholder="Search my listings..." value={mineSearch} onChange={(e) => setMineSearch(e.target.value)} aria-label="Search my listings"
-                style={{ background: 'transparent', border: 'none', color: 'white', outline: 'none', width: '100%', fontSize: '1rem' }} />
-            ) : (
-              <input type="text" placeholder="Search title, brand, model or category..." value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} aria-label="Search marketplace"
-                style={{ background: 'transparent', border: 'none', color: 'white', outline: 'none', width: '100%', fontSize: '1rem' }} />
-            )}
-          </div>
-          {activeTab === 'marketplace' && (
-            <>
-              <button type="submit" className="btn btn-primary" style={{ borderRadius: '30px' }}>Search</button>
-              <button type="button" title="Filters" aria-label="Filters" onClick={() => setShowFilters((v) => !v)} className="btn btn-outline" style={{ borderRadius: '50%', width: '48px', height: '48px', padding: 0, justifyContent: 'center' }}>
-                <SlidersHorizontal size={18} />
-              </button>
-            </>
-          )}
-          <button type="button" onClick={reload} title="Refresh listings" aria-label="Refresh listings" className="btn btn-outline" style={{ borderRadius: '50%', width: '48px', height: '48px', padding: 0, justifyContent: 'center' }}>
-            <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
-          </button>
-        </form>
-
-        {activeTab === 'marketplace' && showFilters && (
-          <form onSubmit={applyFilters} className="glass-panel" style={{ width: '100%', maxWidth: '700px', padding: '1rem', borderRadius: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.75rem' }}>
-            <input style={filterInput} placeholder="Category" value={filters.category} onChange={(e) => setFilters({ ...filters, category: e.target.value })} aria-label="Category filter" />
-            <input style={filterInput} placeholder="Brand" value={filters.brand} onChange={(e) => setFilters({ ...filters, brand: e.target.value })} aria-label="Brand filter" />
-            <select style={{ ...filterInput, background: '#1f1b2e' }} value={filters.condition} onChange={(e) => setFilters({ ...filters, condition: e.target.value })} aria-label="Condition filter">
-              <option value="">Any condition</option>
-              {CONDITIONS.map((c) => <option key={c} value={c}>{c.replace('_', ' ')}</option>)}
-            </select>
-            <input style={filterInput} type="number" min="0" placeholder="Min LKR" value={filters.minPrice} onChange={(e) => setFilters({ ...filters, minPrice: e.target.value })} aria-label="Minimum price" />
-            <input style={filterInput} type="number" min="0" placeholder="Max LKR" value={filters.maxPrice} onChange={(e) => setFilters({ ...filters, maxPrice: e.target.value })} aria-label="Maximum price" />
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>Apply</button>
-              <button type="button" className="btn btn-outline" onClick={clearFilters}>Clear</button>
-            </div>
-          </form>
-        )}
-      </div>
-
-      {error && <ErrorState compact message={error} onRetry={reload} />}
-
-      {loading && items.length === 0 ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '1.5rem' }}>
-          {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} height="320px" borderRadius="14px" />)}
-        </div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '1.5rem' }}>
-          {visibleItems.map((item) => {
-            const isOwn = currentUser && item.sellerId === currentUser.id;
-            const status = STATUS_BADGES[item.status] || { bg: 'rgba(255,255,255,0.1)', color: '#fff', border: 'rgba(255,255,255,0.2)', label: item.status };
-            const verdict = item.priceVerdict ? (VERDICT_BADGES[item.priceVerdict] || VERDICT_BADGES.UNKNOWN) : null;
-            return (
-              <div key={item.id} data-testid={`listing-card-${item.id}`} className="glass-panel"
-                style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.15)', cursor: 'pointer' }}
-                onClick={() => navigate(`/dashboard/listings/${item.id}`)}>
-                <div style={{ height: '180px', width: '100%', overflow: 'hidden', position: 'relative', background: '#111' }}>
-                  <img src={item.firstImageUrl || 'https://placehold.co/400x300?text=No+Photo'} alt={item.title}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover', filter: item.status === 'SOLD' ? 'grayscale(100%)' : 'none' }} />
-                  {item.status === 'SOLD' && (
-                    <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%) rotate(-15deg)', background: 'rgba(239, 68, 68, 0.9)', color: '#fff', padding: '6px 20px', fontSize: '1.2rem', fontWeight: '900', border: '2px solid #fff', borderRadius: '6px' }}>
-                      SOLD
-                    </div>
-                  )}
-
-                  {/* Wishlist heart: not for admins, not on your own listing */}
-                  {currentUser && !isAdmin && !isOwn && activeTab === 'marketplace' && item.status === 'LIVE' && (
-                    <button type="button" aria-label={wishlist.includes(item.id) ? 'Remove from wishlist' : 'Add to wishlist'} data-testid={`wishlist-${item.id}`}
-                      onClick={(e) => toggleWishlist(item.id, e)}
-                      style={{ position: 'absolute', top: '10px', left: '10px', background: 'rgba(0,0,0,0.5)', border: 'none', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: wishlist.includes(item.id) ? '#ff006e' : '#fff', cursor: 'pointer' }}>
-                      <Heart size={18} fill={wishlist.includes(item.id) ? '#ff006e' : 'none'} />
-                    </button>
-                  )}
-
-                  <div style={{ position: 'absolute', top: '10px', right: '10px', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                    {(activeTab === 'mine' || isAdmin) && <Badge style={status} />}
-                    {showAi && <Badge style={trustBadge(item.trustScore)} />}
-                    {showAi && verdict && <Badge style={verdict} />}
-                  </div>
-
-                  {item.condition && (
-                    <div style={{ position: 'absolute', bottom: '10px', left: '10px', background: 'rgba(0,0,0,0.75)', color: '#fff', padding: '0.2rem 0.6rem', borderRadius: '6px', fontSize: '0.75rem' }}>
-                      {item.condition.replace('_', ' ')}
-                    </div>
-                  )}
-                  {isOwn && activeTab === 'marketplace' && (
-                    <div style={{ position: 'absolute', bottom: '10px', right: '10px', background: 'rgba(168,85,247,0.85)', color: '#fff', padding: '0.2rem 0.6rem', borderRadius: '6px', fontSize: '0.75rem' }}>Your listing</div>
-                  )}
-                </div>
-
-                <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: 1 }}>
-                  <div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                    {item.category} • {item.brand}
-                  </div>
-                  <h3 style={{ fontSize: '1.1rem', margin: 0, fontWeight: '600', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.title}>
-                    {item.title}
-                  </h3>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 'auto', paddingTop: '0.5rem' }}>
-                    <p style={{ color: 'var(--primary-hover, #a855f7)', fontSize: '1.2rem', fontWeight: '800', margin: 0 }}>{fmtLkr(item.price)}</p>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{item.listingType || 'Sell'}</span>
-                  </div>
-                  {showAi && item.fairPriceMin != null && item.fairPriceMax != null && (
-                    <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Fair: {fmtLkr(item.fairPriceMin)} – {fmtLkr(item.fairPriceMax)}</div>
-                  )}
-                  {activeTab === 'mine' && item.trustScore != null && item.trustScore >= 40 && item.trustScore < 70 && (
-                    <div style={{ fontSize: '0.78rem', color: '#f59e0b', display: 'flex', gap: '4px', alignItems: 'center' }}><AlertTriangle size={12} /> Live with a low-trust warning</div>
-                  )}
-                  {item.location && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                      <MapPin size={12} /> {item.location}
-                    </div>
-                  )}
-
-                  {item.latitude != null && item.longitude != null && (
-                    <div style={{ height: '100px', width: '100%', borderRadius: '6px', overflow: 'hidden', marginTop: '0.5rem', border: '1px solid rgba(255,255,255,0.1)' }}>
-                      <MapContainer center={[item.latitude, item.longitude]} zoom={13} style={{ height: '100%', width: '100%', zIndex: 1 }} zoomControl={false} dragging={false} scrollWheelZoom={false} doubleClickZoom={false} attributionControl={false}>
-                        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                        <Marker position={[item.latitude, item.longitude]} />
-                      </MapContainer>
-                    </div>
-                  )}
-
-                  {activeTab === 'mine' && (
-                    <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }} onClick={(e) => e.stopPropagation()}>
-                      {item.status !== 'SOLD' && (
-                        <>
-                          <button type="button" className="btn btn-outline" data-testid={`edit-${item.id}`} onClick={() => navigate(`/dashboard/edit/${item.id}`)} style={{ flex: 1, padding: '0.4rem', fontSize: '0.85rem', justifyContent: 'center' }}>
-                            <Edit2 size={14} /> Edit
-                          </button>
-                          <button type="button" className="btn btn-outline" onClick={() => setPriceModal({ listingId: item.id, currentPrice: item.price, newPrice: String(item.price), saving: false, error: '' })} style={{ flex: 1, padding: '0.4rem', fontSize: '0.85rem', justifyContent: 'center' }}>
-                            <Edit2 size={14} /> Price
-                          </button>
-                          <button type="button" className="btn btn-outline" aria-label="Delete listing" onClick={() => setDeleteTarget(item)} style={{ padding: '0.4rem 0.6rem', color: '#ff6b6b', borderColor: 'rgba(255,107,107,0.4)' }}>
-                            <Trash2 size={14} />
-                          </button>
-                        </>
-                      )}
-                      {item.status === 'SOLD' && <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Sold items cannot be edited.</span>}
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-
-          {visibleItems.length === 0 && !loading && !error && (
-            <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '4rem 1rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
-              <Package size={48} style={{ color: 'var(--text-secondary)', opacity: 0.6 }} />
-              <h3 style={{ margin: 0, color: '#eaeaea' }}>
-                {activeTab === 'mine' ? "You haven't posted any instruments yet" : 'No instruments match your search.'}
-              </h3>
-              {activeTab === 'mine' && (
-                <button type="button" className="btn btn-primary" onClick={() => navigate('/dashboard/create')}>
-                  <PlusCircle size={18} /> Create your first post
-                </button>
-              )}
-            </div>
-          )}
-        </div>
+      {!isAdmin && (
+        <Tabs
+          ariaLabel="Listing views"
+          value={activeTab}
+          onChange={setTab}
+          tabs={[
+            { id: 'marketplace', label: 'Marketplace', icon: ShoppingBag },
+            { id: 'mine', label: 'My Listings', icon: Store, count: activeTab === 'mine' && !loading ? items.length : undefined }
+          ]}
+        />
       )}
 
-      {activeTab === 'marketplace' && page < totalPages && !error && (
-        <div style={{ textAlign: 'center', marginTop: '2rem' }}>
-          <button type="button" className="btn btn-outline" disabled={loading} onClick={() => { setLoading(true); loadMarketplace(page + 1, appliedFilters); }}>
-            {loading ? 'Loading...' : 'Load more'}
-          </button>
+      {activeTab === 'marketplace' ? (
+        <div className="market-layout">
+          {filterPanel}
+          <section className="stack" aria-label="Listings">
+            <form onSubmit={applyFilters} className="row" style={{ gap: 8 }} role="search">
+              <div className="input-icon-wrap grow">
+                <Search size={16} aria-hidden="true" />
+                <input className="input" type="search" placeholder="Search title, brand, model or category…" value={filters.q} onChange={setFilter('q')} aria-label="Search marketplace" />
+              </div>
+              <Button type="submit">Search</Button>
+              <Button
+                variant="secondary"
+                className="only-mobile"
+                icon={SlidersHorizontal}
+                aria-label="Filters"
+                aria-expanded={showFilters}
+                onClick={() => setShowFilters((v) => !v)}
+              >
+                {activeFilterCount > 0 ? activeFilterCount : null}
+              </Button>
+            </form>
+
+            {!loading && !error && (
+              <p className="text-sm muted" aria-live="polite">
+                {totalCount != null ? `${totalCount} instrument${totalCount === 1 ? '' : 's'}` : `${items.length} shown`}
+                {appliedFilters.q && <> for “<strong style={{ color: 'var(--text)' }}>{appliedFilters.q}</strong>”</>}
+              </p>
+            )}
+
+            {error && <ErrorState compact message={error} onRetry={reload} />}
+
+            {loading && items.length === 0 ? skeletonGrid : visibleItems.length > 0 ? (
+              <div className="listing-grid">{visibleItems.map(listingCard)}</div>
+            ) : !error && (
+              <Card>
+                <EmptyState
+                  icon={Package}
+                  title="No instruments match your search"
+                  description="Try a different keyword or clear the filters."
+                  action={<Button variant="secondary" onClick={clearFilters}>Clear filters</Button>}
+                />
+              </Card>
+            )}
+
+            {page < totalPages && !error && (
+              <div className="text-center" style={{ marginTop: 'var(--space-2)' }}>
+                <Button variant="secondary" loading={loading} onClick={() => { setLoading(true); loadMarketplace(page + 1, appliedFilters); }}>
+                  Load more
+                </Button>
+              </div>
+            )}
+          </section>
         </div>
+      ) : (
+        <section className="stack" aria-label="My listings">
+          <div className="input-icon-wrap" style={{ maxWidth: 420 }}>
+            <Search size={16} aria-hidden="true" />
+            <input className="input" type="search" placeholder="Search my listings…" value={mineSearch} onChange={(e) => setMineSearch(e.target.value)} aria-label="Search my listings" />
+          </div>
+
+          {error && <ErrorState compact message={error} onRetry={reload} />}
+
+          {loading && items.length === 0 ? (
+            <div className="stack-sm">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} height="104px" radius="var(--radius-lg)" />)}</div>
+          ) : visibleItems.length > 0 ? (
+            <div className="stack-sm">{visibleItems.map(ownerRow)}</div>
+          ) : !error && (
+            <Card>
+              <EmptyState
+                icon={Package}
+                title={mineSearch ? 'No listings match your search' : "You haven't posted any instruments yet"}
+                description={mineSearch ? 'Try another keyword.' : 'Post your first instrument – our AI checks it and it goes live in seconds.'}
+                action={!mineSearch && <Button icon={PlusCircle} onClick={() => navigate('/dashboard/create')}>Create your first post</Button>}
+              />
+            </Card>
+          )}
+        </section>
       )}
 
       {/* Price modal */}
-      {priceModal && (
-        <div role="dialog" aria-modal="true" onClick={() => !priceModal.saving && setPriceModal(null)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(8, 6, 15, 0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999, padding: '1rem' }}>
-          <div className="glass-panel" onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: '400px', padding: '2rem', borderRadius: '24px', background: 'linear-gradient(145deg, rgba(30, 24, 45, 0.98), rgba(18, 14, 28, 0.99))' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <h3 style={{ margin: 0 }}>Change price</h3>
-              <button type="button" aria-label="Close" onClick={() => setPriceModal(null)} disabled={priceModal.saving} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                <XCircle size={24} />
-              </button>
-            </div>
-            <label htmlFor="new-price" style={{ display: 'block', color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
-              New price (LKR) – now {fmtLkr(priceModal.currentPrice)}
-            </label>
-            <input id="new-price" type="number" min="1" className="input-field" value={priceModal.newPrice}
-              onChange={(e) => setPriceModal((p) => ({ ...p, newPrice: e.target.value }))} style={{ width: '100%', marginBottom: '1rem' }} />
+      <Modal
+        isOpen={!!priceModal}
+        onClose={() => !priceModal?.saving && setPriceModal(null)}
+        title="Change price"
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setPriceModal(null)} disabled={priceModal?.saving}>Cancel</Button>
+            <Button onClick={savePrice} loading={priceModal?.saving} disabled={Number(priceModal?.newPrice) === Number(priceModal?.currentPrice)}>
+              {priceModal?.saving ? 'Saving…' : 'Save price'}
+            </Button>
+          </>
+        }
+      >
+        {priceModal && (
+          <div className="stack">
+            <Input
+              id="new-price"
+              type="number"
+              min="1"
+              label="New price (LKR)"
+              hint={`Now ${formatLKR(priceModal.currentPrice)}. Buyers who saved it are told about price drops.`}
+              value={priceModal.newPrice}
+              onChange={(e) => setPriceModal((p) => ({ ...p, newPrice: e.target.value }))}
+            />
             {priceModal.error && <ErrorState compact message={priceModal.error} />}
-            {priceModal.saving && <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Saving and re-checking the price with AI…</p>}
-            <button type="button" className="btn btn-primary" style={{ width: '100%' }} onClick={savePrice}
-              disabled={priceModal.saving || Number(priceModal.newPrice) === Number(priceModal.currentPrice)}>
-              {priceModal.saving ? 'Saving...' : 'Save price'}
-            </button>
+            {priceModal.saving && <p className="text-sm muted">Saving and re-checking the price with AI…</p>}
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
 
       {/* Delete confirm */}
-      {deleteTarget && (
-        <div role="dialog" aria-modal="true" style={{ position: 'fixed', inset: 0, background: 'rgba(8, 6, 15, 0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999, padding: '1rem' }}>
-          <div className="glass-panel" style={{ width: '100%', maxWidth: '400px', padding: '2rem', borderRadius: '24px', textAlign: 'center', background: 'linear-gradient(145deg, rgba(30, 24, 45, 0.98), rgba(18, 14, 28, 0.99))' }}>
-            <AlertTriangle size={40} style={{ color: '#ff6b6b', marginBottom: '0.75rem' }} />
-            <h3 style={{ margin: '0 0 0.5rem 0' }}>Delete “{deleteTarget.title}”?</h3>
-            <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>This cannot be undone.</p>
-            <div style={{ display: 'flex', gap: '1rem' }}>
-              <button type="button" className="btn btn-outline" style={{ flex: 1 }} onClick={() => setDeleteTarget(null)} disabled={deleting}>Cancel</button>
-              <button type="button" className="btn btn-primary" style={{ flex: 1, background: '#ff6b6b' }} onClick={confirmDelete} disabled={deleting}>
-                {deleting ? 'Deleting...' : 'Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <Modal
+        isOpen={!!deleteTarget}
+        onClose={() => !deleting && setDeleteTarget(null)}
+        title="Delete listing?"
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setDeleteTarget(null)} disabled={deleting}>Cancel</Button>
+            <Button variant="danger" onClick={confirmDelete} loading={deleting}>{deleting ? 'Deleting…' : 'Delete'}</Button>
+          </>
+        }
+      >
+        <p>“<strong>{deleteTarget?.title}</strong>” will be removed from the marketplace. This cannot be undone.</p>
+      </Modal>
     </div>
   );
 };

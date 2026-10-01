@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Eye, EyeOff, Camera } from 'lucide-react';
+import { AuthLayout, PhotoPicker } from '../../components/AuthLayout';
 import { apiCall } from '../../services/api';
-import './Register.css';
+import { Button, ErrorState, Input, PasswordInput } from '../../components/ui';
 
 const ShopRegistration = () => {
   const [formData, setFormData] = useState({
@@ -11,8 +11,6 @@ const ShopRegistration = () => {
   const [imagePreview, setImagePreview] = useState(null);
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const navigate = useNavigate();
 
   const handleChange = (e) => {
@@ -113,128 +111,53 @@ const ShopRegistration = () => {
   };
 
   return (
-    <div className="register-page">
-      <div className="bg-gradients">
-        <div className="gradient-sphere sphere-1"></div>
-        <div className="gradient-sphere sphere-2"></div>
-      </div>
-      
-      <div className="container">
-        <div className="register-form-container glass-panel">
-          <Link to="/register" className="back-btn">
-            <ArrowLeft size={16} />
-            Back to Options
-          </Link>
-          <div className="text-center mb-4">
-            <h2>Shop Registration</h2>
-            <p className="register-subtitle mt-2">Create your account to list your shop's inventory.</p>
+    <AuthLayout
+      wide
+      title="Register your shop"
+      subtitle="List your inventory and reach buyers near you. An admin verifies new shops before the first login."
+      backTo="/register"
+      backLabel="Back to options"
+      footer={<>Already registered? <Link to="/login">Log in</Link></>}
+    >
+      {errors.form && <ErrorState compact message={errors.form} />}
+
+      <form onSubmit={handleSubmit} noValidate className="auth-form">
+        <PhotoPicker
+          label="Shop logo (optional)"
+          preview={imagePreview}
+          onChange={handleChange}
+          onRemove={() => {
+            setImagePreview(null);
+            setFormData({ ...formData, profileImage: null });
+          }}
+        />
+
+        <fieldset className="stack" style={{ border: 0, padding: 0, margin: 0 }}>
+          <legend className="section-title" style={{ fontSize: 'var(--text-base)', marginBottom: 'var(--space-3)' }}>Shop details</legend>
+          <div className="form-grid">
+            <Input label="Shop name" required name="shopName" value={formData.shopName} onChange={handleChange} placeholder="Kandy Music House" error={errors.shopName} />
+            <Input label="Owner name" required name="ownerName" autoComplete="name" value={formData.ownerName} onChange={handleChange} placeholder="Owner's full name" error={errors.ownerName} />
+            <Input label="Email" required type="email" name="email" autoComplete="email" value={formData.email} onChange={handleChange} placeholder="shop@example.com" error={errors.email} />
+            <Input label="Phone number" required type="tel" name="phone" autoComplete="tel" value={formData.phone} onChange={handleChange} placeholder="0812345678" hint="10 digits" error={errors.phone} />
+            <Input label="Address" required name="address" autoComplete="street-address" value={formData.address} onChange={handleChange} placeholder="No. 12, Dalada Veediya, Kandy" error={errors.address} fieldClassName="span-2" />
+            <Input label="Business registration ID" required name="shopRegisterId" value={formData.shopRegisterId} onChange={handleChange} placeholder="BR-2026-0001" error={errors.shopRegisterId} />
+            <Input label="Owner NIC" required name="nic" value={formData.nic} onChange={handleChange} placeholder="199512345678" error={errors.nic} />
           </div>
-          
-          {errors.form && (
-            <div style={{ color: '#ff6b6b', background: 'rgba(255, 107, 107, 0.15)', border: '1px solid rgba(255, 107, 107, 0.3)', padding: '12px', borderRadius: '8px', marginBottom: '16px', fontSize: '14px', textAlign: 'center' }}>
-              {errors.form}
-            </div>
-          )}
+        </fieldset>
 
-          <form onSubmit={handleSubmit} noValidate>
-            <div className="form-group" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '3rem', marginBottom: '2rem' }}>
-              <label>Profile Picture (Optional)</label>
-              <div 
-                className="profile-upload-circle mt-2" 
-                onClick={() => document.getElementById('profileImageInput').click()}
-                style={{
-                  width: '140px', height: '140px', borderRadius: '50%', border: '2px dashed var(--primary-color)',
-                  display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'pointer',
-                  overflow: 'hidden', position: 'relative', background: 'rgba(255,255,255,0.05)'
-                }}
-              >
-                {imagePreview ? (
-                  <img src={imagePreview} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                ) : (
-                  <Camera size={48} color="var(--primary-color)" />
-                )}
-              </div>
-              {imagePreview && (
-                <button 
-                  type="button" 
-                  onClick={() => {
-                    setImagePreview(null);
-                    setFormData({ ...formData, profileImage: null });
-                    document.getElementById('profileImageInput').value = '';
-                  }}
-                  style={{
-                    background: 'transparent', border: 'none', color: '#ff4d4f', marginTop: '1rem', cursor: 'pointer', fontSize: '0.9rem', fontWeight: '500'
-                  }}
-                >
-                  Remove Picture
-                </button>
-              )}
-              <input id="profileImageInput" type="file" name="profileImage" accept="image/*" onChange={handleChange} style={{ display: 'none' }} />
-            </div>
+        <fieldset className="stack" style={{ border: 0, padding: 0, margin: 0 }}>
+          <legend className="section-title" style={{ fontSize: 'var(--text-base)', marginBottom: 'var(--space-3)' }}>Password</legend>
+          <div className="form-grid">
+            <PasswordInput label="Password" required name="password" autoComplete="new-password" value={formData.password} onChange={handleChange} placeholder="Create a password" hint="At least 8 characters" minLength="8" error={errors.password} />
+            <PasswordInput label="Confirm password" required name="confirmPassword" autoComplete="new-password" value={formData.confirmPassword} onChange={handleChange} placeholder="Repeat the password" minLength="8" error={errors.confirmPassword} />
+          </div>
+        </fieldset>
 
-            <div className="form-group">
-              <label>Shop Name</label>
-              <input type="text" name="shopName" value={formData.shopName} onChange={handleChange} className="form-control" placeholder="Enter shop name" />
-              {errors.shopName && <small style={{ color: 'red' }}>{errors.shopName}</small>}
-            </div>
-            <div className="form-group">
-              <label>Owner Name</label>
-              <input type="text" name="ownerName" value={formData.ownerName} onChange={handleChange} className="form-control" placeholder="Enter owner's full name" />
-              {errors.ownerName && <small style={{ color: 'red' }}>{errors.ownerName}</small>}
-            </div>
-            <div className="form-group">
-              <label>Email</label>
-              <input type="email" name="email" value={formData.email} onChange={handleChange} className="form-control" placeholder="Enter shop email" />
-              {errors.email && <small style={{ color: 'red' }}>{errors.email}</small>}
-            </div>
-            <div className="form-group">
-              <label>Phone Number</label>
-              <input type="tel" name="phone" value={formData.phone} onChange={handleChange} className="form-control" placeholder="Enter shop phone number" />
-              {errors.phone && <small style={{ color: 'red' }}>{errors.phone}</small>}
-            </div>
-            <div className="form-group">
-              <label>Address</label>
-              <input type="text" name="address" value={formData.address} onChange={handleChange} className="form-control" placeholder="Enter shop physical address" />
-              {errors.address && <small style={{ color: 'red' }}>{errors.address}</small>}
-            </div>
-            <div className="form-group">
-              <label>Shop Registration ID</label>
-              <input type="text" name="shopRegisterId" value={formData.shopRegisterId} onChange={handleChange} className="form-control" placeholder="Enter business registration ID" />
-              {errors.shopRegisterId && <small style={{ color: 'red' }}>{errors.shopRegisterId}</small>}
-            </div>
-            <div className="form-group">
-              <label>NIC Card Number</label>
-              <input type="text" name="nic" value={formData.nic} onChange={handleChange} className="form-control" placeholder="Enter owner's NIC" />
-              {errors.nic && <small style={{ color: 'red' }}>{errors.nic}</small>}
-            </div>
-            <div className="form-group">
-              <label>Password</label>
-              <div className="password-input-wrapper">
-                <input type={showPassword ? "text" : "password"} name="password" value={formData.password} onChange={handleChange} className="form-control" placeholder="Create a password" minLength="8" />
-                <button type="button" className="password-toggle-btn" onClick={() => setShowPassword(!showPassword)}>
-                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                </button>
-              </div>
-              {errors.password && <small style={{ color: 'red' }}>{errors.password}</small>}
-            </div>
-            <div className="form-group">
-              <label>Confirm Password</label>
-              <div className="password-input-wrapper">
-                <input type={showConfirmPassword ? "text" : "password"} name="confirmPassword" value={formData.confirmPassword} onChange={handleChange} className="form-control" placeholder="Confirm your password" minLength="8" />
-                <button type="button" className="password-toggle-btn" onClick={() => setShowConfirmPassword(!showConfirmPassword)}>
-                  {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                </button>
-              </div>
-              {errors.confirmPassword && <small style={{ color: 'red' }}>{errors.confirmPassword}</small>}
-            </div>
-            
-            <button type="submit" className="btn btn-primary w-100 mt-4" disabled={loading || Object.keys(errors).some((field) => errors[field])}>
-              {loading ? 'Registering...' : 'Register'}
-            </button>
-          </form>
-        </div>
-      </div>
-    </div>
+        <Button type="submit" size="lg" block loading={loading} disabled={Object.keys(errors).some((field) => errors[field])}>
+          {loading ? 'Submitting…' : 'Submit for verification'}
+        </Button>
+      </form>
+    </AuthLayout>
   );
 };
 
