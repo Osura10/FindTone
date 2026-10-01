@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using MusicMarket.Api.Data;
 using MusicMarket.Api.Dtos;
+using MusicMarket.Api.Helpers;
 using MusicMarket.Api.Models;
 
 namespace MusicMarket.Api.Controllers;
@@ -18,12 +19,14 @@ public class AuthController : ControllerBase
     private readonly AppDbContext _db;
     private readonly IConfiguration _cfg;
     private readonly CloudinaryDotNet.Cloudinary _cloudinary;
+    private readonly ILogger<AuthController> _logger;
 
-    public AuthController(AppDbContext db, IConfiguration cfg, CloudinaryDotNet.Cloudinary cloudinary)
+    public AuthController(AppDbContext db, IConfiguration cfg, CloudinaryDotNet.Cloudinary cloudinary, ILogger<AuthController> logger)
     {
         _db = db;
         _cfg = cfg;
         _cloudinary = cloudinary;
+        _logger = logger;
     }
 
     [AllowAnonymous]
@@ -34,12 +37,16 @@ public class AuthController : ControllerBase
         var role = dto.Role?.ToLower();
         if (string.IsNullOrEmpty(role) || !validRoles.Contains(role))
         {
-            return BadRequest("Invalid role. Must be buyer or shop.");
+            return this.Error(400, "Invalid role. Must be buyer or shop.");
         }
 
-        var trimmedEmail = dto.Email?.Trim();
-        var taken = await _db.Users.AnyAsync(u => u.Email.ToLower() == trimmedEmail.ToLower());
-        if (taken) return Conflict("Email already used");
+        var trimmedEmail = dto.Email?.Trim().ToLower();
+        if (string.IsNullOrEmpty(trimmedEmail) || string.IsNullOrWhiteSpace(dto.Password) || string.IsNullOrWhiteSpace(dto.Name))
+        {
+            return this.Error(400, "Name, email and password are required.");
+        }
+        var taken = await _db.Users.AnyAsync(u => u.Email.ToLower() == trimmedEmail);
+        if (taken) return this.Error(409, "Email already used.");
 
         string? profileImageUrl = null;
         if (dto.ProfileImage != null && dto.ProfileImage.Length > 0)
@@ -79,12 +86,16 @@ public class AuthController : ControllerBase
     [HttpPost("login")]
     public async Task<IActionResult> Login(LoginDto dto)
     {
-        var trimmedEmail = dto.Email?.Trim();
-        var user = await _db.Users.FirstOrDefaultAsync(u => u.Email.ToLower() == trimmedEmail.ToLower());
+        var trimmedEmail = dto.Email?.Trim().ToLower();
+        if (string.IsNullOrEmpty(trimmedEmail) || string.IsNullOrEmpty(dto.Password))
+        {
+            return this.Error(400, "Email and password are required.");
+        }
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Email.ToLower() == trimmedEmail);
         
         if (user is null || !BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
         {
-            return Unauthorized(new { message = "Invalid credentials" });
+            return this.Error(401, "Invalid credentials.");
         }
 
         if (!user.Approval)
@@ -111,13 +122,13 @@ public class AuthController : ControllerBase
         var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrEmpty(userIdString) || !int.TryParse(userIdString, out int userId))
         {
-            return Unauthorized("User ID not found in token");
+            return this.Error(401, "Please log in again.");
         }
 
         var user = await _db.Users.FindAsync(userId);
         if (user is null)
         {
-            return NotFound("User not found");
+            return this.Error(404, "User not found.");
         }
 
         bool isDefaultPassword = !string.IsNullOrEmpty(user.NicCardNumber) && BCrypt.Net.BCrypt.Verify(user.NicCardNumber, user.PasswordHash);
@@ -144,10 +155,10 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> UpdatePhone([FromBody] UpdatePhoneDto dto)
     {
         var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!int.TryParse(userIdString, out int userId)) return Unauthorized();
+        if (!int.TryParse(userIdString, out int userId)) return this.Error(401, "Please log in again.");
 
         var user = await _db.Users.FindAsync(userId);
-        if (user is null) return NotFound("User not found");
+        if (user is null) return this.Error(404, "User not found.");
 
         user.PhoneNumber = dto.PhoneNumber;
         await _db.SaveChangesAsync();
@@ -160,10 +171,10 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> UpdatePassword([FromBody] UpdatePasswordDto dto)
     {
         var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!int.TryParse(userIdString, out int userId)) return Unauthorized();
+        if (!int.TryParse(userIdString, out int userId)) return this.Error(401, "Please log in again.");
 
         var user = await _db.Users.FindAsync(userId);
-        if (user is null) return NotFound("User not found");
+        if (user is null) return this.Error(404, "User not found.");
 
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
         await _db.SaveChangesAsync();
@@ -176,10 +187,10 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> UpdateLocation([FromBody] UpdateLocationDto dto)
     {
         var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!int.TryParse(userIdString, out int userId)) return Unauthorized();
+        if (!int.TryParse(userIdString, out int userId)) return this.Error(401, "Please log in again.");
 
         var user = await _db.Users.FindAsync(userId);
-        if (user is null) return NotFound("User not found");
+        if (user is null) return this.Error(404, "User not found.");
 
         user.Address = dto.Address;
         await _db.SaveChangesAsync();
@@ -192,14 +203,14 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> UpdateProfileImage([FromForm] UpdateProfileImageDto dto)
     {
         var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!int.TryParse(userIdString, out int userId)) return Unauthorized();
+        if (!int.TryParse(userIdString, out int userId)) return this.Error(401, "Please log in again.");
 
         var user = await _db.Users.FindAsync(userId);
-        if (user is null) return NotFound("User not found");
+        if (user is null) return this.Error(404, "User not found.");
 
         if (dto.ProfileImage == null || dto.ProfileImage.Length == 0)
         {
-            return BadRequest("No image provided");
+            return this.Error(400, "No image provided.");
         }
 
         // Delete old image
@@ -225,10 +236,10 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> DeleteProfileImage()
     {
         var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!int.TryParse(userIdString, out int userId)) return Unauthorized();
+        if (!int.TryParse(userIdString, out int userId)) return this.Error(401, "Please log in again.");
 
         var user = await _db.Users.FindAsync(userId);
-        if (user is null) return NotFound("User not found");
+        if (user is null) return this.Error(404, "User not found.");
 
         // Delete old image
         await DeleteCloudinaryImage(user.ProfileImageUrl);
@@ -244,10 +255,10 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> DeleteAccount()
     {
         var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!int.TryParse(userIdString, out int userId)) return Unauthorized();
+        if (!int.TryParse(userIdString, out int userId)) return this.Error(401, "Please log in again.");
 
         var user = await _db.Users.FindAsync(userId);
-        if (user is null) return NotFound("User not found");
+        if (user is null) return this.Error(404, "User not found.");
 
         // Delete profile image from Cloudinary if exists
         await DeleteCloudinaryImage(user.ProfileImageUrl);
@@ -282,7 +293,7 @@ public class AuthController : ControllerBase
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Failed to delete cloudinary image: {ex.Message}");
+            _logger.LogWarning(ex, "Failed to delete Cloudinary image {Url}", imageUrl);
         }
     }
 

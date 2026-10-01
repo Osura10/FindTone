@@ -6,7 +6,6 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from Agent_04.tools import validate_alert_criteria, search_listings, compare_items, get_price_insight
 from unittest.mock import patch
 
-@pytest.mark.skipif(os.getenv("LLM_PROVIDER") == "ollama", reason="Skip in CI without LLM")
 def test_validate_alert_criteria_valid():
     res = validate_alert_criteria(
         name="Test",
@@ -29,7 +28,6 @@ def test_validate_alert_criteria_valid():
     assert res["alert"]["conditions"] == "new,good" or res["alert"]["conditions"] == "good,new"
     assert res["alert"]["location"] == "Colombo"
 
-@pytest.mark.skipif(os.getenv("LLM_PROVIDER") == "ollama", reason="Skip in CI without LLM")
 def test_validate_alert_criteria_invalid_price():
     res = validate_alert_criteria(
         category="Guitar",
@@ -39,7 +37,6 @@ def test_validate_alert_criteria_invalid_price():
     assert res["valid"] is False
     assert "MaxPrice must be greater than or equal to MinPrice." in res["errors"]
 
-@pytest.mark.skipif(os.getenv("LLM_PROVIDER") == "ollama", reason="Skip in CI without LLM")
 def test_validate_alert_criteria_invalid_condition():
     res = validate_alert_criteria(
         category="Guitar",
@@ -48,13 +45,11 @@ def test_validate_alert_criteria_invalid_condition():
     assert res["valid"] is False
     assert any("Invalid condition" in err for err in res["errors"])
 
-@pytest.mark.skipif(os.getenv("LLM_PROVIDER") == "ollama", reason="Skip in CI without LLM")
 def test_validate_alert_criteria_no_filters():
     res = validate_alert_criteria()
     assert res["valid"] is False
     assert any("At least one filter" in err for err in res["errors"])
 
-@pytest.mark.skipif(os.getenv("LLM_PROVIDER") == "ollama", reason="Skip in CI without LLM")
 def test_validate_alert_criteria_auto_name():
     res = validate_alert_criteria(
         brand="Yamaha",
@@ -65,7 +60,6 @@ def test_validate_alert_criteria_auto_name():
     assert res["alert"]["name"] == "Yamaha in Colombo under LKR 40,000"
 
 @patch('Agent_04.tools.fetch_all')
-@pytest.mark.skipif(os.getenv("LLM_PROVIDER") == "ollama", reason="Skip in CI without LLM")
 def test_search_listings_only_live(mock_fetch_all):
     mock_fetch_all.return_value = []
     search_listings.invoke({"category": "Guitar"})
@@ -74,7 +68,6 @@ def test_search_listings_only_live(mock_fetch_all):
     assert "l.\"Status\" = 'LIVE'" in sql
 
 @patch('Agent_04.tools.fetch_all')
-@pytest.mark.skipif(os.getenv("LLM_PROVIDER") == "ollama", reason="Skip in CI without LLM")
 def test_compare_items_only_live(mock_fetch_all):
     mock_fetch_all.return_value = []
     compare_items.invoke({"listing_ids": [1, 2]})
@@ -83,7 +76,6 @@ def test_compare_items_only_live(mock_fetch_all):
     assert "\"Status\" = 'LIVE'" in sql
 
 @patch('Agent_04.tools.fetch_one')
-@pytest.mark.skipif(os.getenv("LLM_PROVIDER") == "ollama", reason="Skip in CI without LLM")
 def test_get_price_insight_only_live(mock_fetch_one):
     mock_fetch_one.return_value = None
     get_price_insight.invoke({"listing_id": 1})

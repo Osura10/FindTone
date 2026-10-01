@@ -115,8 +115,13 @@ Do not invent numbers or signals."""
                     result["reason"] = "Fallback generated reason. No penalties applied."
                 
         except Exception as fallback_e:
+            # Fail closed: never let a broken check publish a listing as LIVE with 100.
             print(f"Trust Fallback also failed: {fallback_e}")
-            result["reason"] = "Could not perform trust check due to an error."
+            result["trust_score"] = 50
+            result["decision"] = "PENDING"
+            result["warning"] = True
+            result["signals"] = []
+            result["reason"] = "Could not perform trust check due to an error. An admin must review this listing."
             result["used_fallback"] = True
             
     return result

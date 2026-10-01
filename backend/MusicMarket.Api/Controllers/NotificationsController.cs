@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using MusicMarket.Api.Data;
+using MusicMarket.Api.Dtos;
+using MusicMarket.Api.Helpers;
 
 namespace MusicMarket.Api.Controllers;
 
@@ -18,36 +20,41 @@ public class NotificationsController : ControllerBase
         _db = db;
     }
 
+    private int? CurrentUserId =>
+        int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : null;
+
+    /// <summary>
+    /// Newest 50 notifications. Shape: id, type, title, message, isRead, createdAt,
+    /// listingId, savedSearchId, listing {id, title, price, firstImageUrl}.
+    /// </summary>
     [HttpGet]
     public async Task<IActionResult> GetNotifications()
     {
-        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!int.TryParse(userIdStr, out var userId)) return Unauthorized();
+        var userId = CurrentUserId;
+        if (userId == null) return this.Error(401, "Please log in again.");
 
         var notifications = await _db.Notifications
             .AsNoTracking()
-            .Include(n => n.Listing)
-            .ThenInclude(l => l.Images)
             .Where(n => n.UserId == userId)
             .OrderByDescending(n => n.CreatedAt)
             .Take(50)
-            .Select(n => new
+            .Select(n => new NotificationDto
             {
-                n.Id,
-                n.ListingId,
-                n.SavedSearchId,
-                n.Type,
-                n.Title,
-                n.Message,
-                n.IsRead,
-                n.CreatedAt,
-                Listing = n.Listing != null ? new
+                Id = n.Id,
+                Type = n.Type,
+                Title = n.Title,
+                Message = n.Message,
+                IsRead = n.IsRead,
+                CreatedAt = n.CreatedAt,
+                ListingId = n.ListingId,
+                SavedSearchId = n.SavedSearchId,
+                Listing = n.Listing == null ? null : new NotificationListingDto
                 {
-                    n.Listing.Id,
-                    n.Listing.Title,
+                    Id = n.Listing.Id,
+                    Title = n.Listing.Title,
                     Price = n.Listing.Price,
                     FirstImageUrl = n.Listing.Images.OrderBy(i => i.SortOrder).Select(i => i.Url).FirstOrDefault()
-                } : null
+                }
             })
             .ToListAsync();
 
@@ -57,8 +64,8 @@ public class NotificationsController : ControllerBase
     [HttpGet("unread-count")]
     public async Task<IActionResult> GetUnreadCount()
     {
-        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!int.TryParse(userIdStr, out var userId)) return Unauthorized();
+        var userId = CurrentUserId;
+        if (userId == null) return this.Error(401, "Please log in again.");
 
         var count = await _db.Notifications.CountAsync(n => n.UserId == userId && !n.IsRead);
         return Ok(new { unreadCount = count });
@@ -67,23 +74,23 @@ public class NotificationsController : ControllerBase
     [HttpPatch("{id:int}/read")]
     public async Task<IActionResult> MarkAsRead(int id)
     {
-        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!int.TryParse(userIdStr, out var userId)) return Unauthorized();
+        var userId = CurrentUserId;
+        if (userId == null) return this.Error(401, "Please log in again.");
 
         var notif = await _db.Notifications.FirstOrDefaultAsync(n => n.Id == id && n.UserId == userId);
-        if (notif == null) return NotFound();
+        if (notif == null) return this.Error(404, "Notification not found.");
 
         notif.IsRead = true;
         await _db.SaveChangesAsync();
 
-        return Ok();
+        return Ok(new { message = "Notification marked as read." });
     }
 
     [HttpPatch("read-all")]
     public async Task<IActionResult> MarkAllAsRead()
     {
-        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!int.TryParse(userIdStr, out var userId)) return Unauthorized();
+        var userId = CurrentUserId;
+        if (userId == null) return this.Error(401, "Please log in again.");
 
         var unread = await _db.Notifications.Where(n => n.UserId == userId && !n.IsRead).ToListAsync();
         foreach (var n in unread)

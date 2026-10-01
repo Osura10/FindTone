@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using MusicMarket.Api.Helpers;
 using MusicMarket.Api.Services;
 
 namespace MusicMarket.Api.Controllers;
@@ -31,19 +32,30 @@ public class ShoppingAssistantController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(dto.Message))
         {
-            return BadRequest(new { message = "Message is required." });
+            return this.Error(400, "Message is required.");
         }
 
         var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (!int.TryParse(userIdStr, out var userId))
         {
-            return Unauthorized();
+            return this.Error(401, "Please log in again.");
         }
 
         var result = await _ai.GetShoppingAssistantAsync(dto.Message, dto.SessionId, userId);
         if (result == null)
         {
-            return StatusCode(503, new { message = "AI Shopping Assistant is currently unavailable. Please try again shortly." });
+            return this.Error(503, "AI Shopping Assistant is currently unavailable. Please try again shortly.");
+        }
+
+        // Trust score and fair-price verdict are private (owner/admin only): remove them from the cards.
+        foreach (var listing in result.Listings)
+        {
+            listing.TrustScore = null;
+            listing.FairPrice = null;
+            listing.FairPriceMin = null;
+            listing.FairPriceMax = null;
+            listing.PriceVerdict = null;
+            listing.PriceExplanation = null;
         }
 
         return Ok(result);

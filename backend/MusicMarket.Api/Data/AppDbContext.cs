@@ -136,7 +136,9 @@ public class AppDbContext : DbContext
         builder.Entity<Notification>(entity =>
         {
             entity.HasIndex(n => new { n.UserId, n.IsRead });
-            entity.HasIndex(n => new { n.UserId, n.ListingId, n.Type });
+            // Unique: one row per (user, listing, type). Repeat events UPDATE that row
+            // (see SmartAlertService) so the user sees the newest message on top.
+            entity.HasIndex(n => new { n.UserId, n.ListingId, n.Type }).IsUnique();
             
             entity.HasOne(n => n.User)
                 .WithMany()
