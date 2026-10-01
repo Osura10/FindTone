@@ -1,6 +1,6 @@
-import 'package:music_market/core/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import '../network/api_client.dart';
+import '../network/api_exceptions.dart';
 import '../models/catalog_model.dart';
 
 class CatalogProvider with ChangeNotifier {
@@ -18,6 +18,7 @@ class CatalogProvider with ChangeNotifier {
 
   Future<void> fetchCatalog() async {
     _isLoading = true;
+    _errorMessage = null;
     notifyListeners();
     
     try {
@@ -26,9 +27,8 @@ class CatalogProvider with ChangeNotifier {
         _items = (response.data as List).map((e) => CatalogModel.fromJson(e)).toList();
       }
     } catch (e) {
-logDebug('Caught error:', e);
-      _errorMessage = 'An error occurred. Pull to refresh or try again.';
-      notifyListeners();
+      // Suggestions are optional: forms still accept any typed value.
+      _errorMessage = describeError(e, 'Suggestions are not available right now.');
     } finally {
       _isLoading = false;
       notifyListeners();

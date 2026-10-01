@@ -1,6 +1,6 @@
-import 'package:music_market/core/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/network/api_exceptions.dart';
 import '../models/wishlist_item_model.dart';
 
 class WishlistProvider with ChangeNotifier {
@@ -25,40 +25,34 @@ class WishlistProvider with ChangeNotifier {
         _items = (response.data as List).map((e) => WishlistItemModel.fromJson(e)).toList();
       }
     } catch (e) {
-      _errorMessage = "Failed to load wishlist.";
+      _errorMessage = describeError(e, 'Failed to load wishlist.');
     } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
 
-  Future<bool> addToWishlist(int listingId) async {
+  /// Adds a listing. Returns an error message, or null when it worked.
+  Future<String?> addToWishlist(int listingId) async {
     try {
-      final response = await _apiClient.dio.post('/wishlist/$listingId');
-      if (response.statusCode == 200) {
-        await fetchWishlist();
-        return true;
-      }
+      await _apiClient.dio.post('/wishlist/$listingId');
+      await fetchWishlist();
+      return null;
     } catch (e) {
-      logDebug('Caught error:', e);
+      return describeError(e, 'Could not add to the wishlist.');
     }
-    return false;
   }
 
-  Future<bool> removeFromWishlist(int listingId) async {
+  /// Removes a listing (by LISTING id). Returns an error message, or null when it worked.
+  Future<String?> removeFromWishlist(int listingId) async {
     try {
-      final response = await _apiClient.dio.delete('/wishlist/$listingId');
-      if (response.statusCode == 204) {
-        _items.removeWhere((item) => item.listingId == listingId);
-        notifyListeners();
-        return true;
-      }
-    } catch (e) {
-logDebug('Caught error:', e);
-      _errorMessage = 'An error occurred. Pull to refresh or try again.';
+      await _apiClient.dio.delete('/wishlist/$listingId');
+      _items.removeWhere((item) => item.listingId == listingId);
       notifyListeners();
+      return null;
+    } catch (e) {
+      return describeError(e, 'Could not remove from the wishlist.');
     }
-    return false;
   }
 
   bool isInWishlist(int listingId) {

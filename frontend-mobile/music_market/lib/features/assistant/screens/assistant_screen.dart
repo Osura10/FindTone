@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/network/api_exceptions.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:go_router/go_router.dart';
@@ -202,11 +203,24 @@ class _AssistantScreenState extends State<AssistantScreen> {
                                   label: const Text('Create Alert for this search'),
                                   onPressed: () async {
                                     final messenger = ScaffoldMessenger.of(context);
+                                    // The AI answers in snake_case; the alerts API uses camelCase (same mapping as the web).
+                                    final a = msg.alertToCreate!;
+                                    String? text(String k) => (a[k]?.toString().trim().isEmpty ?? true) ? null : a[k].toString().trim();
                                     try {
-                                      await context.read<AlertsProvider>().createAlert(msg.alertToCreate!);
-                                      messenger.showSnackBar(const SnackBar(content: Text('Alert created successfully!')));
+                                      final saved = await context.read<AlertsProvider>().saveAlert({
+                                        'name': text('name'),
+                                        'category': text('category'),
+                                        'brand': text('brand'),
+                                        'modelKeyword': text('model_keyword'),
+                                        'minPrice': (a['min_price'] as num?)?.toDouble(),
+                                        'maxPrice': (a['max_price'] as num?)?.toDouble(),
+                                        'conditions': text('conditions'),
+                                        'location': text('location'),
+                                      });
+                                      final matches = saved.newMatches ?? 0;
+                                      messenger.showSnackBar(SnackBar(content: Text(matches > 0 ? 'Alert created – $matches listing(s) already match.' : 'Alert created.')));
                                     } catch (e) {
-                                      messenger.showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: Colors.red));
+                                      messenger.showSnackBar(SnackBar(content: Text(describeError(e)), backgroundColor: Colors.red));
                                     }
                                   },
                                 ),

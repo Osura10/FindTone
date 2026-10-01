@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/network/api_exceptions.dart';
 import '../../../core/network/api_client.dart';
 import '../models/chat_message_model.dart';
 import 'package:dio/dio.dart';
@@ -52,7 +53,7 @@ class AssistantProvider with ChangeNotifier {
     } catch (e) {
       _messages.add(ChatMessageModel(
         role: 'assistant',
-        text: 'Sorry, I encountered an error. Please try again.',
+        text: 'Sorry, something went wrong: ${describeError(e)}',
       ));
     } finally {
       _isTyping = false;

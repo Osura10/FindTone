@@ -17,6 +17,7 @@ class MarketplaceScreen extends StatefulWidget {
 
 class _MarketplaceScreenState extends State<MarketplaceScreen> {
   final ScrollController _scrollController = ScrollController();
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
@@ -37,6 +38,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
   @override
   void dispose() {
     _scrollController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -57,6 +59,11 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
         title: const Text('Marketplace'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.favorite_border),
+            onPressed: () => context.push('/wishlist'),
+            tooltip: 'Wishlist',
+          ),
+          IconButton(
             icon: const Icon(Icons.notifications_active),
             onPressed: () => context.push('/my_alerts'),
             tooltip: 'My Alerts',
@@ -67,7 +74,34 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
           ),
         ],
       ),
-      body: Consumer<MarketplaceProvider>(
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            child: TextField(
+              key: const ValueKey('marketplace-search'),
+              controller: _searchController,
+              textInputAction: TextInputAction.search,
+              decoration: InputDecoration(
+                hintText: 'Search title, brand, model or category',
+                prefixIcon: const Icon(Icons.search),
+                isDense: true,
+                suffixIcon: _searchController.text.isEmpty
+                    ? null
+                    : IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          _searchController.clear();
+                          context.read<MarketplaceProvider>().search('');
+                          setState(() {});
+                        },
+                      ),
+              ),
+              onChanged: (_) => setState(() {}),
+              onSubmitted: (text) => context.read<MarketplaceProvider>().search(text),
+            ),
+          ),
+          Expanded(child: Consumer<MarketplaceProvider>(
         builder: (context, provider, child) {
           if (provider.isLoading && provider.listings.isEmpty) {
             return _buildShimmerGrid();
@@ -106,6 +140,8 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
             ),
           );
         },
+      )),
+        ],
       ),
     );
   }
@@ -129,7 +165,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
 
 class _ListingCard extends StatelessWidget {
   final ListingSummary listing;
-  
+
   const _ListingCard({required this.listing});
 
   @override
@@ -155,7 +191,7 @@ class _ListingCard extends StatelessWidget {
                     )
                   else
                     const Icon(Icons.image, size: 50, color: Colors.grey),
-                  
+
                   if (listing.status == 'SOLD')
                     Positioned(
                       top: 10,
@@ -172,43 +208,8 @@ class _ListingCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                  
-                  if (listing.priceVerdict != null && listing.priceVerdict != 'UNKNOWN')
-                    Positioned(
-                      bottom: 8,
-                      left: 8,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Formatters.getVerdictColor(listing.priceVerdict),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          Formatters.getVerdictText(listing.priceVerdict),
-                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ),
-                  
-                  if (listing.trustScore != null)
-                    Positioned(
-                      bottom: 8,
-                      right: 8,
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: Formatters.getTrustColor(listing.trustScore!).withValues(alpha: 0.9),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.verified, color: Colors.white, size: 12),
-                            const SizedBox(width: 4),
-                            Text('Trust ${listing.trustScore}', style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)),
-                          ],
-                        ),
-                      ),
-                    ),
+
+                  // No trust score / price verdict here: those are only for the owner and admins.
                 ],
               ),
             ),
@@ -264,7 +265,7 @@ class _FilterSheetState extends State<_FilterSheet> {
   @override
   Widget build(BuildContext context) {
     final catalog = context.watch<CatalogProvider>();
-    
+
     return Padding(
       padding: EdgeInsets.only(
         bottom: MediaQuery.of(context).viewInsets.bottom,

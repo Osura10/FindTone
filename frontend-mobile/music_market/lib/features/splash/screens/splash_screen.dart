@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 
 import '../../auth/providers/auth_provider.dart';
 
+/// Shown while the saved login is checked. AuthProvider.loadAuthData never throws,
+/// so the router always moves on (to a home or to /login) – no blank screen.
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -15,17 +17,9 @@ class _SplashScreenState extends State<SplashScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkAuth();
+      final auth = context.read<AuthProvider>();
+      if (auth.isAuthLoading) auth.loadAuthData();
     });
-  }
-
-  Future<void> _checkAuth() async {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    await authProvider.loadAuthData();
-    if (!mounted) return;
-    if (authProvider.isOffline) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Server offline or network error')));
-    }
   }
 
   @override

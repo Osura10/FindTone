@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/widgets/common_widgets.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -28,8 +29,11 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
       appBar: AppBar(title: const Text('My Orders')),
       body: Consumer<BuyerProvider>(
         builder: (context, provider, child) {
-          if (provider.isLoadingOrders) {
+          if (provider.isLoadingOrders && provider.myOrders.isEmpty) {
             return const Center(child: CircularProgressIndicator());
+          }
+          if (provider.errorMessage != null && provider.myOrders.isEmpty) {
+            return ErrorView(message: provider.errorMessage!, onRetry: provider.fetchMyOrders);
           }
           if (provider.myOrders.isEmpty) {
             return const Center(child: Text('You have no orders yet.'));

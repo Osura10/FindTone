@@ -1,11 +1,15 @@
-import 'package:music_market/core/utils/app_logger.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/network/api_exceptions.dart';
 import '../models/alert_model.dart';
 
+/// My Alerts for buyers AND shops: list, create, edit, enable/disable, delete and "Fill with AI".
 class AlertsProvider with ChangeNotifier {
+  static const parseTimeout = Duration(seconds: 90);
+
   final ApiClient _apiClient = ApiClient();
-  
+
   List<AlertModel> _alerts = [];
   bool _isLoading = false;
   String? _errorMessage;
@@ -16,86 +20,70 @@ class AlertsProvider with ChangeNotifier {
 
   Future<void> fetchAlerts() async {
     _isLoading = true;
+    _errorMessage = null;
     notifyListeners();
     try {
       final response = await _apiClient.dio.get('/alerts');
-      if (response.statusCode == 200) {
-        _alerts = (response.data as List).map((e) => AlertModel.fromJson(e)).toList();
-      }
+      _alerts = (response.data as List).map((e) => AlertModel.fromJson(Map<String, dynamic>.from(e))).toList();
     } catch (e) {
-logDebug('Caught error:', e);
-      _errorMessage = 'An error occurred. Pull to refresh or try again.';
-      notifyListeners();
+      _errorMessage = describeError(e, 'Could not load your alerts.');
     } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
 
-  Future<Map<String, dynamic>> parseAlertQuery(String query) async {
+  /// "Fill with AI": POST /alerts/parse with {"text": ...}. The answer uses snake_case keys.
+  Future<Map<String, dynamic>> parseAlertText(String text) async {
     try {
-      final response = await _apiClient.dio.post('/alerts/parse', data: {'query': query});
-      if (response.statusCode == 200) {
-        return response.data;
-      }
+      final response = await _apiClient.dio.post(
+        '/alerts/parse',
+        data: {'text': text},
+        options: Options(receiveTimeout: parseTimeout, sendTimeout: parseTimeout),
+      );
+      return Map<String, dynamic>.from(response.data as Map);
     } catch (e) {
-      throw Exception('Failed to parse query');
+      throw AppException(describeError(e, 'The AI could not read that. Please fill the form yourself.'), statusCode: statusOf(e));
     }
-    return {};
   }
 
-  Future<void> createAlert(Map<String, dynamic> data) async {
+  /// Create (id == null) or update an alert. Returns the saved alert (with newMatches). Throws AppException.
+  Future<AlertModel> saveAlert(Map<String, dynamic> data, {int? id}) async {
     try {
-      await _apiClient.dio.post('/alerts', data: data);
+      final response = id == null
+          ? await _apiClient.dio.post('/alerts', data: data)
+          : await _apiClient.dio.put('/alerts/$id', data: data);
+      final saved = AlertModel.fromJson(Map<String, dynamic>.from(response.data as Map));
       await fetchAlerts();
+      return saved;
     } catch (e) {
-      throw Exception('Failed to create alert');
+      throw AppException(describeError(e, 'Could not save the alert.'), statusCode: statusOf(e));
     }
   }
 
-  Future<void> updateAlert(int id, Map<String, dynamic> data) async {
+  /// Enable/disable. Returns (error message or null, number of new matches when enabled).
+  Future<(String?, int)> toggleAlert(int id, bool isActive) async {
+    final index = _alerts.indexWhere((a) => a.id == id);
     try {
-      await _apiClient.dio.put('/alerts/$id', data: data);
-      await fetchAlerts();
+      final response = await _apiClient.dio.patch('/alerts/$id/toggle', data: {'isActive': isActive});
+      final saved = AlertModel.fromJson(Map<String, dynamic>.from(response.data as Map));
+      if (index != -1) _alerts[index] = saved;
+      notifyListeners();
+      return (null, saved.newMatches ?? 0);
     } catch (e) {
-      throw Exception('Failed to update alert');
+      return (describeError(e, 'Could not change the alert.'), 0);
     }
   }
 
-  Future<void> toggleAlert(int id, bool isActive) async {
+  /// Returns an error message, or null when it worked.
+  Future<String?> deleteAlert(int id) async {
     try {
-      final index = _alerts.indexWhere((a) => a.id == id);
-      if (index != -1) {
-        final alert = _alerts[index];
-        _alerts[index] = AlertModel(
-          id: alert.id,
-          queryText: alert.queryText,
-          category: alert.category,
-          brand: alert.brand,
-          modelKeyword: alert.modelKeyword,
-          minPrice: alert.minPrice,
-          maxPrice: alert.maxPrice,
-          conditions: alert.conditions,
-          location: alert.location,
-          isActive: isActive,
-        );
-        notifyListeners();
-      }
-      await _apiClient.dio.patch('/alerts/$id/toggle', data: {'isActive': isActive});
-    } catch (e) {
-      // Revert if failed
-      await fetchAlerts();
-    }
-  }
-
-  Future<void> deleteAlert(int id) async {
-    try {
+      await _apiClient.dio.delete('/alerts/$id');
       _alerts.removeWhere((a) => a.id == id);
       notifyListeners();
-      await _apiClient.dio.delete('/alerts/$id');
+      return null;
     } catch (e) {
-      // Revert if failed
-      await fetchAlerts();
+      return describeError(e, 'Could not delete the alert.');
     }
   }
 }

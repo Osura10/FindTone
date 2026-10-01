@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import '../providers/shop_provider.dart';
-import '../../../core/widgets/common_widgets.dart';
-import '../../../core/widgets/app_network_image.dart';
+import '../../../core/network/api_exceptions.dart';
 import '../../../core/utils/formatters.dart';
-import 'create_post_screen.dart';
+import '../../../core/widgets/app_network_image.dart';
+import '../../../core/widgets/common_widgets.dart';
+import '../../marketplace/models/listing_model.dart';
+import '../providers/shop_provider.dart';
 
+/// The user's own listings (buyers and shops can both sell). Only here – and on the owner's
+/// details page – are the trust score and fair-price verdict shown.
 class MyListingsScreen extends StatefulWidget {
   const MyListingsScreen({super.key});
 
@@ -18,224 +22,226 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ShopProvider>().fetchMyListings();
+      if (mounted) context.read<ShopProvider>().fetchMyListings();
     });
   }
 
-  void _showEditPriceSheet(BuildContext context, int id, double currentPrice) {
-    final TextEditingController priceController = TextEditingController(text: currentPrice.toStringAsFixed(0));
-    bool isSaving = false;
+  Future<void> _openEditor(String path) async {
+    final provider = context.read<ShopProvider>();
+    await context.push(path);
+    // Always refresh after create/edit so the new AI result is shown.
+    if (mounted) provider.fetchMyListings();
+  }
+
+  void _showEditPriceSheet(ListingSummary listing) {
+    final controller = TextEditingController(text: listing.price.toStringAsFixed(0));
+    String? error;
+    bool saving = false;
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return Padding(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom,
-                left: 16,
-                right: 16,
-                top: 16,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheet) => Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(sheetContext).viewInsets.bottom, left: 16, right: 16, top: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('Change price', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              TextField(
+                controller: controller,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(labelText: 'Price (LKR)', prefixText: 'LKR ', errorText: error),
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Text('Edit Price', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: priceController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(
-                      labelText: 'Price (LKR)',
-                      prefixText: 'LKR ',
-                    ),
-                  ),
-                  const SizedBox(height: 32),
-                  ElevatedButton(
-                    onPressed: isSaving ? null : () async {
-                      final newPrice = double.tryParse(priceController.text);
-                      if (newPrice != null && newPrice > 0) {
-                        setState(() => isSaving = true);
-                        final navigator = Navigator.of(context);
-                        final messenger = ScaffoldMessenger.of(context);
-                        final success = await context.read<ShopProvider>().updatePrice(id, newPrice);
-                        if (mounted) {
-                          navigator.pop();
-                          messenger.showSnackBar(
-                            SnackBar(content: Text(success ? 'Price updated successfully' : 'Failed to update price')),
-                          );
+              const SizedBox(height: 8),
+              if (saving) const Text('Saving and re-checking the price with AI…', textAlign: TextAlign.center),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: saving
+                    ? null
+                    : () async {
+                        final newPrice = double.tryParse(controller.text.trim());
+                        if (newPrice == null || newPrice <= 0) {
+                          setSheet(() => error = 'Price must be greater than 0');
+                          return;
                         }
-                      }
-                    },
-                    child: isSaving ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Save'),
-                  ),
-                  const SizedBox(height: 16),
-                ],
+                        setSheet(() {
+                          saving = true;
+                          error = null;
+                        });
+                        final navigator = Navigator.of(sheetContext);
+                        final messenger = ScaffoldMessenger.of(context);
+                        try {
+                          final updated = await context.read<ShopProvider>().updatePrice(listing.id, newPrice);
+                          navigator.pop();
+                          messenger.showSnackBar(SnackBar(
+                            content: Text('Price updated to ${Formatters.price(updated.price)}. Status: ${updated.status}'
+                                '${updated.priceVerdict != null ? ' · ${Formatters.getVerdictText(updated.priceVerdict)}' : ''}'),
+                          ));
+                        } catch (e) {
+                          setSheet(() {
+                            saving = false;
+                            error = describeError(e);
+                          });
+                        }
+                      },
+                child: saving ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Save price'),
               ),
-            );
-          },
-        );
-      },
-    );
+              const SizedBox(height: 16),
+            ],
+          ),
+        ),
+      ),
+    ).whenComplete(controller.dispose);
   }
 
-  void _confirmDelete(BuildContext context, int id) {
-    showDialog(
+  Future<void> _confirmDelete(ListingSummary listing) async {
+    final ok = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Listing'),
-        content: const Text('Are you sure you want to delete this listing?'),
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete listing?'),
+        content: Text('"${listing.title}" will be removed. This cannot be undone.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await context.read<ShopProvider>().deleteListing(id);
-            },
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete', style: TextStyle(color: Colors.red))),
         ],
       ),
+    );
+    if (ok != true || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await context.read<ShopProvider>().deleteListing(listing.id);
+      messenger.showSnackBar(const SnackBar(content: Text('Listing deleted')));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(describeError(e)), backgroundColor: Colors.red));
+    }
+  }
+
+  Widget _trustLine(ListingSummary l) {
+    final score = l.trustScore;
+    if (score == null) return const Text('Trust: not checked yet', style: TextStyle(fontSize: 12, color: Colors.grey));
+    final color = Formatters.getTrustColor(score);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          Icon(Icons.shield, size: 16, color: color),
+          const SizedBox(width: 4),
+          Text('Trust $score/100', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: color)),
+        ]),
+        if (score >= 40 && score < 70)
+          const Padding(
+            padding: EdgeInsets.only(top: 2),
+            child: Text('Live with a low-trust warning', style: TextStyle(fontSize: 12, color: Colors.amber)),
+          ),
+      ],
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('My Listings'),
-      ),
-      body: Consumer<ShopProvider>(
-        builder: (context, provider, child) {
-          if (provider.isLoadingListings) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (provider.myListings.isEmpty) {
-            return const EmptyState(message: 'You have no listings.');
-          }
+    final provider = context.watch<ShopProvider>();
 
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: provider.myListings.length,
-            separatorBuilder: (context, index) => const SizedBox(height: 16),
-            itemBuilder: (context, index) {
-              final listing = provider.myListings[index];
-              return AppCard(
-                padding: EdgeInsets.zero,
-                child: Column(
-                  children: [
-                    Stack(
+    Widget body;
+    if (provider.isLoadingListings && provider.myListings.isEmpty) {
+      body = const Center(child: CircularProgressIndicator());
+    } else if (provider.listingsError != null && provider.myListings.isEmpty) {
+      body = ErrorView(message: provider.listingsError!, onRetry: provider.fetchMyListings);
+    } else if (provider.myListings.isEmpty) {
+      body = ListView(children: [
+        const SizedBox(height: 120),
+        const EmptyState(message: "You haven't posted any instruments yet."),
+        const SizedBox(height: 16),
+        Center(
+          child: ElevatedButton.icon(onPressed: () => _openEditor('/shop/create'), icon: const Icon(Icons.add), label: const Text('Create your first post')),
+        ),
+      ]);
+    } else {
+      body = ListView.separated(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        itemCount: provider.myListings.length,
+        separatorBuilder: (_, _) => const SizedBox(height: 16),
+        itemBuilder: (context, index) {
+          final listing = provider.myListings[index];
+          final sold = listing.status == 'SOLD';
+          return AppCard(
+            key: ValueKey('my-listing-${listing.id}'),
+            padding: EdgeInsets.zero,
+            child: InkWell(
+              onTap: () => context.push('/listing/${listing.id}'),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Stack(children: [
+                    ClipRRect(
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                      child: AppNetworkImage(imageUrl: listing.firstImageUrl, height: 150, isThumbnail: true),
+                    ),
+                    Positioned(top: 8, right: 8, child: StatusBadge(status: listing.status == 'FLAGGED' ? 'UNDER REVIEW' : listing.status)),
+                    if (listing.priceVerdict != null)
+                      Positioned(
+                        bottom: 8,
+                        left: 8,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(color: Formatters.getVerdictColor(listing.priceVerdict), borderRadius: BorderRadius.circular(4)),
+                          child: Text(Formatters.getVerdictText(listing.priceVerdict), style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                  ]),
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        ClipRRect(
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                          child: AppNetworkImage(
-                            imageUrl: listing.firstImageUrl,
-                            height: 150,
-                            isThumbnail: true,
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(listing.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                              const SizedBox(height: 4),
+                              PriceText(amount: listing.price),
+                              if (listing.fairPriceMin != null && listing.fairPriceMax != null)
+                                Text('Fair: ${Formatters.price(listing.fairPriceMin!)} – ${Formatters.price(listing.fairPriceMax!)}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                              const SizedBox(height: 6),
+                              _trustLine(listing),
+                            ],
                           ),
                         ),
-                        Positioned(
-                          top: 8,
-                          right: 8,
-                          child: StatusBadge(status: listing.status == 'FLAGGED' ? 'UNDER REVIEW' : listing.status),
-                        ),
-                        if (listing.priceVerdict != null && listing.priceVerdict != 'UNKNOWN')
-                          Positioned(
-                            bottom: 8,
-                            left: 8,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Formatters.getVerdictColor(listing.priceVerdict),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                Formatters.getVerdictText(listing.priceVerdict),
-                                style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                              ),
-                            ),
+                        if (sold)
+                          const Padding(padding: EdgeInsets.only(top: 8), child: Text('Sold – cannot edit', style: TextStyle(color: Colors.grey, fontSize: 12)))
+                        else ...[
+                          IconButton(
+                            key: ValueKey('edit-${listing.id}'),
+                            tooltip: 'Edit',
+                            icon: const Icon(Icons.edit_note, color: Colors.blue),
+                            onPressed: () => _openEditor('/shop/edit/${listing.id}'),
                           ),
+                          IconButton(tooltip: 'Change price', icon: const Icon(Icons.attach_money, color: Colors.blue), onPressed: () => _showEditPriceSheet(listing)),
+                          IconButton(tooltip: 'Delete', icon: const Icon(Icons.delete, color: Colors.red), onPressed: () => _confirmDelete(listing)),
+                        ],
                       ],
                     ),
-                    Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(listing.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                                const SizedBox(height: 4),
-                                PriceText(amount: listing.price),
-                                if (listing.trustScore != null) ...[
-                                  const SizedBox(height: 8),
-                                  Row(
-                                    children: [
-                                      Icon(Icons.shield, size: 16, color: listing.trustScore! >= 70 ? Colors.green : (listing.trustScore! >= 40 ? Colors.amber : Colors.red)),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        'Trust Score: ${listing.trustScore}',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.bold,
-                                          color: listing.trustScore! >= 70 ? Colors.green : (listing.trustScore! >= 40 ? Colors.amber : Colors.red),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  if (listing.trustScore! < 70 && listing.aiReason != null && listing.aiReason!.isNotEmpty)
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 4),
-                                      child: Text(
-                                        listing.trustScore! >= 40 ? 'Low trust: ${listing.aiReason}' : listing.aiReason!,
-                                        style: TextStyle(fontSize: 12, color: listing.trustScore! >= 40 ? Colors.amber[800] : Colors.red[800], fontStyle: FontStyle.italic),
-                                      ),
-                                    ),
-                                ],
-                              ],
-                            ),
-                          ),
-                          if (listing.status != 'SOLD') ...[
-                            IconButton(
-                              icon: const Icon(Icons.edit_note, color: Colors.blue),
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => CreatePostScreen(listingId: listing.id),
-                                  ),
-                                );
-                              },
-                            ),
-                            if (listing.status == 'LIVE')
-                              IconButton(
-                                icon: const Icon(Icons.attach_money, color: Colors.blue),
-                                onPressed: () => _showEditPriceSheet(context, listing.id, listing.price),
-                              ),
-                            IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.red),
-                              onPressed: () => _confirmDelete(context, listing.id),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
+                  ),
+                ],
+              ),
+            ),
           );
         },
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.push(context, MaterialPageRoute(builder: (_) => const CreatePostScreen()));
-        },
-        child: const Icon(Icons.add),
+      );
+    }
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('My Listings')),
+      body: RefreshIndicator(onRefresh: provider.fetchMyListings, child: body),
+      floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'create-post',
+        onPressed: () => _openEditor('/shop/create'),
+        icon: const Icon(Icons.add),
+        label: const Text('Create Post'),
       ),
     );
   }

@@ -6,7 +6,7 @@ import '../../../core/widgets/app_text_field.dart';
 import '../../../core/widgets/primary_button.dart';
 import 'package:flutter/foundation.dart';
 import '../../../core/network/api_client.dart';
-import 'package:dio/dio.dart';
+import '../../../core/network/api_exceptions.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -19,6 +19,19 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+
+  @override
+  void initState() {
+    super.initState();
+    // Show why we are on the login page (session expired, admin blocked, server offline...).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final message = context.read<AuthProvider>().takeStatusMessage();
+      if (message != null) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -39,14 +52,8 @@ class _LoginScreenState extends State<LoginScreen> {
         _passwordController.text,
       );
       
-      if (success) {
-        if (!mounted) return;
-        if (authProvider.role == 'shop') {
-          context.go('/shop_home');
-        } else {
-          context.go('/buyer_home');
-        }
-      }
+      // On success the router redirect opens the right home screen for the role.
+      if (success && mounted) context.go('/');
     }
   }
 
@@ -130,12 +137,8 @@ class _LoginScreenState extends State<LoginScreen> {
                             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('OK: ${res.statusCode}')));
                           }
                         } catch (e) {
-                          String msg = e.toString();
-                          if (e is DioException && e.error != null) {
-                            msg = e.error.toString();
-                          }
                           if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $msg')));
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: ${describeError(e)}')));
                           }
                         }
                       },

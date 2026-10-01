@@ -14,6 +14,7 @@ import '../models/listing_model.dart';
 import '../../../core/widgets/common_widgets.dart';
 import '../../../core/widgets/app_network_image.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/network/api_exceptions.dart';
 
 class ListingDetailsScreen extends StatefulWidget {
   final int id;
@@ -26,27 +27,44 @@ class ListingDetailsScreen extends StatefulWidget {
 class _ListingDetailsScreenState extends State<ListingDetailsScreen> {
   ListingDetail? _listing;
   bool _isLoading = true;
+  String? _error;
+  bool _wishlistBusy = false;
 
   @override
   void initState() {
     super.initState();
-    _fetchDetails();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _fetchDetails());
   }
 
   Future<void> _fetchDetails() async {
-    final provider = context.read<MarketplaceProvider>();
-    final details = await provider.getListingDetails(widget.id);
-    if (mounted) {
-      setState(() {
-        _listing = details;
-        _isLoading = false;
-      });
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    try {
+      final details = await context.read<MarketplaceProvider>().getListingDetails(widget.id);
+      if (mounted) setState(() => _listing = details);
+    } catch (e) {
+      if (mounted) setState(() => _error = statusOf(e) == 404 ? 'This listing is not available.' : describeError(e));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  Future<void> _toggleWishlist(WishlistProvider wishlist, bool saved) async {
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _wishlistBusy = true);
+    final error = saved ? await wishlist.removeFromWishlist(widget.id) : await wishlist.addToWishlist(widget.id);
+    if (mounted) setState(() => _wishlistBusy = false);
+    messenger.showSnackBar(SnackBar(
+      content: Text(error ?? (saved ? 'Removed from wishlist' : 'Added to wishlist – you will be told about price drops')),
+      backgroundColor: error != null ? Colors.red : null,
+    ));
   }
 
   void _openGallery(BuildContext context, int initialIndex) {
     if (_listing == null || _listing!.images.isEmpty) return;
-    
+
     Navigator.of(context).push(MaterialPageRoute(
       builder: (context) => Scaffold(
         backgroundColor: Colors.black,
@@ -82,13 +100,13 @@ class _ListingDetailsScreenState extends State<ListingDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (_isLoading && _listing == null) {
+      return Scaffold(appBar: AppBar(), body: const Center(child: CircularProgressIndicator()));
     }
     if (_listing == null) {
       return Scaffold(
         appBar: AppBar(),
-        body: ErrorView(message: 'Failed to load listing details.', onRetry: () {}),
+        body: ErrorView(message: _error ?? 'Failed to load listing details.', onRetry: _fetchDetails),
       );
     }
 
@@ -96,22 +114,20 @@ class _ListingDetailsScreenState extends State<ListingDetailsScreen> {
     final wishlistProvider = context.watch<WishlistProvider>();
     final isInWishlist = wishlistProvider.isInWishlist(listing.id);
     final authProvider = context.watch<AuthProvider>();
-    final isOwner = authProvider.userId == listing.sellerId;
+    final isOwner = authProvider.userId != null && authProvider.userId == listing.sellerId;
+    // Wishlist / Buy only for other people's LIVE listings (never own or SOLD).
+    final canBuy = !isOwner && listing.status == 'LIVE';
 
     return Scaffold(
       appBar: AppBar(
         title: Text(listing.title),
         actions: [
-          if (listing.status == 'LIVE')
+          if (canBuy)
             IconButton(
+              key: const ValueKey('wishlist-toggle'),
+              tooltip: isInWishlist ? 'Remove from wishlist' : 'Add to wishlist',
               icon: Icon(isInWishlist ? Icons.favorite : Icons.favorite_border, color: isInWishlist ? Colors.red : null),
-              onPressed: () {
-                if (isInWishlist) {
-                  wishlistProvider.removeFromWishlist(listing.id);
-                } else {
-                  wishlistProvider.addToWishlist(listing.id);
-                }
-              },
+              onPressed: _wishlistBusy ? null : () => _toggleWishlist(wishlistProvider, isInWishlist),
             ),
         ],
       ),
@@ -135,7 +151,7 @@ class _ListingDetailsScreenState extends State<ListingDetailsScreen> {
                   );
                 }).toList(),
               ),
-            
+
             Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
@@ -151,7 +167,7 @@ class _ListingDetailsScreenState extends State<ListingDetailsScreen> {
                   const SizedBox(height: 16),
                   Text(listing.title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
-                  
+
                   // Metadata
                   Wrap(
                     spacing: 8,
@@ -164,13 +180,14 @@ class _ListingDetailsScreenState extends State<ListingDetailsScreen> {
                     ],
                   ),
                   const SizedBox(height: 24),
-                  
+
                   const Text('Description', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
                   Text(listing.description),
                   const SizedBox(height: 24),
 
-                  if (listing.fairPrice != null) ...[
+                  // Trust score + fair verdict: only for the owner (the API hides them from others).
+                  if (isOwner && listing.priceVerdict != null) ...[
                     AppCard(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -197,7 +214,7 @@ class _ListingDetailsScreenState extends State<ListingDetailsScreen> {
                                   style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                                 ),
                               ),
-                              Text('${Formatters.price(listing.fairPriceMin ?? 0)} - ${Formatters.price(listing.fairPriceMax ?? 0)}'),
+                              Text(listing.fairPriceMin != null ? '${Formatters.price(listing.fairPriceMin!)} - ${Formatters.price(listing.fairPriceMax ?? 0)}' : 'No reference price'),
                             ],
                           ),
                           const SizedBox(height: 8),
@@ -208,7 +225,7 @@ class _ListingDetailsScreenState extends State<ListingDetailsScreen> {
                     const SizedBox(height: 24),
                   ],
 
-                  if (listing.trustScore != null) ...[
+                  if (isOwner && listing.trustScore != null) ...[
                     AppCard(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -287,7 +304,7 @@ class _ListingDetailsScreenState extends State<ListingDetailsScreen> {
                       children: [
                         Row(
                           children: [
-                            CircleAvatar(child: Text(listing.sellerName.substring(0, 1).toUpperCase())),
+                            CircleAvatar(child: Text(listing.sellerName.isEmpty ? '?' : listing.sellerName.substring(0, 1).toUpperCase())),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Column(
@@ -300,7 +317,7 @@ class _ListingDetailsScreenState extends State<ListingDetailsScreen> {
                             ),
                           ],
                         ),
-                        if (listing.sellerPhone != null && listing.status == 'LIVE') ...[
+                        if (listing.sellerPhone != null && canBuy) ...[
                           const SizedBox(height: 16),
                           Row(
                             children: [
@@ -333,12 +350,33 @@ class _ListingDetailsScreenState extends State<ListingDetailsScreen> {
           ],
         ),
       ),
-      bottomSheet: listing.status == 'LIVE'
+      bottomSheet: isOwner
           ? Container(
               padding: const EdgeInsets.all(16),
               color: Theme.of(context).scaffoldBackgroundColor,
-              child: isOwner ? const Text('This is your listing', textAlign: TextAlign.center, style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)) : ElevatedButton(
-                onPressed: () => context.push('/checkout', extra: listing),
+              child: Row(
+                children: [
+                  const Expanded(child: Text('This is your listing', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold))),
+                  if (listing.status != 'SOLD')
+                    ElevatedButton.icon(
+                      key: const ValueKey('edit-own-listing'),
+                      icon: const Icon(Icons.edit),
+                      label: const Text('Edit'),
+                      onPressed: () async {
+                        await context.push('/shop/edit/${listing.id}');
+                        if (mounted) _fetchDetails();
+                      },
+                    ),
+                ],
+              ),
+            )
+          : canBuy
+          ? Container(
+              padding: const EdgeInsets.all(16),
+              color: Theme.of(context).scaffoldBackgroundColor,
+              child: ElevatedButton(
+                key: const ValueKey('buy-now'),
+                onPressed: () => context.push('/checkout/${listing.id}'),
                 style: ElevatedButton.styleFrom(
                   minimumSize: const Size(double.infinity, 50),
                   padding: const EdgeInsets.symmetric(vertical: 16),

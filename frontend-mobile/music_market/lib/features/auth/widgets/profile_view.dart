@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/network/api_exceptions.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -131,10 +132,13 @@ class _ProfileViewState extends State<ProfileView> {
   Future<void> _pickImage(BuildContext context) async {
     final picker = ImagePicker();
     final picked = await picker.pickImage(source: ImageSource.gallery);
-    if (picked != null) {
-      if (context.mounted) {
-        await context.read<AuthProvider>().uploadAvatar(picked.path);
-      }
+    if (picked == null || !context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await context.read<AuthProvider>().uploadAvatar(picked);
+      messenger.showSnackBar(const SnackBar(content: Text('Profile photo updated')));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(describeError(e)), backgroundColor: Colors.red));
     }
   }
 

@@ -29,8 +29,11 @@ class _SalesScreenState extends State<SalesScreen> {
       ),
       body: Consumer<ShopProvider>(
         builder: (context, provider, child) {
-          if (provider.isLoadingSales) {
+          if (provider.isLoadingSales && provider.sales.isEmpty) {
             return const Center(child: CircularProgressIndicator());
+          }
+          if (provider.salesError != null && provider.sales.isEmpty) {
+            return ErrorView(message: provider.salesError!, onRetry: provider.fetchSales);
           }
           if (provider.sales.isEmpty) {
             return const EmptyState(message: 'No sales found.');
