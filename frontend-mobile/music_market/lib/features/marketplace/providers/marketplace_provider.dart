@@ -1,3 +1,4 @@
+import 'package:music_market/core/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import '../../../core/network/api_client.dart';
@@ -125,7 +126,7 @@ class MarketplaceProvider with ChangeNotifier {
         return ListingDetail.fromJson(response.data);
       }
     } catch (e) {
-      // Handle error
+      logDebug('Caught error:', e);
     }
     return null;
   }

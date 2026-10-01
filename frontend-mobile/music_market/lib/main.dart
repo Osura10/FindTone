@@ -12,39 +12,51 @@ import 'features/alerts/providers/alerts_provider.dart';
 import 'features/assistant/providers/assistant_provider.dart';
 import 'features/notifications/providers/notifications_provider.dart';
 
+import 'dart:async';
+import 'package:music_market/core/utils/app_logger.dart';
+
 void main() {
-  ErrorWidget.builder = (FlutterErrorDetails details) {
-    bool inDebug = false;
-    assert(() {
-      inDebug = true;
-      return true;
-    }());
-    
-    return Material(
-      child: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, color: Colors.red, size: 48),
-              const SizedBox(height: 16),
-              const Text('Something went wrong', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              if (inDebug)
-                Expanded(
-                  child: SingleChildScrollView(
-                    child: Text(details.exceptionAsString(), style: const TextStyle(fontSize: 12)),
+  runZonedGuarded(() {
+    WidgetsFlutterBinding.ensureInitialized();
+    FlutterError.onError = (FlutterErrorDetails details) {
+      logDebug('FlutterError', details.exceptionAsString());
+    };
+
+    ErrorWidget.builder = (FlutterErrorDetails details) {
+      bool inDebug = false;
+      assert(() {
+        inDebug = true;
+        return true;
+      }());
+      
+      return Material(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error_outline, color: Colors.red, size: 48),
+                const SizedBox(height: 16),
+                const Text('Something went wrong', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                if (inDebug)
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Text(details.exceptionAsString(), style: const TextStyle(fontSize: 12)),
+                    ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
-      ),
-    );
-  };
+      );
+    };
 
-  runApp(const MusicMarketApp());
+    runApp(const MusicMarketApp());
+  }, (error, stackTrace) {
+    logDebug('runZonedGuarded', '$error\n$stackTrace');
+  });
 }
 
 /// The main entry point of the application.
@@ -65,11 +77,16 @@ class MusicMarketApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AssistantProvider()),
         ChangeNotifierProvider(create: (_) => NotificationsProvider()),
       ],
-      child: MaterialApp.router(
-        title: 'FindTone',
-        theme: AppTheme.darkTheme,
-        routerConfig: AppRouter.router,
-        debugShowCheckedModeBanner: false,
+      child: Builder(
+        builder: (context) {
+          final authProvider = Provider.of<AuthProvider>(context, listen: false);
+          return MaterialApp.router(
+            title: 'FindTone',
+            theme: AppTheme.darkTheme,
+            routerConfig: AppRouter.getRouter(authProvider),
+            debugShowCheckedModeBanner: false,
+          );
+        }
       ),
     );
   }

@@ -31,10 +31,19 @@ public class SmartAlertService
             {
                 if (notif.UserId == listing.SellerId) continue; // never notify the seller
 
-                // Check if already exists
-                var exists = await dbContext.Notifications.AnyAsync(n => 
+                var existing = await dbContext.Notifications.FirstOrDefaultAsync(n => 
                     n.UserId == notif.UserId && n.ListingId == listing.Id && n.Type == notif.Type);
-                if (exists) continue;
+                if (existing != null)
+                {
+                    if (notif.Type == "PRICE_DROP")
+                    {
+                        existing.Title = notif.Title;
+                        existing.Message = notif.Message;
+                        existing.IsRead = false;
+                        existing.CreatedAt = DateTime.UtcNow;
+                    }
+                    continue;
+                }
 
                 var entity = new Notification
                 {
@@ -83,10 +92,19 @@ public class SmartAlertService
             {
                 if (notif.UserId == listing.SellerId) continue;
 
-                // Check if already exists
-                var exists = await dbContext.Notifications.AnyAsync(n => 
+                var existing = await dbContext.Notifications.FirstOrDefaultAsync(n => 
                     n.UserId == notif.UserId && n.ListingId == listing.Id && n.Type == notif.Type);
-                if (exists) continue;
+                if (existing != null)
+                {
+                    if (notif.Type == "PRICE_DROP")
+                    {
+                        existing.Title = notif.Title;
+                        existing.Message = notif.Message;
+                        existing.IsRead = false;
+                        existing.CreatedAt = DateTime.UtcNow;
+                    }
+                    continue;
+                }
 
                 var entity = new Notification
                 {

@@ -1,3 +1,4 @@
+import 'package:music_market/core/utils/app_logger.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter/foundation.dart';
@@ -51,7 +52,7 @@ class ApiClient {
         if (e.type == DioExceptionType.connectionTimeout || 
             e.type == DioExceptionType.connectionError) {
           if (kDebugMode) {
-            print("DioException: ${e.type}, ${e.message}, ${e.requestOptions.uri}, ${e.response?.statusCode}, ${e.error}");
+            logDebug('Log:', "DioException: ${e.type}, ${e.message}, ${e.requestOptions.uri}, ${e.response?.statusCode}, ${e.error}");
           }
           return handler.next(DioException(
             requestOptions: e.requestOptions,
@@ -61,7 +62,7 @@ class ApiClient {
 
         if (e.type == DioExceptionType.receiveTimeout || e.type == DioExceptionType.sendTimeout) {
           if (kDebugMode) {
-            print("DioException Timeout: ${e.type}, path: ${e.requestOptions.path}");
+            logDebug('Log:', "DioException Timeout: ${e.type}, path: ${e.requestOptions.path}");
           }
           String msg = "Request timed out, try again.";
           if (e.requestOptions.path.endsWith('/listings') && e.requestOptions.method == 'POST') {

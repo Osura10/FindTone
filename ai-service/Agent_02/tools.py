@@ -120,6 +120,29 @@ def verify_images(listing_id: int) -> dict:
                     "drum kit", "microphone", "guitar amplifier", "a screenshot or text image"
                 ]
                 
+                expected = category.lower()
+                expected_label = expected
+                cat_map = {
+                    "electric guitar": "electric guitar",
+                    "acoustic guitar": "acoustic guitar",
+                    "bass guitar": "bass guitar",
+                    "keyboard": "keyboard",
+                    "drum": "drum kit",
+                    "microphone": "microphone",
+                    "amplifier": "guitar amplifier",
+                    "amp": "guitar amplifier",
+                    "ukulele": "acoustic guitar",
+                    "pedal": "guitar amplifier"
+                }
+                
+                for k, v in cat_map.items():
+                    if k in expected:
+                        expected_label = v
+                        break
+                        
+                if expected_label not in labels:
+                    labels.append(expected_label)
+                    
                 import numpy as np
                 image_emb = model.encode(im_to_check)
                 text_emb = model.encode(labels)
@@ -130,24 +153,6 @@ def verify_images(listing_id: int) -> dict:
                 
                 best_idx = np.argmax(similarities)
                 detected_label = labels[best_idx]
-                
-                expected = category.lower()
-                cat_map = {
-                    "acoustic": "acoustic guitar",
-                    "electric": "electric guitar",
-                    "bass": "bass guitar",
-                    "keyboard": "keyboard",
-                    "piano": "keyboard",
-                    "drum": "drum kit",
-                    "mic": "microphone",
-                    "amp": "guitar amplifier"
-                }
-                
-                expected_label = expected
-                for k, v in cat_map.items():
-                    if k in expected:
-                        expected_label = v
-                        break
                         
                 if detected_label == "a screenshot or text image":
                     category_check = "mismatch"

@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { apiCall } from '../../services/api';
 import {
   MapPin, CheckCircle, Shield, AlertTriangle, ArrowLeft, Trash2, Heart,
-  Phone, MessageCircle, Info
+  Phone, MessageCircle, Info, Edit2
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker } from 'react-leaflet';
 import L from 'leaflet';
@@ -349,8 +349,15 @@ const ListingDetails = () => {
           {/* Actions */}
           <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
             {isOwner ? (
-              <div style={{ color: 'var(--primary-hover)', fontWeight: 'bold', flex: 1, textAlign: 'center', padding: '1rem', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }}>
-                This is your listing
+              <div style={{ display: 'flex', gap: '0.5rem', flex: 1 }}>
+                <div style={{ color: 'var(--primary-hover)', fontWeight: 'bold', flex: 1, textAlign: 'center', padding: '1rem', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }}>
+                  This is your listing
+                </div>
+                {listing.status !== 'SOLD' && (
+                  <button className="btn btn-outline" style={{ flex: 1, padding: '1rem' }} onClick={() => navigate(`/dashboard/edit/${listing.id}`)}>
+                    <Edit2 size={18} style={{ marginRight: '8px' }} /> Edit
+                  </button>
+                )}
               </div>
             ) : listing.status === 'LIVE' && !isAdmin && (
               <button 

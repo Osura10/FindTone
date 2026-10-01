@@ -443,17 +443,31 @@ const AllItems = () => {
                     </div>
                   )}
                   
-                  {activeTab === 'mine' && item.status === 'LIVE' && (
-                    <button 
-                      className="btn btn-outline"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setPriceModal({ isOpen: true, listingId: item.id, currentPrice: item.price, newPrice: item.price });
-                      }}
-                      style={{ marginTop: '0.75rem', padding: '0.4rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
-                    >
-                      <Edit2 size={14} /> Edit Price
-                    </button>
+                  {activeTab === 'mine' && item.status !== 'SOLD' && (
+                    <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
+                      <button 
+                        className="btn btn-outline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/dashboard/edit/${item.id}`);
+                        }}
+                        style={{ flex: 1, padding: '0.4rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+                      >
+                        <Edit2 size={14} /> Edit
+                      </button>
+                      {item.status === 'LIVE' && (
+                        <button 
+                          className="btn btn-outline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPriceModal({ isOpen: true, listingId: item.id, currentPrice: item.price, newPrice: item.price });
+                          }}
+                          style={{ flex: 1, padding: '0.4rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+                        >
+                          <Edit2 size={14} /> Price
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>

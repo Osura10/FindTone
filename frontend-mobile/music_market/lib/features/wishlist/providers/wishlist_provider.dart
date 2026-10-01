@@ -1,3 +1,4 @@
+import 'package:music_market/core/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import '../../../core/network/api_client.dart';
 import '../models/wishlist_item_model.dart';
@@ -39,7 +40,7 @@ class WishlistProvider with ChangeNotifier {
         return true;
       }
     } catch (e) {
-      // Handle error natively if needed
+      logDebug('Caught error:', e);
     }
     return false;
   }
@@ -53,7 +54,9 @@ class WishlistProvider with ChangeNotifier {
         return true;
       }
     } catch (e) {
-      // Handle error
+logDebug('Caught error:', e);
+      _errorMessage = 'An error occurred. Pull to refresh or try again.';
+      notifyListeners();
     }
     return false;
   }

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:go_router/go_router.dart';
+
 import '../../auth/providers/auth_provider.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -14,25 +14,17 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    _checkAuth();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkAuth();
+    });
   }
 
   Future<void> _checkAuth() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     await authProvider.loadAuthData();
-
-    await Future.delayed(const Duration(seconds: 1)); // small delay for branding
-
     if (!mounted) return;
-
-    if (authProvider.isAuthenticated) {
-      if (authProvider.role == 'shop') {
-        context.go('/shop_home');
-      } else {
-        context.go('/buyer_home');
-      }
-    } else {
-      context.go('/login');
+    if (authProvider.isOffline) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Server offline or network error')));
     }
   }
 

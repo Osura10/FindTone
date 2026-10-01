@@ -1,3 +1,4 @@
+import 'package:music_market/core/utils/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
@@ -10,12 +11,14 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import '../providers/shop_provider.dart';
+import '../../marketplace/providers/marketplace_provider.dart';
 import '../models/price_check_model.dart';
 import '../../../core/providers/catalog_provider.dart';
 import '../../../core/utils/formatters.dart';
 
 class CreatePostScreen extends StatefulWidget {
-  const CreatePostScreen({super.key});
+  final int? listingId;
+  const CreatePostScreen({super.key, this.listingId});
 
   @override
   State<CreatePostScreen> createState() => _CreatePostScreenState();
@@ -26,7 +29,54 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   final _priceController = TextEditingController();
   final _scrollController = ScrollController();
   final List<XFile> _images = [];
+  late final bool _isEdit;
+  bool _isLoadingEdit = false;
+  List<dynamic> _existingImages = [];
+
+  @override
   
+  @override
+  void initState() {
+    super.initState();
+    _isEdit = widget.listingId != null;
+    if (_isEdit) {
+      _isLoadingEdit = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _loadListing();
+      });
+    }
+  }
+
+  Future<void> _loadListing() async {
+    try {
+      final listing = await context.read<MarketplaceProvider>().getListingDetails(widget.listingId!);
+      if (listing != null && mounted) {
+        setState(() {
+          _title = listing.title;
+          _category = listing.category;
+          _brand = listing.brand;
+          _model = listing.model;
+          _condition = listing.condition;
+          _year = listing.year;
+          _listingType = listing.listingType;
+          _price = listing.price;
+          _priceController.text = listing.price.toStringAsFixed(0);
+          _description = listing.description;
+          _location = listing.location;
+          _lat = listing.latitude;
+          _lng = listing.longitude;
+          _existingImages = listing.images;
+          _isLoadingEdit = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoadingEdit = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to load listing: $e')));
+      }
+    }
+  }
+
   @override
   void dispose() {
     _priceController.dispose();
@@ -53,21 +103,26 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
 
   bool _isSubmitting = false;
 
-  Future<void> _pickImages() async {
+Future<void> _pickImages() async {
     final picker = ImagePicker();
-    final pickedFiles = await picker.pickMultiImage(
-      imageQuality: 80, // roughly handles max size, though backend validates 5MB limit
-    );
-    
-    if (pickedFiles.isNotEmpty) {
+    final picked = await picker.pickMultiImage();
+    if (picked.isNotEmpty) {
       setState(() {
-        _images.addAll(pickedFiles);
-        if (_images.length > 6) {
-          _images.removeRange(6, _images.length);
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Maximum 6 images allowed.')));
+        if (_images.length + _existingImages.length + picked.length <= 6) {
+          _images.addAll(picked);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Max 6 images total allowed')));
         }
       });
     }
+  }
+
+  
+  // removeExistingImage
+  void _removeExistingImage(int index) {
+    setState(() {
+      _existingImages.removeAt(index);
+    });
   }
 
   void _removeImage(int index) {
@@ -137,7 +192,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_images.isEmpty) {
+    if (_images.isEmpty && _existingImages.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please add at least 1 image.')));
       return;
     }
@@ -199,7 +254,14 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     };
 
     try {
-      final success = await context.read<ShopProvider>().createListing(data, _images);
+      
+      bool success;
+      if (_isEdit) {
+        success = await context.read<ShopProvider>().updateListing(widget.listingId!, data, _images, _existingImages);
+      } else {
+        success = await context.read<ShopProvider>().createListing(data, _images);
+      }
+
       isDone = true;
       if (mounted) {
         Navigator.pop(context); // close dialog
@@ -210,7 +272,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           final newListing = provider.myListings.isNotEmpty ? provider.myListings.first : null;
           final status = newListing?.status ?? 'PENDING';
           
-          String message = 'Listing created successfully. Status: $status';
+          String message = _isEdit ? 'Listing updated successfully' : 'Listing created successfully. Status: $status';
           if (status == 'LIVE') {
             message = 'Success! Your listing is LIVE.';
           } else if (status == 'FLAGGED') {
@@ -235,11 +297,18 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoadingEdit) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Edit Post')),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
     final catalog = context.watch<CatalogProvider>();
     
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Create Listing'),
+        title: Text(_isEdit ? 'Edit Listing' : 'Create Listing'),
       ),
       body: Form(
         key: _formKey,
@@ -254,10 +323,10 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
               height: 100,
               child: ListView.builder(
                 scrollDirection: Axis.horizontal,
-                itemCount: _images.length + 1,
+                itemCount: _existingImages.length + _images.length + 1,
                 itemBuilder: (context, index) {
-                  if (index == _images.length) {
-                    if (_images.length >= 6) return const SizedBox();
+                  if (index == _existingImages.length + _images.length) {
+                    if (_existingImages.length + _images.length >= 6) return const SizedBox();
                     return GestureDetector(
                       onTap: _pickImages,
                       child: Container(
@@ -272,6 +341,10 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                       ),
                     );
                   }
+                  
+                  final isExisting = index < _existingImages.length;
+                  final dynamic img = isExisting ? _existingImages[index] : _images[index - _existingImages.length];
+                  
                   return Stack(
                     children: [
                       Container(
@@ -279,16 +352,16 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                         margin: const EdgeInsets.only(right: 8),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(8),
-                          child: kIsWeb
-                              ? Image.network(_images[index].path, fit: BoxFit.cover)
-                              : Image.file(File(_images[index].path), fit: BoxFit.cover),
+                          child: isExisting
+                              ? Image.network(img.url, fit: BoxFit.cover)
+                              : (kIsWeb ? Image.network(img.path, fit: BoxFit.cover) : Image.file(File(img.path), fit: BoxFit.cover)),
                         ),
                       ),
                       Positioned(
                         top: 4,
                         right: 12,
                         child: GestureDetector(
-                          onTap: () => _removeImage(index),
+                          onTap: () => isExisting ? _removeExistingImage(index) : _removeImage(index - _existingImages.length),
                           child: const CircleAvatar(
                             radius: 12,
                             backgroundColor: Colors.red,
@@ -304,21 +377,40 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
             const SizedBox(height: 16),
             
             TextFormField(
+              initialValue: _title,
               decoration: const InputDecoration(labelText: 'Title'),
               validator: (v) => v!.isEmpty ? 'Required' : null,
               onSaved: (v) => _title = v,
             ),
             const SizedBox(height: 16),
             
-            DropdownButtonFormField<String>(
-              decoration: const InputDecoration(labelText: 'Category'),
-              items: catalog.categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-              validator: (v) => v == null ? 'Required' : null,
-              onChanged: (v) => setState(() => _category = v),
+Autocomplete<String>(
+              initialValue: TextEditingValue(text: _category ?? ''),
+              optionsBuilder: (TextEditingValue textEditingValue) {
+                if (textEditingValue.text.isEmpty) {
+                  return catalog.categories;
+                }
+                return catalog.categories.where((String option) {
+                  return option.toLowerCase().contains(textEditingValue.text.toLowerCase());
+                });
+              },
+              onSelected: (String selection) {
+                setState(() => _category = selection);
+              },
+              fieldViewBuilder: (context, controller, focusNode, onEditingComplete) {
+                return TextFormField(
+                  controller: controller,
+                  focusNode: focusNode,
+                  decoration: const InputDecoration(labelText: 'Category (e.g. Electric Guitar)'),
+                  validator: (v) => v!.isEmpty ? 'Required' : null,
+                  onChanged: (v) => _category = v,
+                );
+              },
             ),
             const SizedBox(height: 16),
             
             DropdownButtonFormField<String>(
+              initialValue: _brand,
               decoration: const InputDecoration(labelText: 'Brand'),
               items: catalog.brands.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
               validator: (v) => v == null ? 'Required' : null,
@@ -327,6 +419,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
             const SizedBox(height: 16),
             
             TextFormField(
+              initialValue: _model,
               decoration: const InputDecoration(labelText: 'Model'),
               validator: (v) => v!.isEmpty ? 'Required' : null,
               onSaved: (v) => _model = v,
@@ -334,6 +427,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
             const SizedBox(height: 16),
 
             DropdownButtonFormField<String>(
+              initialValue: _condition,
               decoration: const InputDecoration(labelText: 'Condition'),
               items: ['new', 'like_new', 'excellent', 'good', 'fair', 'poor', 'for_parts']
                   .map((c) => DropdownMenuItem(value: c, child: Text(Formatters.condition(c))))
@@ -344,6 +438,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
             const SizedBox(height: 16),
 
             TextFormField(
+              initialValue: _year?.toString(),
               decoration: const InputDecoration(labelText: 'Year (optional)'),
               keyboardType: TextInputType.number,
               onSaved: (v) => _year = int.tryParse(v ?? ''),
@@ -385,6 +480,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
             const SizedBox(height: 16),
 
             TextFormField(
+              initialValue: _description,
               decoration: const InputDecoration(labelText: 'Description'),
               maxLines: 4,
               validator: (v) => v!.isEmpty ? 'Required' : null,
@@ -492,7 +588,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                 Expanded(
                   child: ElevatedButton(
                     onPressed: _isSubmitting ? null : _submit,
-                    child: _isSubmitting ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator()) : const Text('Submit'),
+                    child: _isSubmitting ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator()) : Text(_isEdit ? 'Save Changes' : 'Submit'),
                   ),
                 ),
               ],
@@ -536,7 +632,7 @@ class _LocationPickerDialogState extends State<_LocationPickerDialog> {
         });
       }
     } catch (e) {
-      // ignore
+      logDebug('Caught error:', e);
     } finally {
       setState(() => _isLoading = false);
     }
@@ -565,7 +661,7 @@ class _LocationPickerDialogState extends State<_LocationPickerDialog> {
         _mapController.move(pos, 15.0);
       }
     } catch (e) {
-      // ignore
+      logDebug('Caught error:', e);
     } finally {
       setState(() => _isLoading = false);
     }
@@ -601,6 +697,7 @@ class _LocationPickerDialogState extends State<_LocationPickerDialog> {
 
   @override
   Widget build(BuildContext context) {
+
     return Dialog(
       insetPadding: const EdgeInsets.all(16),
       child: Column(
