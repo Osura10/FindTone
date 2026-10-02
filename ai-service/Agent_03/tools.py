@@ -210,9 +210,11 @@ def detect_price_drop(listing_id: int, old_price: float) -> dict:
     }
 
 @tool
-def prepare_notifications(listing_id: int, event: str, matches: list, watchers: list, old_price: float = None) -> dict:
+def prepare_notifications(listing_id: int, event: str, matches: list, watchers: list, old_price: Optional[float] = None) -> dict:
     """
     Prepare notification objects for the given users.
+    old_price is only set for PRICE_DROP; it is None for a new listing (must be Optional,
+    or the tool's validation rejects None and no NEW_MATCH is ever sent).
     """
     listing = get_listing_details.invoke({"listing_id": listing_id})
     if listing.get("error"):
