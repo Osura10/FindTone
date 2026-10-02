@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
+import '../theme/app_theme.dart';
+import 'common_widgets.dart';
+
 class AppNetworkImage extends StatelessWidget {
   final String? imageUrl;
   final double? width;
@@ -60,28 +63,18 @@ class AppNetworkImage extends StatelessWidget {
   }
 
   Widget _buildShimmer() {
-    return Container(
-      width: width ?? double.infinity,
-      height: height ?? double.infinity,
-      color: Colors.grey[300],
-      child: const Center(child: CircularProgressIndicator()),
-    );
+    return LoadingShimmer(width: width ?? double.infinity, height: height ?? double.infinity, borderRadius: 0);
   }
 
   Widget _buildPlaceholder() {
-    return Container(
-      width: width ?? double.infinity,
-      height: height ?? double.infinity,
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.grey, Colors.blueGrey],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: const Center(
-        child: Icon(Icons.music_note, color: Colors.white54, size: 40),
-      ),
-    );
+    return Builder(builder: (context) {
+      final c = context.colors;
+      return Container(
+        width: width ?? double.infinity,
+        height: height ?? double.infinity,
+        color: c.surface2,
+        child: Center(child: Icon(Icons.music_note_rounded, color: c.textMuted, size: 36)),
+      );
+    });
   }
 }

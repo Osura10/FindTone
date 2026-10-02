@@ -8,6 +8,8 @@ import '../../../core/widgets/suggestion_field.dart';
 import '../../notifications/providers/notifications_provider.dart';
 import '../models/alert_model.dart';
 import '../providers/alerts_provider.dart';
+import '../../notifications/widgets/notification_bell.dart';
+import '../../../core/theme/app_theme.dart';
 
 const _conditionCodes = ['new', 'like_new', 'excellent', 'good', 'fair', 'poor', 'for_parts'];
 
@@ -32,14 +34,13 @@ class _MyAlertsScreenState extends State<MyAlertsScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
       builder: (_) => AlertForm(alert: alert),
     );
   }
 
   void _snack(String text, {bool error = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text), backgroundColor: error ? Colors.red : null));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error ? '⚠ $text' : text)));
   }
 
   String _summary(AlertModel a) {
@@ -58,71 +59,99 @@ class _MyAlertsScreenState extends State<MyAlertsScreen> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AlertsProvider>();
+    final c = context.colors;
+    final canPop = Navigator.of(context).canPop();
 
     Widget body;
     if (provider.isLoading && provider.alerts.isEmpty) {
-      body = const Center(child: CircularProgressIndicator());
+      body = const ShimmerLoader.list(count: 3, rowHeight: 130);
     } else if (provider.errorMessage != null && provider.alerts.isEmpty) {
-      body = ErrorView(message: provider.errorMessage!, onRetry: provider.fetchAlerts);
+      body = ListView(children: [ErrorState(message: provider.errorMessage!, onRetry: provider.fetchAlerts)]);
     } else if (provider.alerts.isEmpty) {
       body = ListView(children: [
-        const SizedBox(height: 120),
-        const EmptyState(icon: Icons.notifications_off, message: 'No alerts yet.'),
-        const SizedBox(height: 16),
-        Center(child: ElevatedButton.icon(icon: const Icon(Icons.add), label: const Text('Create Alert'), onPressed: _openForm)),
+        const SizedBox(height: 60),
+        EmptyState(
+          icon: Icons.notifications_active_outlined,
+          title: 'No alerts yet',
+          message: 'Tell us what you want – we notify you the moment a matching instrument is listed.',
+          action: FilledButton.icon(icon: const Icon(Icons.add), label: const Text('Create Alert'), onPressed: _openForm),
+        ),
       ]);
     } else {
       body = ListView.builder(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(AppSpacing.page, AppSpacing.sm, AppSpacing.page, 96),
         itemCount: provider.alerts.length,
         itemBuilder: (context, index) {
           final alert = provider.alerts[index];
-          return Card(
+          return Padding(
             key: ValueKey('alert-${alert.id}'),
-            margin: const EdgeInsets.only(bottom: 16),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(children: [
-                    Expanded(
-                      child: Text(alert.name.isNotEmpty ? alert.name : 'Alert #${alert.id}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    ),
-                    Switch(
-                      value: alert.isActive,
-                      onChanged: (val) async {
-                        final (error, matches) = await provider.toggleAlert(alert.id, val);
-                        if (error != null) {
-                          _snack(error, error: true);
-                        } else if (val && matches > 0) {
-                          _snack('Alert resumed – $matches listing${matches == 1 ? '' : 's'} match now.');
-                          if (context.mounted) context.read<NotificationsProvider>().refreshUnreadCount();
-                        } else {
-                          _snack(val ? 'Alert resumed' : 'Alert paused');
-                        }
-                      },
-                    ),
-                  ]),
-                  Text(_summary(alert), style: const TextStyle(color: Colors.grey)),
-                  if (alert.lastNotifiedAt != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Text('Last match: ${alert.lastNotifiedAt}'.split('.').first, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                    ),
-                  Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-                    TextButton.icon(icon: const Icon(Icons.edit, size: 16), label: const Text('Edit'), onPressed: () => _openForm(alert: alert)),
-                    TextButton.icon(
-                      icon: const Icon(Icons.delete, size: 16, color: Colors.red),
-                      label: const Text('Delete', style: TextStyle(color: Colors.red)),
-                      onPressed: () async {
-                        final error = await provider.deleteAlert(alert.id);
-                        _snack(error ?? 'Alert deleted', error: error != null);
-                      },
-                    ),
-                  ]),
-                ],
+            padding: const EdgeInsets.only(bottom: AppSpacing.md),
+            child: Opacity(
+              opacity: alert.isActive ? 1 : 0.65,
+              child: AppCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(color: c.primarySoft, borderRadius: BorderRadius.circular(AppRadius.md)),
+                        child: Icon(Icons.notifications_active_outlined, size: 20, color: c.primaryText),
+                      ),
+                      const SizedBox(width: AppSpacing.md),
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(alert.name.isNotEmpty ? alert.name : 'Alert #${alert.id}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                          Text(alert.isActive ? 'Active' : 'Paused', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: alert.isActive ? c.success : c.textMuted)),
+                        ]),
+                      ),
+                      Switch(
+                        value: alert.isActive,
+                        onChanged: (val) async {
+                          final (error, matches) = await provider.toggleAlert(alert.id, val);
+                          if (error != null) {
+                            _snack(error, error: true);
+                          } else if (val && matches > 0) {
+                            _snack('Alert resumed – $matches listing${matches == 1 ? '' : 's'} match now.');
+                            if (context.mounted) context.read<NotificationsProvider>().refreshUnreadCount();
+                          } else {
+                            _snack(val ? 'Alert resumed' : 'Alert paused');
+                          }
+                        },
+                      ),
+                    ]),
+                    const SizedBox(height: AppSpacing.md),
+                    Wrap(spacing: 6, runSpacing: 6, children: [
+                      for (final part in _summary(alert).split(' · ').where((p) => p.isNotEmpty))
+                        Pill(label: part, color: context.scheme.onSurface, background: c.surface2),
+                    ]),
+                    if (alert.lastNotifiedAt != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: AppSpacing.sm),
+                        child: Row(children: [
+                          Icon(Icons.schedule_rounded, size: 14, color: c.textMuted),
+                          const SizedBox(width: 4),
+                          Text('Last match: ${alert.lastNotifiedAt}'.split('.').first, style: context.text.bodySmall),
+                        ]),
+                      ),
+                    const SizedBox(height: AppSpacing.sm),
+                    const Divider(),
+                    Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                      TextButton.icon(icon: const Icon(Icons.edit_outlined, size: 18), label: const Text('Edit'), onPressed: () => _openForm(alert: alert)),
+                      TextButton.icon(
+                        style: TextButton.styleFrom(foregroundColor: c.danger),
+                        icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                        label: const Text('Delete'),
+                        onPressed: () async {
+                          final error = await provider.deleteAlert(alert.id);
+                          _snack(error ?? 'Alert deleted', error: error != null);
+                        },
+                      ),
+                    ]),
+                  ],
+                ),
               ),
             ),
           );
@@ -132,10 +161,12 @@ class _MyAlertsScreenState extends State<MyAlertsScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        automaticallyImplyLeading: canPop,
         title: const Text('My Alerts'),
-        actions: [IconButton(tooltip: 'New alert', icon: const Icon(Icons.add), onPressed: _openForm)],
+        actions: const [NotificationBell(), SizedBox(width: 4)],
       ),
       body: RefreshIndicator(onRefresh: provider.fetchAlerts, child: body),
+      floatingActionButton: FloatingActionButton.extended(heroTag: 'new-alert', onPressed: _openForm, icon: const Icon(Icons.add), label: const Text('New alert')),
     );
   }
 }
@@ -281,73 +312,96 @@ class _AlertFormState extends State<AlertForm> {
   @override
   Widget build(BuildContext context) {
     final catalog = context.watch<CatalogProvider>();
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).scaffoldBackgroundColor,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 16, right: 16, top: 24),
+    final c = context.colors;
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: SafeArea(
         child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(AppSpacing.page, 0, AppSpacing.page, AppSpacing.page),
           child: Form(
             key: _formKey,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(widget.alert == null ? 'Create Alert' : 'Edit Alert', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 16),
-                Row(children: [
-                  Expanded(
-                    child: TextField(
+                Text(widget.alert == null ? 'Create Alert' : 'Edit Alert', style: context.text.titleLarge),
+                const SizedBox(height: AppSpacing.lg),
+                // Describe in plain words -> the AI fills the filters
+                Container(
+                  padding: const EdgeInsets.all(AppSpacing.md),
+                  decoration: BoxDecoration(color: c.primarySoft, borderRadius: BorderRadius.circular(AppRadius.lg)),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    Row(children: [
+                      Icon(Icons.auto_awesome, size: 18, color: c.primaryText),
+                      const SizedBox(width: 6),
+                      Text('Describe what you want', style: TextStyle(fontWeight: FontWeight.w700, color: c.primaryText)),
+                    ]),
+                    const SizedBox(height: AppSpacing.sm),
+                    TextField(
                       key: const ValueKey('ai-text'),
                       controller: _aiText,
                       decoration: const InputDecoration(hintText: 'e.g. used Yamaha guitar under 40k in Colombo'),
                       onSubmitted: (_) => _fillWithAi(),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  ElevatedButton.icon(
-                    key: const ValueKey('fill-with-ai'),
-                    icon: _isParsing ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.auto_awesome),
-                    label: Text(_isParsing ? 'Reading…' : 'Fill with AI'),
-                    onPressed: _isParsing ? null : _fillWithAi,
-                  ),
-                ]),
-                if (_aiNote != null) Padding(padding: const EdgeInsets.only(top: 6), child: Text(_aiNote!, style: const TextStyle(color: Colors.green))),
-                const SizedBox(height: 16),
+                    const SizedBox(height: AppSpacing.sm),
+                    FilledButton.icon(
+                      key: const ValueKey('fill-with-ai'),
+                      icon: _isParsing
+                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.auto_awesome, size: 18),
+                      label: Text(_isParsing ? 'Reading…' : 'Fill with AI'),
+                      onPressed: _isParsing ? null : _fillWithAi,
+                    ),
+                    if (_aiNote != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: AppSpacing.sm),
+                        child: Row(children: [
+                          Icon(Icons.check_circle_outline, size: 16, color: c.success),
+                          const SizedBox(width: 6),
+                          Expanded(child: Text(_aiNote!, style: TextStyle(color: c.success, fontWeight: FontWeight.w600))),
+                        ]),
+                      ),
+                  ]),
+                ),
+                const SizedBox(height: AppSpacing.lg),
                 TextFormField(controller: _name, decoration: const InputDecoration(labelText: 'Alert name (optional)')),
-                const SizedBox(height: 12),
+                const SizedBox(height: AppSpacing.md),
                 SuggestionField(controller: _category, label: 'Category', suggestions: catalog.categories),
-                const SizedBox(height: 12),
+                const SizedBox(height: AppSpacing.md),
                 SuggestionField(controller: _brand, label: 'Brand', suggestions: catalog.brands),
-                const SizedBox(height: 12),
+                const SizedBox(height: AppSpacing.md),
                 TextFormField(controller: _model, decoration: const InputDecoration(labelText: 'Model / keyword')),
-                const SizedBox(height: 12),
-                Row(children: [_number(_minPrice, 'Min price (LKR)'), const SizedBox(width: 16), _number(_maxPrice, 'Max price (LKR)')]),
-                const SizedBox(height: 12),
-                TextFormField(controller: _location, decoration: const InputDecoration(labelText: 'Location')),
-                const SizedBox(height: 12),
-                const Text('Conditions (any of)'),
+                const SizedBox(height: AppSpacing.md),
+                Row(children: [_number(_minPrice, 'Min LKR'), const SizedBox(width: AppSpacing.md), _number(_maxPrice, 'Max LKR')]),
+                const SizedBox(height: AppSpacing.md),
+                TextFormField(controller: _location, decoration: const InputDecoration(labelText: 'Location', prefixIcon: Icon(Icons.place_outlined))),
+                const SizedBox(height: AppSpacing.lg),
+                Text('Conditions (any of)', style: context.text.titleSmall),
+                const SizedBox(height: AppSpacing.sm),
                 Wrap(
                   spacing: 6,
+                  runSpacing: 6,
                   children: [
-                    for (final c in _conditionCodes)
+                    for (final code in _conditionCodes)
                       FilterChip(
-                        label: Text(Formatters.condition(c)),
-                        selected: _conditions.contains(c),
-                        onSelected: (on) => setState(() => on ? _conditions.add(c) : _conditions.remove(c)),
+                        label: Text(Formatters.condition(code)),
+                        selected: _conditions.contains(code),
+                        onSelected: (on) => setState(() => on ? _conditions.add(code) : _conditions.remove(code)),
                       ),
                   ],
                 ),
-                if (_error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(_error!, style: const TextStyle(color: Colors.redAccent))),
-                const SizedBox(height: 20),
-                ElevatedButton(
-                  key: const ValueKey('save-alert'),
-                  onPressed: _isSaving ? null : _save,
-                  child: _isSaving ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Save Alert'),
+                if (_error != null) Padding(padding: const EdgeInsets.only(top: AppSpacing.md), child: InlineNotice(message: _error!, tone: NoticeTone.error)),
+                const SizedBox(height: AppSpacing.xl),
+                SizedBox(
+                  height: 52,
+                  child: FilledButton(
+                    key: const ValueKey('save-alert'),
+                    onPressed: _isSaving ? null : _save,
+                    child: _isSaving
+                        ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Text('Save Alert'),
+                  ),
                 ),
-                const SizedBox(height: 16),
               ],
             ),
           ),

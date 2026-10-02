@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
+import '../theme/app_theme.dart';
+import 'common_widgets.dart';
 
 /// Short place name from a Nominatim answer, e.g. "Kollupitiya, Colombo".
 String shortPlaceName(Map data) {
@@ -164,17 +166,24 @@ class _LocationSectionState extends State<LocationSection> {
                 onChanged: _onSearchChanged,
               ),
             ),
-            IconButton(tooltip: 'Current location', icon: const Icon(Icons.my_location), onPressed: _useMyLocation),
+            const SizedBox(width: 8),
+            IconButton.outlined(tooltip: 'Use my current location', icon: const Icon(Icons.my_location_rounded), onPressed: _useMyLocation),
           ],
         ),
-        for (final r in _results)
-          ListTile(dense: true, leading: const Icon(Icons.place_outlined), title: Text(r['display_name']?.toString() ?? ''), onTap: () => _choose(r)),
+        if (_results.isNotEmpty)
+          Card(
+            margin: const EdgeInsets.only(top: 6),
+            child: Column(children: [
+              for (final r in _results)
+                ListTile(dense: true, leading: const Icon(Icons.place_outlined), title: Text(r['display_name']?.toString() ?? '', maxLines: 2, overflow: TextOverflow.ellipsis), onTap: () => _choose(r)),
+            ]),
+          ),
         const SizedBox(height: 8),
         if (widget.showMap)
           SizedBox(
             height: 240,
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(AppRadius.md),
               child: FlutterMap(
                 mapController: _mapController,
                 options: MapOptions(initialCenter: pos ?? _colombo, initialZoom: pos != null ? 14 : 12, onTap: (_, latLng) => _pick(latLng)),
@@ -182,28 +191,33 @@ class _LocationSectionState extends State<LocationSection> {
                   TileLayer(urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', userAgentPackageName: 'com.findtone.music_market'),
                   if (pos != null)
                     MarkerLayer(markers: [
-                      Marker(point: pos, width: 40, height: 40, child: const Icon(Icons.location_pin, color: Colors.red, size: 40)),
+                      Marker(point: pos, width: 40, height: 40, child: Icon(Icons.location_pin, color: Theme.of(context).colorScheme.primary, size: 40)),
                     ]),
                   const RichAttributionWidget(attributions: [TextSourceAttribution('© OpenStreetMap contributors')]),
                 ],
               ),
             ),
           ),
-        const SizedBox(height: 8),
+        if (widget.showMap)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text('Tap the map to drop a pin at the exact spot.', style: Theme.of(context).textTheme.bodySmall),
+          ),
+        const SizedBox(height: 12),
         TextFormField(
           key: const ValueKey('location-label'),
           controller: widget.labelController,
           decoration: InputDecoration(
             labelText: 'Location name',
             hintText: pos == null ? 'Tap the map to drop a pin' : null,
-            prefixIcon: const Icon(Icons.place),
+            prefixIcon: const Icon(Icons.place_outlined),
             suffixIcon: _busy ? const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))) : null,
           ),
           onChanged: widget.onLabelChanged,
           validator: (v) => (v ?? '').trim().isEmpty ? 'Please enter a location name' : null,
         ),
         if (_message != null)
-          Padding(padding: const EdgeInsets.only(top: 4), child: Text(_message!, style: const TextStyle(color: Colors.amber, fontSize: 12))),
+          Padding(padding: const EdgeInsets.only(top: 8), child: InlineNotice(message: _message!, tone: NoticeTone.warning)),
       ],
     );
   }

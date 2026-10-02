@@ -13,6 +13,9 @@ import '../../features/shop/screens/sales_screen.dart';
 import '../../features/shop/screens/create_post_screen.dart';
 import '../../features/notifications/screens/notifications_screen.dart';
 import '../../features/wishlist/screens/wishlist_screen.dart';
+import '../../features/assistant/screens/assistant_screen.dart';
+import '../../features/marketplace/screens/marketplace_screen.dart';
+import '../../features/shop/screens/my_listings_screen.dart';
 import '../../features/auth/providers/auth_provider.dart';
 
 /// Home route for a role. Buyers and shops have the same features; only the path differs.
@@ -83,6 +86,9 @@ class AppRouter {
         GoRoute(path: '/sales', builder: (context, state) => const SalesScreen()),
         GoRoute(path: '/wishlist', builder: (context, state) => const WishlistScreen()),
         GoRoute(path: '/notifications', builder: (context, state) => const NotificationsScreen()),
+        GoRoute(path: '/assistant', builder: (context, state) => const AssistantScreen()),
+        GoRoute(path: '/search', builder: (context, state) => const MarketplaceScreen()),
+        GoRoute(path: '/my_listings', builder: (context, state) => const MyListingsScreen()),
         GoRoute(path: '/shop/create', builder: (context, state) => const CreatePostScreen()),
         GoRoute(
           path: '/shop/edit/:id',

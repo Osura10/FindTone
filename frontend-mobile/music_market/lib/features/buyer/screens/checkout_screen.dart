@@ -11,6 +11,7 @@ import '../../marketplace/models/listing_model.dart';
 import '../../marketplace/providers/marketplace_provider.dart';
 import '../checkout_validation.dart';
 import '../providers/buyer_provider.dart';
+import '../../../core/theme/app_theme.dart';
 
 /// Checkout (route /checkout/:id). Same rules as the web: demo card 1234 1234 1234 1234 or COD.
 class CheckoutScreen extends StatefulWidget {
@@ -111,28 +112,80 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     }
   }
 
-  Widget _field(TextEditingController c, String label, {TextInputType? type, List<TextInputFormatter>? formatters, bool obscure = false, String? hint, Key? key}) =>
+  Widget _field(TextEditingController c, String label, {TextInputType? type, List<TextInputFormatter>? formatters, bool obscure = false, String? hint, Key? key, IconData? icon}) =>
       Padding(
-        padding: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.only(bottom: AppSpacing.md),
         child: TextField(
           key: key,
           controller: c,
           keyboardType: type,
           inputFormatters: formatters,
           obscureText: obscure,
-          decoration: InputDecoration(labelText: label, hintText: hint),
+          decoration: InputDecoration(labelText: label, hintText: hint, prefixIcon: icon != null ? Icon(icon, size: 20) : null),
+        ),
+      );
+
+  Widget _payOption(String value, IconData icon, String title, String subtitle) {
+    final selected = _paymentMethod == value;
+    final c = context.colors;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      child: Semantics(
+        selected: selected,
+        button: true,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          onTap: () => setState(() => _paymentMethod = value),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            padding: const EdgeInsets.all(AppSpacing.md),
+            decoration: BoxDecoration(
+              color: selected ? c.primarySoft : context.scheme.surface,
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              border: Border.all(color: selected ? context.scheme.primary : context.scheme.outline, width: selected ? 2 : 1),
+            ),
+            child: Row(children: [
+              Icon(icon, color: selected ? c.primaryText : c.textMuted),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                  Text(subtitle, style: context.text.bodySmall),
+                ]),
+              ),
+              Icon(selected ? Icons.radio_button_checked : Icons.radio_button_off, size: 20, color: selected ? c.primaryText : c.textMuted),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _card(String title, IconData icon, List<Widget> children) => Padding(
+        padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+        child: AppCard(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Row(children: [
+              Icon(icon, size: 20, color: context.colors.primaryText),
+              const SizedBox(width: AppSpacing.sm),
+              Text(title, style: context.text.titleMedium),
+            ]),
+            const SizedBox(height: AppSpacing.lg),
+            ...children,
+          ]),
         ),
       );
 
   @override
   Widget build(BuildContext context) {
     if (_loading && _listing == null) {
-      return Scaffold(appBar: AppBar(title: const Text('Checkout')), body: const Center(child: CircularProgressIndicator()));
+      return Scaffold(appBar: AppBar(title: const Text('Checkout')), body: const ShimmerLoader.list(count: 3, rowHeight: 180));
     }
     if (_listing == null) {
-      return Scaffold(appBar: AppBar(title: const Text('Checkout')), body: ErrorView(message: _loadError ?? _error ?? 'Could not load the listing.', onRetry: _load));
+      return Scaffold(appBar: AppBar(title: const Text('Checkout')), body: ErrorState(message: _loadError ?? _error ?? 'Could not load the listing.', onRetry: _load));
     }
     final listing = _listing!;
+    final c = context.colors;
     final myId = context.watch<AuthProvider>().userId;
     final blocked = listing.sellerId == myId
         ? 'You cannot buy your own listing.'
@@ -143,80 +196,116 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Checkout')),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(AppSpacing.page, AppSpacing.sm, AppSpacing.page, AppSpacing.xl),
         children: [
-          Card(
-            child: ListTile(
-              leading: SizedBox(width: 50, height: 50, child: AppNetworkImage(imageUrl: listing.images.isNotEmpty ? listing.images.first.url : null, isThumbnail: true)),
-              title: Text(listing.title),
-              subtitle: Text(Formatters.price(listing.price), style: const TextStyle(fontWeight: FontWeight.bold)),
-            ),
-          ),
-          if (blocked != null) ...[
-            const SizedBox(height: 24),
-            Text(blocked, textAlign: TextAlign.center, style: const TextStyle(color: Colors.redAccent, fontSize: 16)),
-          ] else ...[
-            const SizedBox(height: 16),
-            const Text('Delivery details', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            _field(_fullName, 'Full name', key: const ValueKey('co-name')),
-            _field(_phone, 'Phone number', type: TextInputType.phone, hint: 'e.g. 0771234567', key: const ValueKey('co-phone')),
-            _field(_address, 'Address line', key: const ValueKey('co-address')),
-            Row(children: [
-              Expanded(child: _field(_city, 'City', key: const ValueKey('co-city'))),
-              const SizedBox(width: 12),
-              Expanded(child: _field(_postalCode, 'Postal code (optional)')),
+          // Order summary
+          AppCard(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            child: Row(children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                child: AppNetworkImage(imageUrl: listing.images.isNotEmpty ? listing.images.first.url : null, width: 64, height: 64, isThumbnail: true),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(listing.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 2),
+                  Text('${Formatters.condition(listing.condition)} · ${listing.sellerName}', style: context.text.bodySmall, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 4),
+                  PriceTag(amount: listing.price, size: 17),
+                ]),
+              ),
             ]),
-            _field(_notes, 'Delivery notes (optional)'),
-            const SizedBox(height: 8),
-            const Text('Payment method', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            SegmentedButton<String>(
-              segments: const [
-                ButtonSegment(value: 'CARD', icon: Icon(Icons.credit_card), label: Text('Card')),
-                ButtonSegment(value: 'COD', icon: Icon(Icons.money), label: Text('Cash on Delivery')),
-              ],
-              selected: {_paymentMethod},
-              onSelectionChanged: (s) => setState(() => _paymentMethod = s.first),
-            ),
-            const SizedBox(height: 12),
-            if (_paymentMethod == 'CARD') ...[
-              const Text('Demo mode – use card 1234 1234 1234 1234, any future expiry (MM/YY), any 3-digit CVV. Only the last 4 digits are stored.',
-                  style: TextStyle(color: Colors.amber, fontSize: 12)),
-              const SizedBox(height: 8),
-              _field(_cardNumber, 'Card number', type: TextInputType.number, hint: '0000 0000 0000 0000', key: const ValueKey('co-card'),
-                  formatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(16), _CardNumberFormatter()]),
-              _field(_cardHolder, 'Card holder name', key: const ValueKey('co-holder')),
-              Row(children: [
-                Expanded(
-                  child: _field(_expiry, 'Expiry (MM/YY)', type: TextInputType.number, hint: 'MM/YY', key: const ValueKey('co-expiry'),
-                      formatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(4), _ExpiryFormatter()]),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _field(_cvv, 'CVV', type: TextInputType.number, obscure: true, key: const ValueKey('co-cvv'),
-                      formatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(3)]),
-                ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          if (blocked != null)
+            InlineNotice(message: blocked, tone: NoticeTone.error)
+          else ...[
+            _card('Delivery details', Icons.local_shipping_outlined, [
+              _field(_fullName, 'Full name', key: const ValueKey('co-name'), icon: Icons.person_outline_rounded),
+              _field(_phone, 'Phone number', type: TextInputType.phone, hint: 'e.g. 0771234567', key: const ValueKey('co-phone'), icon: Icons.phone_outlined),
+              _field(_address, 'Address line', key: const ValueKey('co-address'), icon: Icons.home_outlined),
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(child: _field(_city, 'City', key: const ValueKey('co-city'))),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(child: _field(_postalCode, 'Postal code', hint: 'Optional')),
               ]),
-            ],
+              _field(_notes, 'Delivery notes (optional)'),
+            ]),
+            _card('Payment method', Icons.account_balance_wallet_outlined, [
+              _payOption('CARD', Icons.credit_card_rounded, 'Card payment', 'Visa, Mastercard'),
+              _payOption('COD', Icons.payments_outlined, 'Cash on delivery', 'Pay when it arrives'),
+              if (_paymentMethod == 'CARD') ...[
+                const SizedBox(height: AppSpacing.lg),
+                const InlineNotice(
+                  message: 'Demo mode – use card 1234 1234 1234 1234, any future expiry (MM/YY) and any 3-digit CVV. Only the last 4 digits are stored.',
+                  tone: NoticeTone.info,
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                _field(_cardNumber, 'Card number', type: TextInputType.number, hint: '0000 0000 0000 0000', key: const ValueKey('co-card'), icon: Icons.credit_card_rounded,
+                    formatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(16), _CardNumberFormatter()]),
+                _field(_cardHolder, 'Card holder name', key: const ValueKey('co-holder')),
+                Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Expanded(
+                    child: _field(_expiry, 'Expiry (MM/YY)', type: TextInputType.number, hint: 'MM/YY', key: const ValueKey('co-expiry'),
+                        formatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(4), _ExpiryFormatter()]),
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: _field(_cvv, 'CVV', type: TextInputType.number, obscure: true, key: const ValueKey('co-cvv'),
+                        formatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(3)]),
+                  ),
+                ]),
+              ],
+            ]),
             if (_error != null)
               Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Text(_error!, key: const ValueKey('checkout-error'), style: const TextStyle(color: Colors.redAccent)),
+                padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                child: InlineNotice(key: const ValueKey('checkout-error'), message: _error!, tone: NoticeTone.error),
               ),
-            SizedBox(
-              height: 50,
-              child: ElevatedButton(
-                key: const ValueKey('place-order'),
-                onPressed: _submitting ? null : _submit,
-                child: _submitting
-                    ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
-                    : Text('Place order • ${Formatters.price(listing.price)}'),
-              ),
-            ),
+            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Icon(Icons.lock_outline_rounded, size: 14, color: c.textMuted),
+              const SizedBox(width: 4),
+              Text('Your details go only to the seller for delivery.', style: context.text.bodySmall),
+            ]),
           ],
         ],
       ),
+      // Sticky total + Place order
+      bottomNavigationBar: blocked != null
+          ? null
+          : Container(
+              decoration: BoxDecoration(color: context.scheme.surface, border: Border(top: BorderSide(color: c.border))),
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(AppSpacing.page, AppSpacing.md, AppSpacing.page, AppSpacing.md),
+                  child: Row(children: [
+                    Expanded(
+                      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text('Total', style: context.text.bodySmall),
+                        PriceTag(amount: listing.price, size: 20),
+                      ]),
+                    ),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      flex: 2,
+                      child: SizedBox(
+                        height: 52,
+                        child: FilledButton(
+                          key: const ValueKey('place-order'),
+                          onPressed: _submitting ? null : _submit,
+                          child: _submitting
+                              ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                              : const Text('Place order'),
+                        ),
+                      ),
+                    ),
+                  ]),
+                ),
+              ),
+            ),
     );
   }
 }

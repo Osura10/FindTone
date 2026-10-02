@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'core/routes/app_router.dart';
 import 'core/theme/app_theme.dart';
+import 'core/theme/theme_controller.dart';
 import 'features/auth/providers/auth_provider.dart';
 import 'core/providers/catalog_provider.dart';
 import 'features/marketplace/providers/marketplace_provider.dart';
@@ -36,7 +37,7 @@ void main() {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.error_outline, color: Colors.red, size: 48),
+                const Icon(Icons.error_outline_rounded, color: Color(0xFFB91C1C), size: 48),
                 const SizedBox(height: 16),
                 const Text('Something went wrong', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
@@ -67,6 +68,7 @@ class MusicMarketApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => ThemeController()..load()),
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => CatalogProvider()..fetchCatalog()),
         ChangeNotifierProvider(create: (_) => MarketplaceProvider()..fetchListings(refresh: true)),
@@ -80,10 +82,20 @@ class MusicMarketApp extends StatelessWidget {
       child: Builder(
         builder: (context) {
           final authProvider = Provider.of<AuthProvider>(context, listen: false);
+          final themeMode = context.watch<ThemeController>().mode;
           return MaterialApp.router(
-            title: 'FindTone',
-            theme: AppTheme.darkTheme,
+            title: 'MusicMarket',
+            theme: AppTheme.light,
+            darkTheme: AppTheme.dark,
+            themeMode: themeMode,
             routerConfig: AppRouter.getRouter(authProvider),
+            // On wide screens (web / tablets) keep the app at a readable width, centred.
+            builder: (context, child) => ColoredBox(
+              color: Theme.of(context).colorScheme.surfaceContainerLowest,
+              child: Center(
+                child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 1200), child: child),
+              ),
+            ),
             debugShowCheckedModeBanner: false,
           );
         }

@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import '../../../core/widgets/common_widgets.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 import '../providers/buyer_provider.dart';
-import '../../../core/utils/formatters.dart';
-import '../../../core/widgets/app_network_image.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../notifications/widgets/notification_bell.dart';
+import '../../shop/widgets/order_tile.dart';
 
 class MyOrdersScreen extends StatefulWidget {
   const MyOrdersScreen({super.key});
@@ -26,68 +26,34 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('My Orders')),
+      appBar: AppBar(title: const Text('My Orders'), actions: const [NotificationBell(), SizedBox(width: 4)]),
       body: Consumer<BuyerProvider>(
         builder: (context, provider, child) {
+          Widget body;
           if (provider.isLoadingOrders && provider.myOrders.isEmpty) {
-            return const Center(child: CircularProgressIndicator());
+            body = const ShimmerLoader.list(count: 4, rowHeight: 130);
+          } else if (provider.errorMessage != null && provider.myOrders.isEmpty) {
+            body = ListView(children: [ErrorState(message: provider.errorMessage!, onRetry: provider.fetchMyOrders)]);
+          } else if (provider.myOrders.isEmpty) {
+            body = ListView(children: [
+              const SizedBox(height: 60),
+              EmptyState(
+                icon: Icons.shopping_bag_outlined,
+                title: 'No orders yet',
+                message: 'Browse the marketplace to find great deals on instruments.',
+                action: FilledButton(onPressed: () => context.go('/'), child: const Text('Browse marketplace')),
+              ),
+            ]);
+          } else {
+            body = ListView.separated(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(AppSpacing.page, AppSpacing.sm, AppSpacing.page, AppSpacing.xxl),
+              itemCount: provider.myOrders.length,
+              separatorBuilder: (context, index) => const SizedBox(height: AppSpacing.md),
+              itemBuilder: (context, index) => OrderTile(order: provider.myOrders[index], seller: false),
+            );
           }
-          if (provider.errorMessage != null && provider.myOrders.isEmpty) {
-            return ErrorView(message: provider.errorMessage!, onRetry: provider.fetchMyOrders);
-          }
-          if (provider.myOrders.isEmpty) {
-            return const Center(child: Text('You have no orders yet.'));
-          }
-
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: provider.myOrders.length,
-            separatorBuilder: (context, index) => const SizedBox(height: 16),
-            itemBuilder: (context, index) {
-              final order = provider.myOrders[index];
-              return Card(
-                child: InkWell(
-                  onTap: () => context.push('/listing/${order.listingId}'),
-                  borderRadius: BorderRadius.circular(12),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: AppNetworkImage(
-                            imageUrl: order.listingImage,
-                            width: 80,
-                            height: 80,
-                            isThumbnail: true,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(order.listingTitle, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                              const SizedBox(height: 4),
-                              Text(Formatters.price(order.amount), style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
-                              const SizedBox(height: 4),
-                              Text('Status: ${order.status}', style: TextStyle(color: order.status == 'COMPLETED' ? Colors.green : Colors.amber)),
-                              const SizedBox(height: 4),
-                              Text(
-                                '${DateFormat.yMMMd().format(order.createdAt)} • ${order.paymentMethod}',
-                                style: const TextStyle(fontSize: 12, color: Colors.grey),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            },
-          );
+          return RefreshIndicator(onRefresh: provider.fetchMyOrders, child: body);
         },
       ),
     );

@@ -124,6 +124,34 @@ class MarketplaceProvider with ChangeNotifier {
     fetchListings(refresh: true);
   }
 
+  // ── Home feed: the newest listings, kept apart from the search results ──────────────
+  List<ListingSummary> _latest = [];
+  bool _isLoadingLatest = false;
+  String? _latestError;
+
+  List<ListingSummary> get latest => _latest;
+  bool get isLoadingLatest => _isLoadingLatest;
+  String? get latestError => _latestError;
+
+  /// Newest listings for the Home tab (no search text or filters).
+  Future<void> fetchLatest() async {
+    _isLoadingLatest = true;
+    notifyListeners();
+    try {
+      final response = await _apiClient.dio.get('/listings', queryParameters: {'page': 1, 'pageSize': 12});
+      _latest = (response.data['items'] as List).map((e) => ListingSummary.fromJson(e)).toList();
+      _latestError = null;
+    } catch (e) {
+      _latestError = describeError(e, 'Failed to load listings. Please try again.');
+    } finally {
+      _isLoadingLatest = false;
+      notifyListeners();
+    }
+  }
+
+  bool get hasActiveFilters =>
+      (_category?.isNotEmpty ?? false) || (_brand?.isNotEmpty ?? false) || (_condition?.isNotEmpty ?? false) || _minPrice != null || _maxPrice != null;
+
   /// Listing details (public view, or owner view for your own listing). Throws AppException.
   Future<ListingDetail> getListingDetails(int id) async {
     try {
