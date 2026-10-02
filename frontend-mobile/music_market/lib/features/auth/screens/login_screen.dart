@@ -4,9 +4,6 @@ import 'package:go_router/go_router.dart';
 import '../providers/auth_provider.dart';
 import '../../../core/widgets/app_text_field.dart';
 import '../../../core/widgets/primary_button.dart';
-import 'package:flutter/foundation.dart';
-import '../../../core/network/api_client.dart';
-import '../../../core/network/api_exceptions.dart';
 import '../../../core/widgets/common_widgets.dart';
 import '../../../core/theme/app_theme.dart';
 
@@ -128,26 +125,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         isLoading: authProvider.isLoading,
                         onPressed: _handleLogin,
                       ),
-                      if (kDebugMode)
-                        Padding(
-                          padding: const EdgeInsets.only(top: AppSpacing.sm),
-                          child: TextButton.icon(
-                            icon: const Icon(Icons.wifi_tethering, size: 18),
-                            onPressed: () async {
-                              try {
-                                final res = await ApiClient().dio.get('/catalog');
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('OK: ${res.statusCode}')));
-                                }
-                              } catch (e) {
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: ${describeError(e)}')));
-                                }
-                              }
-                            },
-                            label: const Text('Test connection'),
-                          ),
-                        ),
                       const SizedBox(height: AppSpacing.lg),
                       Wrap(
                         alignment: WrapAlignment.center,

@@ -4,13 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import { Mail, Phone, MapPin, Briefcase, User, Key, Map, X, Camera, Trash2, AlertTriangle, Shield, Store, Check, Loader2 } from 'lucide-react';
 import { apiCall } from '../../services/api';
 
-const dummyItems = [
-  { id: 1, name: 'Fender Stratocaster', price: '$850', condition: 'Used', image: 'https://images.unsplash.com/photo-1564186763535-ebb55ef3d1db?auto=format&fit=crop&q=80&w=300' },
-  { id: 2, name: 'Yamaha Acoustic F310', price: '$150', condition: 'Brand New', image: 'https://images.unsplash.com/photo-1550291652-6ea9114a47b1?auto=format&fit=crop&q=80&w=300' },
-  { id: 3, name: 'Roland Juno-DS61', price: '$700', condition: 'Used', image: 'https://images.unsplash.com/photo-1595069906974-f9ae71b504f2?auto=format&fit=crop&q=80&w=300' },
-  { id: 4, name: 'Shure SM58 Mic', price: '$99', condition: 'Brand New', image: 'https://images.unsplash.com/photo-1520523839897-bd0b52f945a0?auto=format&fit=crop&q=80&w=300' },
-];
-
 const Profile = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
@@ -590,77 +583,6 @@ const Profile = () => {
           </div>
         </div>
       </div>
-
-      {/* Shop Posts Section */}
-      {user.role === 'shop' && (
-        <div style={{ marginTop: '4rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2rem' }}>
-            <div>
-              <h2 className="text-gradient" style={{ fontSize: '1.8rem', margin: 0, fontWeight: '700' }}>
-                Listings by {user.name}
-              </h2>
-              <p style={{ color: 'var(--text-secondary)', margin: '0.25rem 0 0 0', fontSize: '0.95rem' }}>
-                Items and instruments currently published in the marketplace
-              </p>
-            </div>
-          </div>
-
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-            gap: '1.5rem'
-          }}>
-            {dummyItems.map(item => (
-              <div
-                key={item.id}
-                className="glass-panel"
-                style={{
-                  overflow: 'hidden',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                  cursor: 'pointer',
-                  borderRadius: '16px',
-                  border: '1px solid var(--surface-2)'
-                }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-6px)';
-                  e.currentTarget.style.borderColor = 'var(--border-strong)';
-                  e.currentTarget.style.boxShadow = 'var(--shadow-lg)';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.borderColor = 'var(--surface-2)';
-                  e.currentTarget.style.boxShadow = 'none';
-                }}
-              >
-                <div style={{ height: '180px', width: '100%', overflow: 'hidden', position: 'relative' }}>
-                  <img src={item.image} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  <div style={{
-                    position: 'absolute',
-                    top: '12px',
-                    right: '12px',
-                    background: 'var(--overlay)',
-                    backdropFilter: 'blur(8px)',
-                    padding: '0.35rem 0.75rem',
-                    borderRadius: '20px',
-                    fontSize: '0.75rem',
-                    fontWeight: '700',
-                    color: item.condition === 'Brand New' ? 'var(--success)' : item.condition === 'Rent' ? 'var(--warning)' : 'var(--primary-text)',
-                    border: '1px solid var(--border-strong)'
-                  }}>
-                    {item.condition}
-                  </div>
-                </div>
-                <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  <h3 style={{ fontSize: '1.1rem', fontWeight: '600', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</h3>
-                  <p style={{ color: 'var(--primary-hover)', fontSize: '1.25rem', fontWeight: '800', margin: 0 }}>{item.price}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* MODERN POP-UP MODALS */}
       {activeModal && createPortal(
