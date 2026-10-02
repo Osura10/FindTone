@@ -35,10 +35,12 @@ jobs:
     - name: Build
       run: dotnet build --no-restore
 
+    # Run the real test project (in-memory SQLite, no secrets needed). Running "dotnet test"
+    # inside MusicMarket.Api ran no tests, because the API project is not a test project.
     - name: Test
       run: |
-        if [ -d "../MusicMarket.Tests" ] || ls ../*.Tests/*.csproj 1> /dev/null 2>&1; then
-          dotnet test --no-build --verbosity normal
+        if [ -d "../MusicMarket.Tests" ]; then
+          dotnet test ../MusicMarket.Tests --verbosity normal
         else
           echo "No test projects found."
         fi
