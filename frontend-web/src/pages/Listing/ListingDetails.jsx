@@ -1,9 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { apiCall } from '../../services/api';
+import { useDashboard, isAdminUser } from '../../hooks/useDashboard';
 import {
-  MapPin, CheckCircle, Shield, AlertTriangle, ArrowLeft, Trash2, Heart,
-  Phone, MessageCircle, Info, Edit2
+  Avatar, Badge, Button, Card, ErrorState, Input, Modal, PriceTag, Skeleton, StatusBadge, VerdictBadge, formatLKR
+} from '../../components/ui';
+import {
+  MapPin, Shield, AlertTriangle, ArrowLeft, Trash2, Heart,
+  Phone, MessageCircle, Info, Edit2, ShoppingCart, Sparkles
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker } from 'react-leaflet';
 import L from 'leaflet';
@@ -24,399 +29,358 @@ const ListingDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
 
+  const { currentUser } = useDashboard();
+  const userId = currentUser?.id ?? null;
+  const isAdmin = isAdminUser(currentUser);
+
   const [listing, setListing] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [userRole, setUserRole] = useState(null);
-  const [userId, setUserId] = useState(null);
-  const [wishlist, setWishlist] = useState([]);
-  
+  const [inWishlist, setInWishlist] = useState(false);
+  const [wishlistBusy, setWishlistBusy] = useState(false);
+
   const [mainImage, setMainImage] = useState('');
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteReason, setDeleteReason] = useState('');
+  const [deleteError, setDeleteError] = useState('');
 
-  useEffect(() => {
-    fetchListing();
-    fetchUserAndWishlist();
-  }, [id]);
-
-  const fetchUserAndWishlist = async () => {
-    try {
-      const user = await apiCall('/auth/me');
-      if (user) {
-        setUserRole(user.role?.toLowerCase());
-        setUserId(user.id);
-        const wl = await apiCall('/wishlist');
-        setWishlist((wl || []).map(w => w.listingId));
-      }
-    } catch (err) {
-      console.log('Not logged in or error fetching user', err);
-    }
-  };
-
-  const fetchListing = async () => {
-    setLoading(true);
+  const fetchListing = useCallback(async () => {
     try {
       const data = await apiCall(`/listings/${id}`);
       setListing(data);
-      if (data.images && data.images.length > 0) {
-        setMainImage(data.images[0].url);
-      }
+      setMainImage(data.images?.[0]?.url || '');
+      setError('');
     } catch (err) {
-      setError('Failed to load listing details.');
+      setError(err.status === 404 ? 'This listing is not available.' : (err.message || 'Failed to load listing details.'));
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
+
+  const fetchWishlist = useCallback(async () => {
+    try {
+      const wl = await apiCall('/wishlist');
+      setInWishlist((wl || []).some((w) => w.listingId === Number(id)));
+    } catch (err) {
+      toast.error(`Could not load your wishlist: ${err.message}`);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchListing();
+  }, [fetchListing]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (currentUser && !isAdmin) fetchWishlist();
+  }, [currentUser, isAdmin, fetchWishlist]);
 
   const toggleWishlist = async () => {
-    if (!userId) {
-      navigate('/login');
-      return;
-    }
+    setWishlistBusy(true);
     try {
-      const listingIdInt = parseInt(id);
-      if (wishlist.includes(listingIdInt)) {
-        await apiCall(`/wishlist/${listingIdInt}`, { method: 'DELETE' });
-        setWishlist(wishlist.filter(w => w !== listingIdInt));
-      } else {
-        await apiCall(`/wishlist/${listingIdInt}`, { method: 'POST' });
-        setWishlist([...wishlist, listingIdInt]);
-      }
+      await apiCall(`/wishlist/${id}`, { method: inWishlist ? 'DELETE' : 'POST' });
+      toast.success(inWishlist ? 'Removed from wishlist' : 'Added to wishlist – you will be told about price drops');
+      setInWishlist(!inWishlist);
     } catch (err) {
-      alert(err.message || 'Failed to update wishlist');
+      toast.error(err.message || 'Failed to update wishlist');
+    } finally {
+      setWishlistBusy(false);
     }
   };
 
-  const handleDelete = async () => {
-    setIsDeleting(true);
-    try {
-      await apiCall(`/listings/${id}${isAdmin && deleteReason ? `?reason=${encodeURIComponent(deleteReason)}` : ''}`, { method: 'DELETE' });
-      alert('Listing deleted successfully');
-      navigate(-1);
-    } catch (err) {
-      alert(err.message || 'Failed to delete listing');
-      setIsDeleting(false);
-      setShowConfirmDelete(false);
-    }
+  const retry = () => {
+    setLoading(true);
+    fetchListing();
   };
 
   if (loading) {
     return (
-      <div style={{ textAlign: 'center', padding: '4rem 0', color: 'var(--text-secondary)' }}>
-        <div className="spinner" style={{ margin: '0 auto 1rem auto' }}></div>
-        <p>Loading details...</p>
+      <div className="page" aria-busy="true" aria-label="Loading listing">
+        <Skeleton width="80px" height="20px" />
+        <div className="details-layout">
+          <div className="stack"><Skeleton height="auto" style={{ aspectRatio: '4 / 3' }} radius="var(--radius-lg)" /><Skeleton height="120px" /></div>
+          <div className="stack"><Skeleton height="28px" width="80%" /><Skeleton height="40px" width="45%" /><Skeleton height="220px" radius="var(--radius-lg)" /></div>
+        </div>
       </div>
     );
   }
 
   if (error || !listing) {
     return (
-      <div style={{ padding: '2rem', textAlign: 'center' }}>
-        <h2 style={{ color: '#ff6b6b' }}>{error || 'Listing not found'}</h2>
-        <button className="btn btn-outline" onClick={() => navigate(-1)} style={{ marginTop: '1rem' }}>
-          Go Back
-        </button>
+      <div className="page page-narrow">
+        <Card>
+          <ErrorState message={error || 'Listing not found'} onRetry={retry} />
+        </Card>
+        <div><Button variant="secondary" icon={ArrowLeft} onClick={() => navigate(-1)}>Go back</Button></div>
       </div>
     );
   }
 
-  const isOwner = userId === listing.sellerId;
-  const isAdmin = userRole === 'admin';
+  const isOwner = userId != null && userId === listing.sellerId;
   const canDelete = isOwner || isAdmin;
+  // Trust score and fair-price verdict: only the owner and admins (the API hides them for others).
+  const showAi = isOwner || isAdmin;
+  const adminDeletingOthers = isAdmin && !isOwner;
 
-  const fmt = (n) => Math.round(n).toLocaleString('en-LK');
-
-  const getStatusBadge = (status) => {
-    switch (status?.toUpperCase()) {
-      case 'LIVE': return { bg: 'rgba(81, 207, 102, 0.2)', color: '#51cf66', label: 'LIVE' };
-      case 'PENDING': return { bg: 'rgba(245, 158, 11, 0.2)', color: '#f59e0b', label: 'PENDING' };
-      case 'FLAGGED': return { bg: 'rgba(255, 146, 43, 0.2)', color: '#ff922b', label: 'Under Review' };
-      case 'REJECTED': return { bg: 'rgba(255, 107, 107, 0.2)', color: '#ff6b6b', label: 'REJECTED' };
-      case 'SOLD': return { bg: 'rgba(134, 142, 150, 0.2)', color: '#adb5bd', label: 'SOLD' };
-      default: return { bg: 'rgba(255, 255, 255, 0.1)', color: '#fff', label: status || 'UNKNOWN' };
+  const handleDelete = async () => {
+    if (adminDeletingOthers && !deleteReason.trim()) {
+      setDeleteError('Please give a reason. The seller will see it.');
+      return;
+    }
+    setIsDeleting(true);
+    setDeleteError('');
+    try {
+      const query = adminDeletingOthers ? `?reason=${encodeURIComponent(deleteReason.trim())}` : '';
+      await apiCall(`/listings/${id}${query}`, { method: 'DELETE' });
+      toast.success('Listing deleted');
+      navigate(isAdmin ? '/dashboard/items' : '/dashboard/items?tab=mine', { replace: true });
+    } catch (err) {
+      setDeleteError(err.message || 'Failed to delete listing');
+      setIsDeleting(false);
     }
   };
 
-  const getVerdictStyles = (verdict) => {
-    switch (verdict?.toUpperCase()) {
-      case 'SUSPICIOUSLY_LOW': return { color: '#ff6b6b' };
-      case 'GREAT_DEAL': return { color: '#51cf66' };
-      case 'FAIR': return { color: '#51cf66' };
-      case 'SLIGHTLY_HIGH': return { color: '#ffd43b' };
-      case 'OVERPRICED': return { color: '#ff6b6b' };
-      default: return { color: '#adb5bd' };
-    }
-  };
-
-  const statusStyle = getStatusBadge(listing.status);
-  const verdictStyle = getVerdictStyles(listing.priceVerdict);
+  const sold = listing.status === 'SOLD';
+  const images = listing.images || [];
+  const specs = [
+    ['Condition', listing.condition?.replace('_', ' ')],
+    ['Brand', listing.brand],
+    ['Model', listing.model],
+    ['Year', listing.year || 'N/A'],
+    ['Category', listing.category],
+    ['Listing type', listing.listingType]
+  ].filter(([, v]) => v);
+  const trustTone = listing.trustScore >= 70 ? 'success' : listing.trustScore >= 40 ? 'warning' : 'danger';
 
   return (
-    <div className="animate-fade-in-up" style={{ padding: '1rem 0', maxWidth: '1000px', margin: '0 auto' }}>
-      <button 
-        onClick={() => navigate(-1)} 
-        style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', marginBottom: '1.5rem' }}
-      >
-        <ArrowLeft size={18} /> Back
-      </button>
+    <div className="page">
+      <div>
+        <Button variant="ghost" size="sm" icon={ArrowLeft} onClick={() => navigate(-1)}>Back</Button>
+      </div>
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2rem' }}>
-        {/* Left Column: Images */}
-        <div style={{ flex: '1 1 400px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div style={{ width: '100%', height: '400px', borderRadius: '12px', overflow: 'hidden', background: '#111', position: 'relative' }}>
-            <img src={mainImage || 'https://placehold.co/600x400?text=No+Photo'} alt="Main" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            <div style={{
-              position: 'absolute', top: '16px', left: '16px',
-              background: statusStyle.bg, color: statusStyle.color,
-              padding: '6px 14px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 'bold',
-              zIndex: 10
-            }}>
-              {statusStyle.label}
+      <div className="details-layout">
+        {/* Gallery (top left) */}
+          <section className="stack-sm d-gallery" aria-label="Photos">
+            <div className="gallery-main">
+              <img src={mainImage || 'https://placehold.co/600x400?text=No+Photo'} alt={listing.title} />
+              {sold && <span className="sold-ribbon" style={{ fontSize: 13, top: 26, right: -46, padding: '6px 56px' }}>SOLD OUT</span>}
+              {images.length > 1 && (
+                <span className="badge media-badge" style={{ position: 'absolute', bottom: 12, right: 12 }}>
+                  {Math.max(1, images.findIndex((img) => img.url === mainImage) + 1)} / {images.length}
+                </span>
+              )}
             </div>
-            {listing.status === 'SOLD' && (
-              <div style={{
-                position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%) rotate(-15deg)',
-                background: 'rgba(239, 68, 68, 0.9)', color: '#fff', padding: '10px 30px', fontSize: '2rem',
-                fontWeight: '900', border: '4px solid #fff', borderRadius: '8px', zIndex: 10,
-                boxShadow: '0 4px 15px rgba(0,0,0,0.5)', textTransform: 'uppercase', letterSpacing: '2px'
-              }}>
-                SOLD OUT
+            {images.length > 1 && (
+              <div className="thumbs" role="list">
+                {images.map((img, i) => (
+                  <button
+                    key={img.id}
+                    type="button"
+                    role="listitem"
+                    className={`thumb ${mainImage === img.url ? 'active' : ''}`}
+                    onClick={() => setMainImage(img.url)}
+                    aria-label={`Show photo ${i + 1}`}
+                    aria-current={mainImage === img.url ? 'true' : undefined}
+                  >
+                    <img src={img.url} alt="" />
+                  </button>
+                ))}
               </div>
             )}
-            {userId && !isOwner && !isAdmin && listing.status === 'LIVE' && (
-              <button
-                onClick={toggleWishlist}
-                style={{
-                  position: 'absolute', top: '16px', right: '16px',
-                  background: 'rgba(0,0,0,0.5)', border: 'none', borderRadius: '50%',
-                  width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: wishlist.includes(listing.id) ? '#ff006e' : '#fff',
-                  cursor: 'pointer', transition: 'transform 0.2s'
-                }}
-              >
-                <Heart size={22} fill={wishlist.includes(listing.id) ? '#ff006e' : 'none'} />
-              </button>
-            )}
-          </div>
-          {listing.images && listing.images.length > 1 && (
-            <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '8px' }}>
-              {listing.images.map(img => (
-                <img 
-                  key={img.id} 
-                  src={img.url} 
-                  alt="Thumbnail" 
-                  onClick={() => setMainImage(img.url)}
-                  style={{
-                    width: '80px', height: '80px', objectFit: 'cover', borderRadius: '8px', cursor: 'pointer',
-                    border: mainImage === img.url ? '2px solid var(--primary)' : '2px solid transparent'
-                  }} 
-                />
+          </section>
+
+        {/* Specs, description, location (bottom left; after the buy box on phones) */}
+        <div className="stack d-info" style={{ gap: 'var(--space-6)' }}>
+          <Card className="stack">
+            <h2 className="section-title">Details</h2>
+            <dl className="spec-grid">
+              {specs.map(([label, value]) => (
+                <div key={label} className="spec"><dt>{label}</dt><dd>{value}</dd></div>
               ))}
-            </div>
-          )}
-        </div>
+            </dl>
+            <h2 className="section-title" style={{ marginTop: 'var(--space-2)' }}>Description</h2>
+            <p style={{ whiteSpace: 'pre-wrap', color: 'var(--text-2)', lineHeight: 1.7 }}>{listing.description}</p>
+          </Card>
 
-        {/* Right Column: Details */}
-        <div style={{ flex: '1 1 400px', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          <div>
-            <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
-              {listing.category} • {listing.brand}
-            </div>
-            <h1 style={{ fontSize: '2rem', margin: '0 0 0.5rem 0', fontWeight: 'bold' }}>{listing.title}</h1>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px' }}>
-              <span style={{ fontSize: '2rem', fontWeight: '900', color: 'var(--primary-hover)' }}>LKR {fmt(listing.price)}</span>
-              <span style={{ fontSize: '1rem', color: 'var(--text-secondary)' }}>{listing.listingType}</span>
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', background: 'rgba(255,255,255,0.03)', padding: '1.2rem', borderRadius: '12px' }}>
-            <div>
-              <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Condition</div>
-              <div style={{ fontWeight: '600' }}>{listing.condition}</div>
-            </div>
-            <div>
-              <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Year</div>
-              <div style={{ fontWeight: '600' }}>{listing.year || 'N/A'}</div>
-            </div>
-            <div>
-              <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Brand</div>
-              <div style={{ fontWeight: '600' }}>{listing.brand}</div>
-            </div>
-            <div>
-              <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Model</div>
-              <div style={{ fontWeight: '600' }}>{listing.model}</div>
-            </div>
-          </div>
-
-          {/* AI Info */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {listing.fairPrice && (
-              <div className="glass-panel" style={{ padding: '1.2rem', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                  <Info size={18} style={{ color: 'var(--primary-hover)' }} />
-                  <span style={{ fontWeight: 'bold' }}>Fair Price Analysis</span>
-                  <span style={{ marginLeft: 'auto', color: verdictStyle.color, fontWeight: 'bold', fontSize: '0.9rem' }}>
-                    {listing.priceVerdict?.replace('_', ' ')}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
-                  <div>
-                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>Fair Range</div>
-                    <div style={{ fontWeight: 'bold' }}>LKR {fmt(listing.fairPriceMin)} - {fmt(listing.fairPriceMax)}</div>
-                  </div>
-                </div>
-                {listing.priceExplanation && (
-                  <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                    {listing.priceExplanation}
-                  </p>
-                )}
-              </div>
-            )}
-            
-            {listing.trustScore != null && (
-              <div className="glass-panel" style={{ padding: '1rem 1.2rem', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <Shield size={24} style={{ color: listing.trustScore >= 70 ? '#10b981' : listing.trustScore >= 40 ? '#f59e0b' : '#ef4444' }} />
-                <div>
-                  <div style={{ fontWeight: 'bold' }}>Trust Score: {listing.trustScore}/100</div>
-                  <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Based on listing details and seller history</div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Description */}
-          <div>
-            <h3 style={{ margin: '0 0 0.8rem 0' }}>Description</h3>
-            <p style={{ whiteSpace: 'pre-wrap', color: '#eaeaea', lineHeight: 1.6, margin: 0 }}>
-              {listing.description}
-            </p>
-          </div>
-
-          {/* Location & Map */}
           {listing.location && (
-            <div>
-              <h3 style={{ margin: '0 0 0.8rem 0' }}>Location</h3>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
-                <MapPin size={16} /> {listing.location}
+            <Card className="stack">
+              <div className="row-between">
+                <h2 className="section-title">Location</h2>
+                <span className="text-sm muted row" style={{ gap: 6 }}><MapPin size={15} aria-hidden="true" /> {listing.location}</span>
               </div>
               {listing.latitude != null && listing.longitude != null && (
-                <div style={{ height: '200px', width: '100%', borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
-                  <MapContainer center={[listing.latitude, listing.longitude]} zoom={14} style={{ height: '100%', width: '100%', zIndex: 1 }}>
+                <div className="map-box">
+                  <MapContainer center={[listing.latitude, listing.longitude]} zoom={14} style={{ height: '100%', width: '100%' }}>
                     <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap' />
                     <Marker position={[listing.latitude, listing.longitude]} />
                   </MapContainer>
                 </div>
               )}
-            </div>
+            </Card>
           )}
+        </div>
 
-          {/* Seller Info */}
-          <div className="glass-panel" style={{ padding: '1.2rem', borderRadius: '12px', marginTop: '1rem' }}>
-            <h4 style={{ margin: '0 0 1rem 0' }}>Seller Information</h4>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div>
-                <div style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>{listing.sellerName}</div>
-                <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', textTransform: 'capitalize' }}>
-                  {listing.sellerRole} • Member since {new Date(listing.sellerMemberSince).getFullYear()}
+        {/* Right column: sticky buy box, seller card, AI info */}
+        <aside className="buy-box stack d-aside">
+          <Card className="stack">
+            <div className="row-between" style={{ alignItems: 'flex-start' }}>
+              <span className="text-xs muted" style={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                {[listing.category, listing.brand].filter(Boolean).join(' · ')}
+              </span>
+              <StatusBadge status={listing.status} />
+            </div>
+            <h1 style={{ fontSize: 'var(--text-2xl)', lineHeight: 1.25, letterSpacing: '-0.01em' }}>{listing.title}</h1>
+            <div className="row" style={{ alignItems: 'baseline' }}>
+              <PriceTag amount={listing.price} size="lg" />
+              {listing.listingType && <span className="text-sm muted">{listing.listingType}</span>}
+            </div>
+            {listing.condition && (
+              <div className="row" style={{ gap: 6 }}>
+                <Badge variant="neutral" className="cap">{listing.condition.replace('_', ' ')}</Badge>
+                {listing.year && <Badge variant="neutral">{listing.year}</Badge>}
+              </div>
+            )}
+
+            <div className="stack-sm">
+              {isOwner ? (
+                <>
+                  <div className="alert alert-info"><Info size={18} aria-hidden="true" style={{ flexShrink: 0, marginTop: 1 }} /><span>This is your listing.</span></div>
+                  {listing.status !== 'SOLD' && (
+                    <Button variant="secondary" size="lg" block icon={Edit2} onClick={() => navigate(`/dashboard/edit/${listing.id}`)}>Edit listing</Button>
+                  )}
+                </>
+              ) : listing.status === 'LIVE' && !isAdmin && userId ? (
+                <Button size="lg" block icon={ShoppingCart} data-testid="buy-now" onClick={() => navigate(`/dashboard/checkout/${listing.id}`)}>
+                  Buy now
+                </Button>
+              ) : sold ? (
+                <div className="alert alert-warning"><AlertTriangle size={18} aria-hidden="true" style={{ flexShrink: 0, marginTop: 1 }} /><span>This instrument has been sold.</span></div>
+              ) : null}
+
+              {userId && !isOwner && !isAdmin && listing.status === 'LIVE' && (
+                <Button
+                  variant="secondary"
+                  size="lg"
+                  block
+                  data-testid="wishlist-toggle"
+                  aria-label={inWishlist ? 'Remove from wishlist' : 'Add to wishlist'}
+                  disabled={wishlistBusy}
+                  onClick={toggleWishlist}
+                >
+                  <Heart size={18} aria-hidden="true" fill={inWishlist ? 'currentColor' : 'none'} style={{ color: inWishlist ? '#e11d48' : undefined }} />
+                  {inWishlist ? 'Remove from wishlist' : 'Add to wishlist'}
+                </Button>
+              )}
+
+              {canDelete && (
+                <Button variant="danger-outline" block icon={Trash2} data-testid="delete-listing" onClick={() => { setDeleteError(''); setShowConfirmDelete(true); }}>
+                  Delete listing
+                </Button>
+              )}
+            </div>
+          </Card>
+
+          {/* Seller card */}
+          <Card className="stack">
+            <h2 className="section-title" style={{ fontSize: 'var(--text-base)' }}>Seller</h2>
+            <div className="row" style={{ flexWrap: 'nowrap' }}>
+              <Avatar name={listing.sellerName || ''} size={48} />
+              <div style={{ minWidth: 0 }}>
+                <div className="truncate" style={{ fontWeight: 700 }}>{listing.sellerName}</div>
+                <div className="text-sm muted">
+                  {listing.sellerRole === 'shop' ? 'Shop' : 'Private seller'}{listing.sellerMemberSince ? ` · member since ${new Date(listing.sellerMemberSince).getFullYear()}` : ''}
                 </div>
               </div>
             </div>
-            
             {listing.sellerPhone && !isAdmin && (
-              <div style={{ display: 'flex', gap: '1rem', marginTop: '1.2rem' }}>
-                <a href={`tel:${listing.sellerPhone}`} className="btn" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', background: 'rgba(255,255,255,0.1)', color: '#fff', textDecoration: 'none' }}>
-                  <Phone size={18} /> Call
-                </a>
-                <a href={`https://wa.me/${listing.sellerPhone.replace(/[^0-9]/g, '')}`} target="_blank" rel="noreferrer" className="btn btn-primary" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', background: '#25D366', color: '#fff', textDecoration: 'none' }}>
-                  <MessageCircle size={18} /> WhatsApp
-                </a>
-              </div>
-            )}
-            {!listing.sellerPhone && userId && !isAdmin && (
-              <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '1rem' }}>
-                Phone number not available.
-              </div>
-            )}
-            {!userId && !isAdmin && (
-              <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '1rem' }}>
-                Log in to see seller contact info.
-              </div>
-            )}
-          </div>
-
-          {/* Actions */}
-          <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-            {isOwner ? (
-              <div style={{ display: 'flex', gap: '0.5rem', flex: 1 }}>
-                <div style={{ color: 'var(--primary-hover)', fontWeight: 'bold', flex: 1, textAlign: 'center', padding: '1rem', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }}>
-                  This is your listing
+              <>
+                <div className="row text-sm" style={{ gap: 8 }}><Phone size={15} aria-hidden="true" className="muted" /> <strong>{listing.sellerPhone}</strong></div>
+                <div className="row" style={{ gap: 8 }}>
+                  <a href={`tel:${listing.sellerPhone}`} className="btn btn-secondary grow"><Phone size={16} aria-hidden="true" /> Call</a>
+                  <a href={`https://wa.me/${listing.sellerPhone.replace(/[^0-9]/g, '')}`} target="_blank" rel="noreferrer" className="btn grow btn-whatsapp">
+                    <MessageCircle size={16} aria-hidden="true" /> WhatsApp
+                  </a>
                 </div>
-                {listing.status !== 'SOLD' && (
-                  <button className="btn btn-outline" style={{ flex: 1, padding: '1rem' }} onClick={() => navigate(`/dashboard/edit/${listing.id}`)}>
-                    <Edit2 size={18} style={{ marginRight: '8px' }} /> Edit
-                  </button>
-                )}
+              </>
+            )}
+            {!listing.sellerPhone && userId && !isAdmin && <p className="text-sm muted">Phone number not available.</p>}
+            {!userId && !isAdmin && <p className="text-sm muted">Log in to see seller contact info.</p>}
+          </Card>
+
+          {/* AI info: owner and admin only */}
+          {showAi && (
+            <Card className="stack" data-testid="ai-info">
+              <div className="row-between">
+                <h2 className="section-title row" style={{ fontSize: 'var(--text-base)', gap: 8 }}><Sparkles size={16} aria-hidden="true" color="var(--primary-text)" /> AI check</h2>
+                <span className="text-xs muted">Only you{isAdmin ? ' (admin)' : ''} can see this</span>
               </div>
-            ) : listing.status === 'LIVE' && !isAdmin && (
-              <button 
-                className="btn btn-primary" 
-                style={{ flex: 1, fontWeight: 'bold' }}
-                onClick={() => navigate(`/dashboard/checkout/${listing.id}`)}
-              >
-                Buy now
-              </button>
-            )}
-            
-            {canDelete && (
-              <button 
-                className="btn btn-outline" 
-                style={{ flex: 1, color: '#ff6b6b', borderColor: '#ff6b6b' }}
-                onClick={() => setShowConfirmDelete(true)}
-              >
-                <Trash2 size={18} style={{ marginRight: '8px' }} /> Delete Listing
-              </button>
-            )}
-          </div>
-        </div>
+              {listing.trustScore != null && (
+                <div className="stack-sm" style={{ gap: 6 }}>
+                  <div className="row-between text-sm">
+                    <span className="row" style={{ gap: 6 }}><Shield size={16} aria-hidden="true" color={`var(--${trustTone})`} /> Trust score</span>
+                    <strong>{listing.trustScore}/100</strong>
+                  </div>
+                  <div className="meter" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={listing.trustScore} aria-label="Trust score">
+                    <span style={{ width: `${listing.trustScore}%`, background: `var(--${trustTone})` }} />
+                  </div>
+                  {listing.trustWarning && <span className="text-xs" style={{ color: 'var(--warning)' }}>Live with a low-trust warning.</span>}
+                </div>
+              )}
+              {listing.priceVerdict && (
+                <div className="stack-sm" style={{ gap: 6 }}>
+                  <div className="row-between text-sm">
+                    <span>Fair price</span>
+                    <VerdictBadge verdict={listing.priceVerdict} />
+                  </div>
+                  <div className="text-sm">
+                    {listing.fairPriceMin != null
+                      ? <>Fair range <strong>{formatLKR(listing.fairPriceMin)} – {formatLKR(listing.fairPriceMax)}</strong></>
+                      : <span className="muted">No reference price found</span>}
+                  </div>
+                  {listing.priceExplanation && <p className="text-sm muted" style={{ lineHeight: 1.55 }}>{listing.priceExplanation}</p>}
+                </div>
+              )}
+              {isAdmin && listing.aiReason && (
+                <pre className="ai-reason">{listing.aiReason}</pre>
+              )}
+            </Card>
+          )}
+        </aside>
       </div>
 
-      {/* Confirm Delete Modal */}
-      {showConfirmDelete && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(8, 6, 15, 0.8)', backdropFilter: 'blur(8px)',
-          display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 999999, padding: '1rem'
-        }}>
-          <div className="glass-panel" style={{
-            width: '100%', maxWidth: '400px', padding: '2rem', borderRadius: '24px',
-            background: 'linear-gradient(145deg, rgba(30, 24, 45, 0.98), rgba(18, 14, 28, 0.99))',
-            textAlign: 'center'
-          }}>
-            <AlertTriangle size={48} style={{ color: '#ff6b6b', margin: '0 auto 1rem auto' }} />
-            <h3 style={{ margin: '0 0 0.5rem 0' }}>Delete Listing?</h3>
-            <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
-              This cannot be undone. Are you sure you want to permanently delete this listing?
-            </p>
-            {isAdmin && !isOwner && (
-              <input
-                type="text"
-                placeholder="Reason for deletion (optional)"
-                value={deleteReason}
-                onChange={e => setDeleteReason(e.target.value)}
-                style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.2)', background: 'transparent', color: '#fff', marginBottom: '1.5rem' }}
-              />
-            )}
-            <div style={{ display: 'flex', gap: '1rem' }}>
-              <button className="btn btn-outline" onClick={() => setShowConfirmDelete(false)} style={{ flex: 1 }} disabled={isDeleting}>Cancel</button>
-              <button className="btn btn-primary" style={{ flex: 1, background: '#ff6b6b' }} onClick={handleDelete} disabled={isDeleting}>
-                {isDeleting ? 'Deleting...' : 'Yes, Delete'}
-              </button>
-            </div>
-          </div>
+      {/* Confirm delete */}
+      <Modal
+        isOpen={showConfirmDelete}
+        onClose={() => !isDeleting && setShowConfirmDelete(false)}
+        title="Delete listing?"
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowConfirmDelete(false)} disabled={isDeleting}>Cancel</Button>
+            <Button variant="danger" data-testid="confirm-delete" onClick={handleDelete} loading={isDeleting}>
+              {isDeleting ? 'Deleting…' : 'Yes, delete'}
+            </Button>
+          </>
+        }
+      >
+        <div className="stack">
+          <p>This cannot be undone. “<strong>{listing.title}</strong>” will be permanently removed.</p>
+          {adminDeletingOthers && (
+            <Input
+              label="Reason for deletion"
+              required
+              hint="Sent to the seller."
+              data-testid="delete-reason"
+              placeholder="e.g. Photos belong to another seller"
+              value={deleteReason}
+              onChange={(e) => setDeleteReason(e.target.value)}
+            />
+          )}
+          {deleteError && <ErrorState compact message={deleteError} />}
         </div>
-      )}
+      </Modal>
     </div>
   );
 };

@@ -6,35 +6,48 @@ from typing import Optional
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from db import fetch_one, fetch_all
 
+def _clean(value) -> Optional[str]:
+    """Return a trimmed string, or None when the value is missing or blank ("" or spaces)."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text if text else None
+
+
+def _norm(value) -> str:
+    """Lower-case text with single spaces, used for case-insensitive compares."""
+    return " ".join(str(value or "").split()).lower()
+
+
 def match_listing_to_search(listing: dict, search: dict) -> dict:
     matched = True
     reasons = []
     failed = []
 
-    # category
-    category = search.get("Category")
+    # category (blank filters are ignored, compare is case-insensitive)
+    category = _clean(search.get("Category"))
     if category is not None:
-        if listing.get("category", "").strip().lower() == category.strip().lower():
+        if _norm(listing.get("category")) == _norm(category):
             reasons.append(f"Category {listing.get('category')}")
         else:
             matched = False
             failed.append("Category mismatch")
 
     # brand
-    brand = search.get("Brand")
+    brand = _clean(search.get("Brand"))
     if brand is not None:
-        if listing.get("brand", "").strip().lower() == brand.strip().lower():
+        if _norm(listing.get("brand")) == _norm(brand):
             reasons.append(f"Brand {listing.get('brand')}")
         else:
             matched = False
             failed.append("Brand mismatch")
 
     # model keyword
-    model_keyword = search.get("ModelKeyword")
+    model_keyword = _clean(search.get("ModelKeyword"))
     if model_keyword is not None:
-        mk = model_keyword.strip().lower()
-        title = listing.get("title", "").lower()
-        model = listing.get("model", "").lower()
+        mk = _norm(model_keyword)
+        title = _norm(listing.get("title"))
+        model = _norm(listing.get("model"))
         if mk in title or mk in model:
             reasons.append(f"Keyword '{model_keyword}' found")
         else:
@@ -70,11 +83,11 @@ def match_listing_to_search(listing: dict, search: dict) -> dict:
             else:
                 reasons.append(f"LKR {p:,.0f} is above your minimum of LKR {float(min_price):,.0f}")
 
-    # conditions
-    conditions_str = search.get("Conditions")
-    if conditions_str is not None:
-        conditions = [c.strip().lower() for c in conditions_str.split(",") if c.strip()]
-        listing_cond = listing.get("condition", "").strip().lower()
+    # conditions ("" or ",," means no condition filter)
+    conditions_str = _clean(search.get("Conditions"))
+    conditions = [c.strip().lower() for c in conditions_str.split(",") if c.strip()] if conditions_str else []
+    if conditions:
+        listing_cond = _norm(listing.get("condition"))
         if listing_cond in conditions:
             reasons.append(f"Condition '{listing.get('condition')}' matches")
         else:
@@ -82,10 +95,10 @@ def match_listing_to_search(listing: dict, search: dict) -> dict:
             failed.append("Condition mismatch")
 
     # location
-    location = search.get("Location")
+    location = _clean(search.get("Location"))
     if location is not None:
-        loc = location.strip().lower()
-        if loc in listing.get("location", "").strip().lower():
+        loc = _norm(location)
+        if loc in _norm(listing.get("location")):
             reasons.append(f"Location '{listing.get('location')}' matches")
         else:
             matched = False
@@ -208,20 +221,8 @@ def prepare_notifications(listing_id: int, event: str, matches: list, watchers: 
     title = listing.get("title", "")
     price_val = listing.get("price", 0.0)
     loc = listing.get("location", "")
-    verdict = listing.get("price_verdict", "Unknown")
-    if verdict == "FAIR":
-        verdict_str = "rated a fair price"
-    elif verdict == "GREAT_DEAL":
-        verdict_str = "rated a great deal"
-    elif verdict == "SUSPICIOUSLY_LOW":
-        verdict_str = "suspiciously low priced"
-    elif verdict == "SLIGHTLY_HIGH":
-        verdict_str = "slightly high priced"
-    elif verdict == "OVERPRICED":
-        verdict_str = "overpriced"
-    else:
-        verdict_str = "unrated"
-        
+    # The price verdict is private (owner/admin only), so it is never put in messages.
+
     notifications = []
     notified_users = set()
     
@@ -238,7 +239,7 @@ def prepare_notifications(listing_id: int, event: str, matches: list, watchers: 
                         "saved_search_id": None,
                         "type": "PRICE_DROP",
                         "title": f"Price Drop: {title}",
-                        "message": f"{title} has dropped from LKR {old_price:,.0f} to LKR {price_val:,.0f} ({drop_res['drop_percent']}% drop)! This item in {loc} is {verdict_str}."
+                        "message": f"{title} has dropped from LKR {old_price:,.0f} to LKR {price_val:,.0f} ({drop_res['drop_percent']}% drop) in {loc}."
                     })
                     
     # NEW_MATCH
@@ -251,7 +252,52 @@ def prepare_notifications(listing_id: int, event: str, matches: list, watchers: 
                 "saved_search_id": m["saved_search_id"],
                 "type": "NEW_MATCH",
                 "title": f"New Match: {title}",
-                "message": f"A new listing matches your alert '{m['search_name']}': {title} for LKR {price_val:,.0f} in {loc}. It is {verdict_str}."
+                "message": f"A new listing matches your alert '{m['search_name']}': {title} for LKR {price_val:,.0f} in {loc}."
             })
             
     return {"notifications": notifications}
+
+
+def backfill_search_matches(saved_search_id: int, limit: int = 20) -> dict:
+    """
+    Check the EXISTING LIVE listings against one saved alert (used when an alert is
+    created, updated or enabled). Pure rules, no LLM, so it is fast and predictable.
+    The user's own listings are never matched. Returns at most `limit` newest matches.
+    """
+    search = fetch_one('SELECT * FROM "SavedSearches" WHERE "Id" = %s', (saved_search_id,))
+    if not search:
+        return {"saved_search_id": saved_search_id, "notifications": [], "checked_listings": 0, "error": "Saved search not found"}
+    if not search.get("IsActive"):
+        return {"saved_search_id": saved_search_id, "notifications": [], "checked_listings": 0}
+
+    rows = fetch_all('''
+        SELECT l."Id", l."Title", l."Category", l."Brand", l."Model", l."Condition", l."Price", l."Location"
+        FROM "Listings" l
+        WHERE l."Status" = 'LIVE' AND l."SellerId" != %s
+        ORDER BY l."CreatedAt" DESC
+        LIMIT 500
+    ''', (search["UserId"],))
+
+    notifications = []
+    for r in rows:
+        listing = {
+            "title": r["Title"], "category": r["Category"], "brand": r["Brand"], "model": r["Model"],
+            "condition": r["Condition"], "location": r["Location"],
+            "price": float(r["Price"]) if r["Price"] is not None else None,
+        }
+        res = match_listing_to_search(listing, search)
+        if not res["matched"]:
+            continue
+        price_txt = f"LKR {listing['price']:,.0f}" if listing["price"] is not None else "an unknown price"
+        notifications.append({
+            "user_id": search["UserId"],
+            "saved_search_id": search["Id"],
+            "listing_id": r["Id"],
+            "type": "NEW_MATCH",
+            "title": f"New Match: {r['Title']}",
+            "message": f"A listing matches your alert '{search['Name']}': {r['Title']} for {price_txt} in {r['Location']}.",
+        })
+        if len(notifications) >= limit:
+            break
+
+    return {"saved_search_id": saved_search_id, "notifications": notifications, "checked_listings": len(rows)}

@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Eye, EyeOff, Camera } from 'lucide-react';
+import { AuthLayout, PhotoPicker } from '../../components/AuthLayout';
 import { apiCall } from '../../services/api';
-import './Register.css';
+import { Button, ErrorState, Input, PasswordInput } from '../../components/ui';
 
 const BuyerRegistration = () => {
   const [formData, setFormData] = useState({
@@ -11,8 +11,6 @@ const BuyerRegistration = () => {
   const [imagePreview, setImagePreview] = useState(null);
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const navigate = useNavigate();
 
   const handleChange = (e) => {
@@ -104,113 +102,40 @@ const BuyerRegistration = () => {
   };
 
   return (
-    <div className="register-page">
-      <div className="bg-gradients">
-        <div className="gradient-sphere sphere-1"></div>
-        <div className="gradient-sphere sphere-2"></div>
-      </div>
-      
-      <div className="container">
-        <div className="register-form-container glass-panel">
-          <Link to="/register" className="back-btn">
-            <ArrowLeft size={16} />
-            Back to Options
-          </Link>
-          <div className="text-center mb-4">
-            <h2>Buyer Registration</h2>
-            <p className="register-subtitle mt-2">Create your account to start buying instruments.</p>
-          </div>
-          
-          {errors.form && (
-            <div style={{ color: '#ff6b6b', background: 'rgba(255, 107, 107, 0.15)', border: '1px solid rgba(255, 107, 107, 0.3)', padding: '12px', borderRadius: '8px', marginBottom: '16px', fontSize: '14px', textAlign: 'center' }}>
-              {errors.form}
-            </div>
-          )}
+    <AuthLayout
+      wide
+      title="Create a buyer account"
+      subtitle="Browse, save and buy instruments – and sell your own gear too."
+      backTo="/register"
+      backLabel="Back to options"
+      footer={<>Already have an account? <Link to="/login">Log in</Link></>}
+    >
+      {errors.form && <ErrorState compact message={errors.form} />}
 
-          <form onSubmit={handleSubmit} noValidate>
-            <div className="form-group" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '3rem', marginBottom: '2rem' }}>
-              <label>Profile Picture (Optional)</label>
-              <div 
-                className="profile-upload-circle mt-2" 
-                onClick={() => document.getElementById('profileImageInput').click()}
-                style={{
-                  width: '140px', height: '140px', borderRadius: '50%', border: '2px dashed var(--primary-color)',
-                  display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'pointer',
-                  overflow: 'hidden', position: 'relative', background: 'rgba(255,255,255,0.05)'
-                }}
-              >
-                {imagePreview ? (
-                  <img src={imagePreview} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                ) : (
-                  <Camera size={48} color="var(--primary-color)" />
-                )}
-              </div>
-              {imagePreview && (
-                <button 
-                  type="button" 
-                  onClick={() => {
-                    setImagePreview(null);
-                    setFormData({ ...formData, profileImage: null });
-                    document.getElementById('profileImageInput').value = '';
-                  }}
-                  style={{
-                    background: 'transparent', border: 'none', color: '#ff4d4f', marginTop: '1rem', cursor: 'pointer', fontSize: '0.9rem', fontWeight: '500'
-                  }}
-                >
-                  Remove Picture
-                </button>
-              )}
-              <input id="profileImageInput" type="file" name="profileImage" accept="image/*" onChange={handleChange} style={{ display: 'none' }} />
-            </div>
+      <form onSubmit={handleSubmit} noValidate className="auth-form">
+        <PhotoPicker
+          preview={imagePreview}
+          onChange={handleChange}
+          onRemove={() => {
+            setImagePreview(null);
+            setFormData({ ...formData, profileImage: null });
+          }}
+        />
 
-            <div className="form-group">
-              <label>Name</label>
-              <input type="text" name="name" value={formData.name} onChange={handleChange} className="form-control" placeholder="Enter your full name" />
-              {errors.name && <small style={{ color: 'red' }}>{errors.name}</small>}
-            </div>
-            <div className="form-group">
-              <label>Email</label>
-              <input type="email" name="email" value={formData.email} onChange={handleChange} className="form-control" placeholder="Enter your email" />
-              {errors.email && <small style={{ color: 'red' }}>{errors.email}</small>}
-            </div>
-            <div className="form-group">
-              <label>Phone Number</label>
-              <input type="tel" name="phone" value={formData.phone} onChange={handleChange} className="form-control" placeholder="Enter your phone number" />
-              {errors.phone && <small style={{ color: 'red' }}>{errors.phone}</small>}
-            </div>
-            <div className="form-group">
-              <label>NIC Card Number</label>
-              <input type="text" name="nic" value={formData.nic} onChange={handleChange} className="form-control" placeholder="Enter your NIC" />
-              {errors.nic && <small style={{ color: 'red' }}>{errors.nic}</small>}
-            </div>
-            <div className="form-group">
-              <label>Password</label>
-              <div className="password-input-wrapper">
-                <input type={showPassword ? "text" : "password"} name="password" value={formData.password} onChange={handleChange} className="form-control" placeholder="Create a password" minLength="8" />
-                <button type="button" className="password-toggle-btn" onClick={() => setShowPassword(!showPassword)}>
-                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                </button>
-              </div>
-              {errors.password && <small style={{ color: 'red' }}>{errors.password}</small>}
-            </div>
-            <div className="form-group">
-              <label>Confirm Password</label>
-              <div className="password-input-wrapper">
-                <input type={showConfirmPassword ? "text" : "password"} name="confirmPassword" value={formData.confirmPassword} onChange={handleChange} className="form-control" placeholder="Confirm your password" minLength="8" />
-                <button type="button" className="password-toggle-btn" onClick={() => setShowConfirmPassword(!showConfirmPassword)}>
-                  {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                </button>
-              </div>
-              {errors.confirmPassword && <small style={{ color: 'red' }}>{errors.confirmPassword}</small>}
-            </div>
-            
-            <button type="submit" className="btn btn-primary w-100 mt-4" disabled={loading || Object.keys(errors).some((field) => errors[field])}>
-              {loading ? 'Registering...' : 'Register'}
-            </button>
-          </form>
+        <div className="form-grid">
+          <Input label="Full name" required name="name" autoComplete="name" value={formData.name} onChange={handleChange} placeholder="Nimal Perera" error={errors.name} fieldClassName="span-2" />
+          <Input label="Email" required type="email" name="email" autoComplete="email" value={formData.email} onChange={handleChange} placeholder="you@example.com" error={errors.email} />
+          <Input label="Phone number" required type="tel" name="phone" autoComplete="tel" value={formData.phone} onChange={handleChange} placeholder="0771234567" hint="10 digits" error={errors.phone} />
+          <Input label="NIC number" required name="nic" value={formData.nic} onChange={handleChange} placeholder="199512345678 or 951234567V" error={errors.nic} fieldClassName="span-2" />
+          <PasswordInput label="Password" required name="password" autoComplete="new-password" value={formData.password} onChange={handleChange} placeholder="Create a password" hint="At least 8 characters" minLength="8" error={errors.password} />
+          <PasswordInput label="Confirm password" required name="confirmPassword" autoComplete="new-password" value={formData.confirmPassword} onChange={handleChange} placeholder="Repeat the password" minLength="8" error={errors.confirmPassword} />
         </div>
-      </div>
-    </div>
+
+        <Button type="submit" size="lg" block loading={loading} disabled={Object.keys(errors).some((field) => errors[field])}>
+          {loading ? 'Creating account…' : 'Create account'}
+        </Button>
+      </form>
+    </AuthLayout>
   );
 };
 

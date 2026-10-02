@@ -1,0 +1,50 @@
+[
+  {
+    "id": 28,
+    "type": "ORDER_PLACED",
+    "title": "Order Placed",
+    "message": "Your order for Yamaha FG800 Acoustic Guitar (LKR 70,000) was successful.",
+    "isRead": false,
+    "createdAt": "2026-10-01T14:41:56.36937Z",
+    "listingId": 22,
+    "savedSearchId": null,
+    "listing": {
+      "id": 22,
+      "title": "Yamaha FG800 Acoustic Guitar",
+      "price": 70000,
+      "firstImageUrl": "https://res.cloudinary.com/ojantrye/image/upload/v1790865490/musicmarket/listings/nivxybmbg90evs81ghc8.png"
+    }
+  },
+  {
+    "id": 26,
+    "type": "PRICE_DROP",
+    "title": "Price Drop: Yamaha FG800 Acoustic Guitar",
+    "message": "Yamaha FG800 Acoustic Guitar has dropped from LKR 75,000 to LKR 70,000 (6.7% drop) in Colombo 07.",
+    "isRead": false,
+    "createdAt": "2026-10-01T14:41:52.518371Z",
+    "listingId": 22,
+    "savedSearchId": null,
+    "listing": {
+      "id": 22,
+      "title": "Yamaha FG800 Acoustic Guitar",
+      "price": 70000,
+      "firstImageUrl": "https://res.cloudinary.com/ojantrye/image/upload/v1790865490/musicmarket/listings/nivxybmbg90evs81ghc8.png"
+    }
+  },
+  {
+    "id": 22,
+    "type": "NEW_MATCH",
+    "title": "New Match: Yamaha FG800 Acoustic Guitar",
+    "message": "A listing matches your alert 'Yamaha': Yamaha FG800 Acoustic Guitar for LKR 80,000 in Colombo 07.",
+    "isRead": false,
+    "createdAt": "2026-10-01T14:39:47.155108Z",
+    "listingId": 22,
+    "savedSearchId": 10,
+    "listing": {
+      "id": 22,
+      "title": "Yamaha FG800 Acoustic Guitar",
+      "price": 70000,
+      "firstImageUrl": "https://res.cloudinary.com/ojantrye/image/upload/v1790865490/musicmarket/listings/nivxybmbg90evs81ghc8.png"
+    }
+  }
+]

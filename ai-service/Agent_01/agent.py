@@ -32,7 +32,8 @@ agent = create_fair_price_agent()
 def run_fair_price(listing: dict) -> dict:
     current_year = datetime.now().year
     year = listing.get("year")
-    age_years = current_year - year if year else 0
+    # A future year (typo) must not make the item worth more than new.
+    age_years = max(0, current_year - year) if year else 0
     
     result = {
         "fair_price": 0.0,
@@ -98,19 +99,19 @@ def run_fair_price(listing: dict) -> dict:
                     extras.append(ex)
                     
             cat_match = search_catalog.invoke({
-                "brand": listing.get("brand", ""),
-                "model": listing.get("model", ""),
-                "category": listing.get("category", "")
+                "brand": listing.get("brand") or "",
+                "model": listing.get("model") or "",
+                "category": listing.get("category") or ""
             })
             
             market = get_market_prices.invoke({
                 "model_id": cat_match.get("model_id"),
-                "category": listing.get("category", "")
+                "category": listing.get("category") or ""
             })
             
             calc = calculate_fair_price.invoke({
                 "new_price": cat_match.get("new_price", 0.0),
-                "condition": listing.get("condition", "good"),
+                "condition": listing.get("condition") or "good",
                 "age_years": age_years,
                 "sold_prices": market.get("sold_prices", []),
                 "is_collectible": cat_match.get("is_collectible", False),

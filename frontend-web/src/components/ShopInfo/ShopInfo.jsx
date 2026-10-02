@@ -1,74 +1,50 @@
 import React from 'react';
-import { MapPin, Inbox, Tag, Repeat } from 'lucide-react';
-import './ShopInfo.css';
+import { useNavigate } from 'react-router-dom';
+import { MapPin, Inbox, Tag, Repeat, Star } from 'lucide-react';
 
 const shopFeatures = [
-  {
-    icon: <MapPin className="shop-icon" />,
-    title: 'Local Discovery',
-    desc: 'Buyers see nearby shop inventory when searching for instruments, driving foot traffic to your physical store.'
-  },
-  {
-    icon: <Repeat className="shop-icon" />,
-    title: 'Trade-in Matches',
-    desc: 'Our AI notifies your shop when a user is selling an instrument that matches what you typically buy or trade.'
-  },
-  {
-    icon: <Tag className="shop-icon" />,
-    title: 'Bulk Listings',
-    desc: 'Easily sync your existing inventory to MusicMarket with our specialized shop dashboard tools.'
-  },
-  {
-    icon: <Inbox className="shop-icon" />,
-    title: 'Direct Inquiries',
-    desc: 'Customers can message your shop directly to ask about stock, setup services, or trade-in evaluations.'
-  }
+  { icon: MapPin, title: 'Local discovery', desc: 'Buyers see nearby shop inventory on a map when searching, driving foot traffic to your store.' },
+  { icon: Repeat, title: 'Instant alerts', desc: 'Buyers set alerts like "Yamaha guitar under 80k" – your matching listing reaches them first.' },
+  { icon: Tag, title: 'Fair-price help', desc: 'Every listing gets a fair price range from real market data, so you can price to sell.' },
+  { icon: Inbox, title: 'Orders in one place', desc: 'Track every sale, buyer contact and delivery address from your shop dashboard.' }
 ];
 
 const ShopInfo = () => {
+  const navigate = useNavigate();
   return (
-    <section className="shop-info-section" id="shops">
-      <div className="container">
-        <div className="shop-layout">
-          <div className="shop-text-content">
-            <h2 className="section-title">For <span className="text-gradient">Local Shops</span></h2>
-            <p className="shop-subtitle">
-              Expand your local reach and turn casual browsers into loyal customers. MusicMarket acts as your smart, digital storefront.
-            </p>
-            <div className="shop-features-list">
-              {shopFeatures.map((feature, index) => (
-                <div key={index} className="shop-feature-item animate-fade-in-up" style={{ animationDelay: `${index * 100}ms` }}>
-                  <div className="shop-feature-icon-wrapper">
-                    {feature.icon}
-                  </div>
-                  <div className="shop-feature-text">
-                    <h4>{feature.title}</h4>
-                    <p>{feature.desc}</p>
-                  </div>
+    <section className="lp-section lp-section-alt" id="shops">
+      <div className="lp-container lp-split">
+        <div>
+          <span className="lp-kicker">For shops</span>
+          <h2 className="lp-h2">Your smart digital storefront</h2>
+          <p className="lp-lead">Expand your local reach and turn casual browsers into loyal customers.</p>
+          <div className="lp-feature-list">
+            {shopFeatures.map((f) => (
+              <div key={f.title} className="lp-feature-row">
+                <span className="lp-icon"><f.icon size={20} aria-hidden="true" /></span>
+                <div>
+                  <h3>{f.title}</h3>
+                  <p>{f.desc}</p>
                 </div>
-              ))}
-            </div>
-            <button className="btn btn-primary shop-cta-btn">Claim Your Shop Profile</button>
-          </div>
-          
-          <div className="shop-visual-content glass-panel animate-fade-in-up delay-200">
-            <div className="shop-mockup-header">
-              <div className="mockup-dot red"></div>
-              <div className="mockup-dot yellow"></div>
-              <div className="mockup-dot green"></div>
-            </div>
-            <div className="shop-mockup-body">
-              <div className="mockup-shop-banner"></div>
-              <div className="mockup-shop-avatar"></div>
-              <h3 className="mockup-shop-title">Downtown Guitars</h3>
-              <p className="mockup-shop-meta">📍 2.4 miles away • ⭐ 4.9/5</p>
-              
-              <div className="mockup-inventory">
-                <div className="mockup-item"></div>
-                <div className="mockup-item"></div>
-                <div className="mockup-item"></div>
-                <div className="mockup-item"></div>
               </div>
+            ))}
+          </div>
+          <button type="button" className="btn btn-primary btn-lg" onClick={() => navigate('/register/shop')}>Register your shop</button>
+        </div>
+
+        {/* Illustration of a shop profile */}
+        <div className="card lp-mock" aria-hidden="true">
+          <div className="lp-mock-banner" />
+          <div className="lp-mock-body">
+            <div className="lp-mock-avatar">KM</div>
+            <strong style={{ fontSize: 'var(--text-lg)' }}>Kandy Music House</strong>
+            <span className="text-sm muted row" style={{ gap: 6 }}>
+              <MapPin size={14} /> Kandy · 2.4 km away · <Star size={14} fill="currentColor" /> 4.9
+            </span>
+            <div className="lp-mock-grid">
+              {['#c4b5fd', '#fbcfe8', '#a7f3d0', '#fde68a'].map((c) => (
+                <div key={c} className="lp-mock-item"><span style={{ background: c }} /><i /><b /></div>
+              ))}
             </div>
           </div>
         </div>

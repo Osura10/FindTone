@@ -1,7 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { apiCall } from '../../services/api';
-import { ShieldCheck, Truck, CreditCard, Banknote, CheckCircle, ArrowLeft, Loader2 } from 'lucide-react';
+import { useDashboard, isAdminUser } from '../../hooks/useDashboard';
+import { Button, Card, ErrorState, Input, PageHeader, PriceTag, Skeleton, Textarea, formatLKR } from '../../components/ui';
+import { validateCheckout } from '../../utils/checkoutValidation';
+
+import { ShieldCheck, Truck, CreditCard, Banknote, CheckCircle, ArrowLeft, Info, Lock } from 'lucide-react';
 
 const Checkout = () => {
   const { listingId } = useParams();
@@ -29,34 +34,37 @@ const Checkout = () => {
     }
   });
 
-  useEffect(() => {
-    fetchListing();
-  }, [listingId]);
+  const { currentUser } = useDashboard();
+  const submittingRef = useRef(false); // blocks a second click before React re-renders
 
-  const fetchListing = async () => {
+  // Admins cannot buy: send them back to the listing details page.
+  useEffect(() => {
+    if (isAdminUser(currentUser)) {
+      toast.error('Admin accounts cannot place orders.');
+      navigate(`/dashboard/listings/${listingId}`, { replace: true });
+    }
+  }, [currentUser, listingId, navigate]);
+
+  const fetchListing = useCallback(async () => {
     try {
-      const user = await apiCall('/auth/me');
-      if (user?.role?.toLowerCase() === 'admin') {
-        alert("Admins cannot place orders.");
-        navigate(`/dashboard/item/${listingId}`);
-        return;
-      }
-      
       const data = await apiCall(`/listings/${listingId}`);
-      if (data.status !== 'LIVE') {
-        setError('This item is no longer available for purchase.');
-      }
       setListing(data);
+      setError(data.status !== 'LIVE' ? 'This item is no longer available for purchase.' : '');
     } catch (err) {
       if (err.status === 401) {
-        navigate(`/login?returnUrl=/checkout/${listingId}`);
+        navigate('/login', { replace: true });
         return;
       }
-      setError('Failed to load listing.');
+      setError(err.message || 'Failed to load listing.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [listingId, navigate]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchListing();
+  }, [fetchListing]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -85,295 +93,211 @@ const Checkout = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (submitting) return;
+    if (submittingRef.current) return;
+    const problem = validateCheckout(formData);
+    if (problem) {
+      setError(problem);
+      return;
+    }
+
+    const payload = {
+      listingId: Number(listingId),
+      paymentMethod: formData.paymentMethod,
+      fullName: formData.fullName.trim(),
+      phone: formData.phone.trim(),
+      addressLine: formData.addressLine.trim(),
+      city: formData.city.trim(),
+      postalCode: formData.postalCode.trim() || null,
+      notes: formData.notes.trim() || null,
+      card: formData.paymentMethod === 'CARD'
+        ? {
+            number: formData.card.number.replace(/[\s-]/g, ''),
+            holderName: formData.card.holderName.trim(),
+            expiry: formData.card.expiry.trim(),
+            cvv: formData.card.cvv
+          }
+        : null
+    };
+
+    submittingRef.current = true;
     setSubmitting(true);
     setError('');
-
     try {
-      const payload = {
-        listingId: parseInt(listingId),
-        paymentMethod: formData.paymentMethod,
-        fullName: formData.fullName,
-        phone: formData.phone,
-        addressLine: formData.addressLine,
-        city: formData.city,
-        postalCode: formData.postalCode,
-        notes: formData.notes
-      };
-
-      // Client-side expiry validation
-      if (formData.paymentMethod === 'CARD') {
-        payload.card = formData.card;
-        
-        const expiryParts = formData.card.expiry.split('/');
-        if (expiryParts.length === 2) {
-          const month = parseInt(expiryParts[0], 10);
-          let year = parseInt(expiryParts[1], 10);
-          year = year < 100 ? 2000 + year : year;
-          const now = new Date();
-          const currentYear = now.getFullYear();
-          const currentMonth = now.getMonth() + 1;
-          
-          if (year < currentYear || (year === currentYear && month < currentMonth)) {
-            setError("Card expired.");
-            setSubmitting(false);
-            return;
-          }
-        }
-      }
-
-      const res = await apiCall('/orders', {
-        method: 'POST',
-        body: JSON.stringify(payload)
-      });
-
-      setSuccess(res.orderId);
-      window.history.replaceState(null, '', `/dashboard/orders`);
+      const res = await apiCall('/orders', { method: 'POST', body: JSON.stringify(payload) });
+      setSuccess({ orderId: res.orderId, status: res.status });
     } catch (err) {
       if (err.status === 401) {
-        sessionStorage.removeItem('token');
-        localStorage.removeItem('token');
-        navigate(`/login?returnUrl=/checkout/${listingId}`);
+        navigate('/login', { replace: true });
         return;
       }
-      
-      if (err.status === 409) {
-        try {
-          const myOrders = await apiCall('/orders/mine');
-          const existingOrder = myOrders.find(o => o.listingId === parseInt(listingId));
-          if (existingOrder) {
-            setSuccess(existingOrder.id);
-            window.history.replaceState(null, '', `/dashboard/orders`);
-            return;
-          }
-        } catch (e) {
-      console.error(e);
-    }
-      }
-
-      let msg = err.message;
-      if (msg === 'Forbidden' || !msg) {
-         msg = 'Could not place your order. Please try again.';
-      }
-      setError(msg);
+      // Show exactly what the backend said (e.g. "This item has already been sold.").
+      setError(err.message || 'Could not place your order. Please try again.');
+      if (err.status === 409) setListing((prev) => (prev ? { ...prev, status: 'SOLD' } : prev));
+    } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };
 
   if (loading) {
     return (
-      <div style={{ textAlign: 'center', padding: '4rem 0', color: 'var(--text-secondary)' }}>
-        <Loader2 size={32} className="animate-spin" style={{ margin: '0 auto 1rem' }} />
-        <p>Loading checkout...</p>
+      <div className="page" aria-busy="true" aria-label="Loading checkout">
+        <Skeleton height="36px" width="260px" />
+        <div className="checkout-layout">
+          <div className="stack"><Skeleton height="300px" radius="var(--radius-lg)" /><Skeleton height="220px" radius="var(--radius-lg)" /></div>
+          <Skeleton height="360px" radius="var(--radius-lg)" />
+        </div>
       </div>
     );
   }
 
   if (error && !listing) {
     return (
-      <div style={{ textAlign: 'center', padding: '4rem 0' }}>
-        <h2 style={{ color: '#ff6b6b' }}>{error}</h2>
-        <button className="btn btn-outline" onClick={() => navigate(-1)} style={{ marginTop: '1rem' }}>Go Back</button>
+      <div className="page page-narrow">
+        <Card><ErrorState message={error} onRetry={() => { setLoading(true); fetchListing(); }} /></Card>
+        <div><Button variant="secondary" icon={ArrowLeft} onClick={() => navigate(-1)}>Go back</Button></div>
       </div>
     );
   }
+
+  const cover = listing.images?.[0]?.url || 'https://placehold.co/100x100?text=No+Photo';
 
   if (success) {
     return (
-      <div className="animate-fade-in-up" style={{ maxWidth: '600px', margin: '4rem auto', textAlign: 'center' }}>
-        <div className="glass-panel" style={{ padding: '3rem', borderRadius: '24px' }}>
-          <CheckCircle size={64} style={{ color: '#10b981', margin: '0 auto 1rem auto' }} />
-          <h1 style={{ marginBottom: '0.5rem', color: '#10b981' }}>Order Placed!</h1>
-          <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem' }}>
-            Thank you for your purchase. Your order #{success} has been successfully created.
-          </p>
-          <div style={{ background: 'rgba(255,255,255,0.05)', padding: '1.5rem', borderRadius: '12px', textAlign: 'left', marginBottom: '2rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
-              <img src={listing.images?.[0]?.url || 'https://placehold.co/100x100?text=No+Photo'} alt="Item" style={{ width: '60px', height: '60px', borderRadius: '8px', objectFit: 'cover' }} />
-              <div>
-                <div style={{ fontWeight: 'bold' }}>{listing.title}</div>
-                <div style={{ color: 'var(--primary-hover)', fontWeight: 'bold' }}>LKR {listing.price.toLocaleString()}</div>
-              </div>
-            </div>
-            <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-              <div><strong>Deliver to:</strong> {formData.fullName}</div>
-              <div>{formData.addressLine}, {formData.city}</div>
+      <div className="page" style={{ maxWidth: 560 }}>
+        <Card className="stack text-center" style={{ alignItems: 'center', padding: 'var(--space-10) var(--space-6)' }}>
+          <span className="success-icon"><CheckCircle size={36} aria-hidden="true" /></span>
+          <div>
+            <h1 className="page-title">Order placed!</h1>
+            <p className="muted" style={{ marginTop: 8 }}>
+              Thank you for your purchase. Your order <strong data-testid="order-id" style={{ color: 'var(--text)' }}>#{success.orderId}</strong> has been created
+              ({success.status === 'PAID' ? 'paid by card' : 'cash on delivery'}).
+            </p>
+          </div>
+          <div className="summary-item w-100" style={{ textAlign: 'left' }}>
+            <img src={cover} alt="" />
+            <div style={{ minWidth: 0 }}>
+              <div className="truncate" style={{ fontWeight: 650 }}>{listing.title}</div>
+              <PriceTag amount={listing.price} size="sm" />
+              <div className="text-xs muted" style={{ marginTop: 4 }}>Deliver to {formData.fullName} · {formData.addressLine}, {formData.city}</div>
             </div>
           </div>
-          <button className="btn btn-primary" onClick={() => navigate('/dashboard/orders')} style={{ width: '100%' }}>
-            View My Orders
-          </button>
-        </div>
+          <div className="row w-100" style={{ gap: 8 }}>
+            <Button variant="secondary" className="grow" onClick={() => navigate('/dashboard/items')}>Keep browsing</Button>
+            <Button className="grow" onClick={() => navigate('/dashboard/orders')}>View my orders</Button>
+          </div>
+        </Card>
       </div>
     );
   }
 
-  return (
-    <div className="animate-fade-in-up" style={{ maxWidth: '1000px', margin: '0 auto', padding: '1rem 0 4rem' }}>
-      <button 
-        onClick={() => navigate(-1)} 
-        style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', marginBottom: '1.5rem' }}
+  const payOption = (method, Icon, title, text) => {
+    const selected = formData.paymentMethod === method;
+    return (
+      <div
+        role="radio"
+        aria-checked={selected}
+        tabIndex={0}
+        data-testid={method === 'CARD' ? 'pay-card' : 'pay-cod'}
+        className={`pay-option ${selected ? 'selected' : ''}`}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setFormData(prev => ({ ...prev, paymentMethod: method })); } }}
+        onClick={() => setFormData(prev => ({ ...prev, paymentMethod: method }))}
       >
-        <ArrowLeft size={18} /> Back to listing
-      </button>
+        <span className="pay-radio" aria-hidden="true" />
+        <Icon size={22} aria-hidden="true" />
+        <span className="stack" style={{ gap: 0 }}>
+          <strong className="text-sm">{title}</strong>
+          <span className="text-xs muted">{text}</span>
+        </span>
+      </div>
+    );
+  };
 
-      <h1 className="text-gradient" style={{ fontSize: '2.5rem', margin: '0 0 2rem 0', fontWeight: '800' }}>Secure Checkout</h1>
+  return (
+    <div className="page">
+      <div>
+        <Button variant="ghost" size="sm" icon={ArrowLeft} onClick={() => navigate(-1)}>Back to listing</Button>
+      </div>
+      <PageHeader title="Checkout" subtitle="Your details go only to the seller for delivery." icon={Lock} />
 
       {error && (
-        <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '1rem', borderRadius: '12px', color: '#ff6b6b', marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <ShieldCheck size={24} /> {error}
+        <div className="alert alert-danger" role="alert">
+          <ShieldCheck size={18} aria-hidden="true" style={{ flexShrink: 0, marginTop: 1 }} /> <span className="grow">{error}</span>
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 350px', gap: '2rem' }}>
-        {/* Left Col: Form */}
-        <div>
-          <form onSubmit={handleSubmit} id="checkout-form">
-            <div className="glass-panel" style={{ padding: '2rem', borderRadius: '16px', marginBottom: '2rem' }}>
-              <h3 style={{ margin: '0 0 1.5rem 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Truck size={20} color="var(--primary-hover)" /> Delivery Information
-              </h3>
-              
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Full Name</label>
-                  <input type="text" name="fullName" value={formData.fullName} onChange={handleInputChange} className="input-field" required style={{ width: '100%' }} />
-                </div>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Phone Number</label>
-                  <input type="tel" name="phone" value={formData.phone} onChange={handleInputChange} className="input-field" required style={{ width: '100%' }} placeholder="e.g. 0712345678" />
-                </div>
-              </div>
+      <div className="checkout-layout">
+        {/* Left: form */}
+        <form onSubmit={handleSubmit} id="checkout-form" noValidate className="stack" style={{ gap: 'var(--space-5)' }}>
+          <Card as="section" className="stack">
+            <h2 className="section-title row" style={{ gap: 8 }}><Truck size={18} aria-hidden="true" color="var(--primary-text)" /> Delivery information</h2>
+            <div className="form-grid">
+              <Input label="Full name" required name="fullName" autoComplete="name" value={formData.fullName} onChange={handleInputChange} />
+              <Input label="Phone number" required type="tel" name="phone" autoComplete="tel" value={formData.phone} onChange={handleInputChange} placeholder="e.g. 0712345678" />
+              <Input label="Address line" required name="addressLine" autoComplete="street-address" value={formData.addressLine} onChange={handleInputChange} fieldClassName="span-2" />
+              <Input label="City" required name="city" autoComplete="address-level2" value={formData.city} onChange={handleInputChange} />
+              <Input label="Postal code" hint="Optional" name="postalCode" autoComplete="postal-code" value={formData.postalCode} onChange={handleInputChange} />
+              <Textarea label="Delivery notes" hint="Optional" name="notes" rows={3} value={formData.notes} onChange={handleInputChange} fieldClassName="span-2" />
+            </div>
+          </Card>
 
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Address Line</label>
-                <input type="text" name="addressLine" value={formData.addressLine} onChange={handleInputChange} className="input-field" required style={{ width: '100%' }} />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>City</label>
-                  <input type="text" name="city" value={formData.city} onChange={handleInputChange} className="input-field" required style={{ width: '100%' }} />
-                </div>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Postal Code (Optional)</label>
-                  <input type="text" name="postalCode" value={formData.postalCode} onChange={handleInputChange} className="input-field" style={{ width: '100%' }} />
-                </div>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Delivery Notes (Optional)</label>
-                <textarea name="notes" value={formData.notes} onChange={handleInputChange} className="input-field" rows="3" style={{ width: '100%', resize: 'vertical' }}></textarea>
-              </div>
+          <Card as="section" className="stack">
+            <h2 className="section-title row" style={{ gap: 8 }}><Banknote size={18} aria-hidden="true" color="var(--primary-text)" /> Payment method</h2>
+            <div className="pay-options" role="radiogroup" aria-label="Payment method">
+              {payOption('CARD', CreditCard, 'Card payment', 'Visa, Mastercard')}
+              {payOption('COD', Banknote, 'Cash on delivery', 'Pay when it arrives')}
             </div>
 
-            <div className="glass-panel" style={{ padding: '2rem', borderRadius: '16px' }}>
-              <h3 style={{ margin: '0 0 1.5rem 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Banknote size={20} color="var(--primary-hover)" /> Payment Method
-              </h3>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '2rem' }}>
-                <div 
-                  onClick={() => setFormData(prev => ({ ...prev, paymentMethod: 'CARD' }))}
-                  style={{ 
-                    border: formData.paymentMethod === 'CARD' ? '2px solid var(--primary-hover)' : '2px solid rgba(255,255,255,0.1)',
-                    background: formData.paymentMethod === 'CARD' ? 'rgba(168, 85, 247, 0.1)' : 'rgba(0,0,0,0.2)',
-                    padding: '1.5rem', borderRadius: '12px', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', transition: 'all 0.2s'
-                  }}
-                >
-                  <CreditCard size={32} color={formData.paymentMethod === 'CARD' ? 'var(--primary-hover)' : 'var(--text-secondary)'} />
-                  <span style={{ fontWeight: formData.paymentMethod === 'CARD' ? 'bold' : 'normal', color: formData.paymentMethod === 'CARD' ? '#fff' : 'var(--text-secondary)' }}>Card Payment</span>
+            {formData.paymentMethod === 'CARD' && (
+              <div className="stack animate-fade-in-up">
+                <div className="alert alert-info">
+                  <Info size={18} aria-hidden="true" style={{ flexShrink: 0, marginTop: 1 }} />
+                  <span><strong>Demo mode</strong> – use card <code>1234 1234 1234 1234</code>, any future expiry (MM/YY) and any 3-digit CVV. Only the last 4 digits are stored.</span>
                 </div>
-                <div 
-                  onClick={() => setFormData(prev => ({ ...prev, paymentMethod: 'COD' }))}
-                  style={{ 
-                    border: formData.paymentMethod === 'COD' ? '2px solid var(--primary-hover)' : '2px solid rgba(255,255,255,0.1)',
-                    background: formData.paymentMethod === 'COD' ? 'rgba(168, 85, 247, 0.1)' : 'rgba(0,0,0,0.2)',
-                    padding: '1.5rem', borderRadius: '12px', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', transition: 'all 0.2s'
-                  }}
-                >
-                  <Banknote size={32} color={formData.paymentMethod === 'COD' ? 'var(--primary-hover)' : 'var(--text-secondary)'} />
-                  <span style={{ fontWeight: formData.paymentMethod === 'COD' ? 'bold' : 'normal', color: formData.paymentMethod === 'COD' ? '#fff' : 'var(--text-secondary)' }}>Cash on Delivery</span>
+                <div className="form-grid">
+                  <Input label="Card number" required name="card.number" inputMode="numeric" autoComplete="cc-number" value={formData.card.number} onChange={handleInputChange} placeholder="0000 0000 0000 0000" style={{ letterSpacing: '0.1em' }} fieldClassName="span-2" />
+                  <Input label="Card holder name" required name="card.holderName" autoComplete="cc-name" value={formData.card.holderName} onChange={handleInputChange} fieldClassName="span-2" />
+                  <Input label="Expiry" required name="card.expiry" inputMode="numeric" autoComplete="cc-exp" value={formData.card.expiry} onChange={handleInputChange} placeholder="MM/YY" />
+                  <Input label="CVV" required type="password" name="card.cvv" inputMode="numeric" autoComplete="cc-csc" value={formData.card.cvv} onChange={handleInputChange} placeholder="•••" />
                 </div>
               </div>
+            )}
+          </Card>
+        </form>
 
-              {formData.paymentMethod === 'CARD' && (
-                <div className="animate-fade-in-up">
-                  <div style={{ background: 'rgba(168, 85, 247, 0.1)', border: '1px solid rgba(168, 85, 247, 0.3)', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem', fontSize: '0.9rem', color: '#e9d5ff' }}>
-                    <strong>Demo mode</strong> - use card <code>1234 1234 1234 1234</code>, any future expiry, any 3-digit CVV.
-                  </div>
-
-                  <div style={{ marginBottom: '1rem' }}>
-                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Card Number</label>
-                    <input type="text" name="card.number" value={formData.card.number} onChange={handleInputChange} className="input-field" required style={{ width: '100%', letterSpacing: '2px' }} placeholder="0000 0000 0000 0000" />
-                  </div>
-                  
-                  <div style={{ marginBottom: '1rem' }}>
-                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Card Holder Name</label>
-                    <input type="text" name="card.holderName" value={formData.card.holderName} onChange={handleInputChange} className="input-field" required style={{ width: '100%' }} />
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                    <div>
-                      <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Expiry</label>
-                      <input type="text" name="card.expiry" value={formData.card.expiry} onChange={handleInputChange} className="input-field" required style={{ width: '100%' }} placeholder="MM/YY" />
-                    </div>
-                    <div>
-                      <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>CVV</label>
-                      <input type="password" name="card.cvv" value={formData.card.cvv} onChange={handleInputChange} className="input-field" required style={{ width: '100%', letterSpacing: '4px' }} placeholder="•••" />
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </form>
-        </div>
-
-        {/* Right Col: Summary */}
-        <div>
-          <div className="glass-panel" style={{ padding: '2rem', borderRadius: '16px', position: 'sticky', top: '2rem' }}>
-            <h3 style={{ margin: '0 0 1.5rem 0' }}>Order Summary</h3>
-            
-            <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
-              <img src={listing.images?.[0]?.url || 'https://placehold.co/100x100?text=No+Photo'} alt="Item" style={{ width: '80px', height: '80px', borderRadius: '12px', objectFit: 'cover' }} />
-              <div>
-                <div style={{ fontWeight: '600', fontSize: '1.1rem', marginBottom: '4px', lineHeight: 1.2 }}>{listing.title}</div>
-                <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{listing.condition}</div>
+        {/* Right: order summary */}
+        <aside className="buy-box">
+          <Card className="stack">
+            <h2 className="section-title">Order summary</h2>
+            <div className="summary-item">
+              <img src={cover} alt="" />
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 650, lineHeight: 1.3 }}>{listing.title}</div>
+                <div className="text-xs muted cap" style={{ marginTop: 2 }}>{listing.condition?.replace('_', ' ')} · {listing.sellerName}</div>
               </div>
             </div>
-
-            <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', borderBottom: '1px solid rgba(255,255,255,0.1)', padding: '1rem 0', margin: '1.5rem 0' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>Subtotal</span>
-                <span>LKR {listing.price.toLocaleString()}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>Shipping</span>
-                <span style={{ color: '#10b981' }}>Free</span>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '2rem' }}>
-              <span style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>Total</span>
-              <span style={{ fontSize: '1.8rem', fontWeight: '900', color: 'var(--primary-hover)', lineHeight: 1 }}>LKR {listing.price.toLocaleString()}</span>
-            </div>
-
-            <button 
-              type="submit" 
-              form="checkout-form" 
-              className="btn btn-primary" 
-              disabled={submitting || listing.status !== 'LIVE'} 
-              style={{ width: '100%', padding: '1rem', fontSize: '1.1rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}
+            <dl className="summary-lines">
+              <div><dt>Subtotal</dt><dd>{formatLKR(listing.price)}</dd></div>
+              <div><dt>Delivery</dt><dd style={{ color: 'var(--success)' }}>Free</dd></div>
+              <div className="total"><dt>Total</dt><dd><PriceTag amount={listing.price} size="md" /></dd></div>
+            </dl>
+            <Button
+              type="submit"
+              form="checkout-form"
+              data-testid="place-order"
+              size="lg"
+              block
+              icon={ShieldCheck}
+              loading={submitting}
+              disabled={listing.status !== 'LIVE'}
             >
-              {submitting ? <Loader2 size={20} className="animate-spin" /> : <ShieldCheck size={20} />}
-              {submitting ? 'Processing...' : `Place Order • LKR ${listing.price.toLocaleString()}`}
-            </button>
-            
-            <div style={{ textAlign: 'center', marginTop: '1rem', fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
-              <ShieldCheck size={14} /> Secure transaction
-            </div>
-          </div>
-        </div>
+              {submitting ? 'Processing…' : `Place order · ${formatLKR(listing.price)}`}
+            </Button>
+            <p className="text-xs muted row" style={{ justifyContent: 'center', gap: 4 }}>
+              <Lock size={12} aria-hidden="true" /> Secure transaction
+            </p>
+          </Card>
+        </aside>
       </div>
     </div>
   );

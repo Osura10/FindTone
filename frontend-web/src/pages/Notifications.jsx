@@ -1,163 +1,169 @@
-import React, { useState, useEffect } from 'react';
-import { apiCall } from '../services/api';
-import { Bell, Loader2, CheckCircle2 } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
+import { Bell, CheckCircle2, Check, ExternalLink, Sparkles, TrendingDown, BadgeDollarSign, Package, Trash2 } from 'lucide-react';
+import { apiCall } from '../services/api';
+import { useDashboard } from '../hooks/useDashboard';
+import { Button, Card, EmptyState, ErrorState, PageHeader, Skeleton, Tabs, formatLKR } from '../components/ui';
+
+// Icon + colour per notification type.
+const TYPE_META = {
+  NEW_MATCH: { icon: Sparkles, tone: 'primary' },
+  PRICE_DROP: { icon: TrendingDown, tone: 'success' },
+  ITEM_SOLD: { icon: BadgeDollarSign, tone: 'warning' },
+  ORDER_PLACED: { icon: Package, tone: 'info' },
+  LISTING_REMOVED: { icon: Trash2, tone: 'danger' }
+};
+
+const timeAgo = (dateStr) => {
+  const diff = (Date.now() - new Date(dateStr).getTime()) / 1000;
+  if (diff < 60) return 'Just now';
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+};
 
 const Notifications = () => {
+  const navigate = useNavigate();
+  const { refreshUnread } = useDashboard();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
-  const navigate = useNavigate();
+  const [error, setError] = useState('');
+  const [filter, setFilter] = useState('all'); // 'all' | 'unread' (view only)
 
-  const fetchNotifications = async () => {
+  const fetchNotifications = useCallback(async () => {
     try {
       const data = await apiCall('/notifications');
-      setNotifications(data || []);
+      setNotifications(Array.isArray(data) ? data : []);
+      setError('');
     } catch (err) {
-      console.error(err);
+      setError(err.message || 'Could not load notifications.');
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchNotifications();
   }, []);
 
-  const handleMarkAsRead = async (id, e) => {
-    if (e) e.stopPropagation();
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchNotifications();
+  }, [fetchNotifications]);
+
+  const markAsRead = async (id) => {
     try {
       await apiCall(`/notifications/${id}/read`, { method: 'PATCH' });
-      setNotifications(notifications.map(n => n.id === id ? { ...n, isRead: true } : n));
+      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)));
+      refreshUnread();
     } catch (err) {
-      console.error(err);
+      toast.error(err.message || 'Could not mark the notification as read.');
     }
   };
 
-  const handleMarkAllAsRead = async () => {
+  const markAllAsRead = async () => {
     try {
       await apiCall('/notifications/read-all', { method: 'PATCH' });
-      setNotifications(notifications.map(n => ({ ...n, isRead: true })));
+      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+      refreshUnread();
     } catch (err) {
-      console.error(err);
+      toast.error(err.message || 'Could not mark all as read.');
     }
   };
 
-  const getIcon = (type) => {
-    if (type === 'NEW_MATCH') return '🎸';
-    if (type === 'PRICE_DROP') return '📉';
-    if (type === 'ITEM_SOLD') return '💰';
-    if (type === 'ORDER_PLACED') return '📦';
-    return '🔔';
+  const open = (n) => {
+    if (!n.isRead) markAsRead(n.id);
+    const listingId = n.listingId ?? n.listing?.id;
+    if (listingId) navigate(`/dashboard/listings/${listingId}`);
   };
 
-  const timeAgo = (dateStr) => {
-    const d = new Date(dateStr);
-    const now = new Date();
-    const diff = (now - d) / 1000;
-    if (diff < 60) return 'Just now';
-    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-    return `${Math.floor(diff / 86400)}d ago`;
-  };
+  const unread = notifications.filter((n) => !n.isRead).length;
+  const shown = filter === 'unread' ? notifications.filter((n) => !n.isRead) : notifications;
 
   return (
-    <div className="animate-fade-in-up" style={{ padding: '1rem 0 4rem 0', maxWidth: '800px', margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <div style={{ padding: '0.5rem', background: 'rgba(255, 0, 110, 0.15)', borderRadius: '10px', color: '#ff006e' }}>
-            <Bell size={24} />
-          </div>
-          <h1 className="text-gradient" style={{ fontSize: '2.2rem', margin: 0, fontWeight: '800' }}>Notifications</h1>
-        </div>
-        {notifications.some(n => !n.isRead) && (
-          <button className="btn btn-outline" onClick={handleMarkAllAsRead} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <CheckCircle2 size={18} /> Mark all as read
-          </button>
+    <div className="page page-narrow">
+      <PageHeader
+        icon={Bell}
+        title="Notifications"
+        subtitle={unread > 0 ? `${unread} unread` : 'You are all caught up.'}
+        actions={unread > 0 && (
+          <Button variant="secondary" icon={CheckCircle2} data-testid="mark-all-read" onClick={markAllAsRead}>Mark all as read</Button>
         )}
-      </div>
+      />
+
+      <Tabs
+        ariaLabel="Filter notifications"
+        value={filter}
+        onChange={setFilter}
+        tabs={[
+          { id: 'all', label: 'All', count: notifications.length || undefined },
+          { id: 'unread', label: 'Unread', count: unread || undefined }
+        ]}
+      />
+
+      {error && <ErrorState compact message={error} onRetry={() => { setLoading(true); fetchNotifications(); }} />}
 
       {loading ? (
-        <div style={{ textAlign: 'center', padding: '3rem' }}>
-          <Loader2 size={32} className="animate-spin" style={{ color: 'var(--primary-color)', margin: '0 auto' }} />
+        <div className="stack-sm" aria-busy="true" aria-label="Loading notifications">
+          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} height="92px" radius="var(--radius-lg)" />)}
         </div>
-      ) : notifications.length === 0 ? (
-        <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center', borderRadius: '20px' }}>
-          <Bell size={48} style={{ opacity: 0.3, margin: '0 auto 1rem' }} />
-          <h3 style={{ color: 'var(--text-secondary)' }}>You don't have any notifications.</h3>
-        </div>
+      ) : shown.length === 0 && !error ? (
+        <Card>
+          <EmptyState
+            icon={Bell}
+            title={filter === 'unread' ? 'No unread notifications' : "You don't have any notifications"}
+            description="Add items to your wishlist or create an alert to get price drops and new matches."
+            action={filter === 'all' && <Button variant="secondary" onClick={() => navigate('/dashboard/alerts')}>Create an alert</Button>}
+          />
+        </Card>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          {notifications.map(n => (
-            <div 
-              key={n.id} 
-              className="glass-panel" 
-              onClick={() => {
-                if (!n.isRead) handleMarkAsRead(n.id);
-                if (n.listingId) {
-                  navigate(`/dashboard/listings/${n.listingId}`);
-                } else if (n.listing && n.listing.id) {
-                  navigate(`/dashboard/listings/${n.listing.id}`);
-                }
-              }}
-              style={{ 
-                padding: '1.5rem', 
-                borderRadius: '16px', 
-                display: 'flex', 
-                gap: '1.5rem', 
-                cursor: !n.isRead ? 'pointer' : 'default',
-                background: !n.isRead ? 'linear-gradient(145deg, rgba(255,0,110,0.1), rgba(0,0,0,0.2))' : undefined,
-                border: !n.isRead ? '1px solid rgba(255,0,110,0.3)' : undefined,
-                transition: 'all 0.2s'
-              }}
-            >
-              <div style={{ fontSize: '2rem', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '50px', flexShrink: 0 }}>
-                {getIcon(n.type)}
-              </div>
-              
-              <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', fontWeight: !n.isRead ? '700' : '500' }}>
-                    {n.title}
-                  </h4>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{timeAgo(n.createdAt)}</span>
+        <Card padded={false} className="notif-list">
+          {shown.map((n) => {
+            const hasListing = Boolean(n.listingId ?? n.listing?.id);
+            const meta = TYPE_META[n.type] || { icon: Bell, tone: 'primary' };
+            return (
+              <div
+                key={n.id}
+                data-testid={`notification-${n.type}`}
+                className={`notif ${n.isRead ? '' : 'unread'} ${hasListing ? 'clickable' : ''}`}
+                role={hasListing ? 'button' : undefined}
+                tabIndex={hasListing ? 0 : undefined}
+                onClick={() => open(n)}
+                onKeyDown={(e) => { if (hasListing && e.key === 'Enter') open(n); }}
+              >
+                <div className="notif-visual">
+                  {n.listing?.firstImageUrl
+                    ? <img src={n.listing.firstImageUrl} alt="" />
+                    : <span className="notif-icon" style={{ background: `var(--${meta.tone}-soft)`, color: `var(--${meta.tone === 'primary' ? 'primary-text' : meta.tone})` }}><meta.icon size={20} aria-hidden="true" /></span>}
+                  {n.listing?.firstImageUrl && (
+                    <span className="notif-type" style={{ background: `var(--${meta.tone === 'primary' ? 'primary' : meta.tone})` }}><meta.icon size={11} aria-hidden="true" /></span>
+                  )}
                 </div>
-                
-                <p style={{ margin: '0 0 1rem 0', color: !n.isRead ? '#fff' : 'var(--text-secondary)', fontSize: '0.95rem' }}>
-                  {n.message}
-                </p>
-                
-                {n.listing && (
-                  <div 
-                    style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'rgba(0,0,0,0.2)', padding: '0.5rem', borderRadius: '8px', cursor: 'pointer' }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (!n.isRead) handleMarkAsRead(n.id);
-                      navigate(`/dashboard/listings/${n.listing.id}`);
-                    }}
-                  >
-                    <img 
-                      src={n.listing.firstImageUrl || 'https://placehold.co/100x100?text=No+Photo'} 
-                      alt="Listing thumbnail" 
-                      style={{ width: '40px', height: '40px', borderRadius: '4px', objectFit: 'cover' }} 
-                    />
-                    <div>
-                      <div style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>{n.listing.title}</div>
-                      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                        {n.listing.price != null ? `LKR ${n.listing.price.toLocaleString()}` : ''}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
 
-              {!n.isRead && (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#ff006e' }} />
+                <div className="grow" style={{ minWidth: 0 }}>
+                  <div className="row-between" style={{ alignItems: 'flex-start', flexWrap: 'nowrap' }}>
+                    <h3 className="notif-title">{n.title || n.type.replace('_', ' ')}</h3>
+                    <time className="text-xs muted" style={{ whiteSpace: 'nowrap' }} dateTime={n.createdAt} title={new Date(n.createdAt).toLocaleString()}>
+                      {timeAgo(n.createdAt)}
+                    </time>
+                  </div>
+                  <p className="notif-msg">{n.message}</p>
+                  <div className="row" style={{ gap: 'var(--space-4)', marginTop: 6 }}>
+                    {hasListing && (
+                      <span className="text-xs row" style={{ gap: 4, color: 'var(--primary-text)', fontWeight: 600 }}>
+                        <ExternalLink size={13} aria-hidden="true" /> Open listing{n.listing?.price != null ? ` · ${formatLKR(n.listing.price)}` : ''}
+                      </span>
+                    )}
+                    {!n.isRead && (
+                      <button type="button" className="link-btn" onClick={(e) => { e.stopPropagation(); markAsRead(n.id); }}>
+                        <Check size={13} aria-hidden="true" /> Mark as read
+                      </button>
+                    )}
+                  </div>
                 </div>
-              )}
-            </div>
-          ))}
-        </div>
+
+                {!n.isRead && <span className="unread-dot" aria-label="Unread" />}
+              </div>
+            );
+          })}
+        </Card>
       )}
     </div>
   );

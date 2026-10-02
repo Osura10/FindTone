@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using MusicMarket.Api.Data;
 using MusicMarket.Api.Dtos;
+using MusicMarket.Api.Helpers;
 using MusicMarket.Api.Models;
 using MusicMarket.Api.Constants;
 
@@ -13,6 +14,9 @@ namespace MusicMarket.Api.Controllers;
 [Route("api/[controller]")]
 public class OrdersController : ControllerBase
 {
+    // Demo payment only: this is the one card number that is accepted.
+    public const string DemoCardNumber = "1234123412341234";
+
     private readonly AppDbContext _db;
 
     public OrdersController(AppDbContext db)
@@ -22,22 +26,21 @@ public class OrdersController : ControllerBase
 
     /// <summary>
     /// POST /api/orders [Authorize]
-    /// Create a new order (Buying flow)
+    /// Buy a LIVE listing. Runs in one transaction: the listing becomes SOLD, the order is
+    /// saved and both buyer and seller get a notification.
     /// </summary>
     [HttpPost]
     [Authorize]
     public async Task<IActionResult> CreateOrder([FromBody] CreateOrderDto dto)
     {
-        var role = User.FindFirstValue(ClaimTypes.Role);
-        if (role == Roles.Admin)
+        if (User.FindFirstValue(ClaimTypes.Role) == Roles.Admin)
         {
-            return StatusCode(403, new { message = "Admin accounts cannot place orders." });
+            return this.Error(403, "Admin accounts cannot place orders.");
         }
 
-        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (string.IsNullOrEmpty(userIdStr) || !int.TryParse(userIdStr, out var userId))
+        if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
         {
-            return StatusCode(401, new { message = "Please log in again." });
+            return this.Error(401, "Please log in again.");
         }
 
         // Check required fields
@@ -47,92 +50,107 @@ public class OrdersController : ControllerBase
             string.IsNullOrWhiteSpace(dto.City) ||
             string.IsNullOrWhiteSpace(dto.PaymentMethod))
         {
-            return BadRequest("Required fields are missing.");
+            return this.Error(400, "Full name, phone, address, city and payment method are required.");
         }
 
-        // Validate Phone (basic Sri Lankan check e.g. starts with 0 and length 10 or similar, but just checking it's not empty and basic structure for now)
-        if (dto.Phone.Length < 9)
+        // Basic Sri Lankan phone check: 9-12 digits (e.g. 0712345678 or +94712345678).
+        var phoneDigits = new string(dto.Phone.Where(char.IsDigit).ToArray());
+        if (phoneDigits.Length < 9 || phoneDigits.Length > 12)
         {
-            return BadRequest("Invalid Sri Lankan phone number.");
+            return this.Error(400, "Invalid Sri Lankan phone number.");
         }
 
-        string status = "";
+        var paymentMethod = dto.PaymentMethod.Trim().ToUpperInvariant();
+        string status;
         string? cardLast4 = null;
 
-        if (dto.PaymentMethod == "CARD")
+        if (paymentMethod == "CARD")
         {
-            if (dto.Card == null) return BadRequest("Card details are required for CARD payment method.");
-            
-            var cleanedNumber = dto.Card.Number.Replace(" ", "").Replace("-", "");
-            if (cleanedNumber != "1234123412341234")
+            if (dto.Card == null) return this.Error(400, "Card details are required for CARD payment method.");
+
+            var cleanedNumber = (dto.Card.Number ?? "").Replace(" ", "").Replace("-", "");
+            if (cleanedNumber != DemoCardNumber)
             {
-                return BadRequest("Invalid demo card number.");
+                return this.Error(400, "Invalid demo card number. Use 1234 1234 1234 1234.");
             }
 
             if (string.IsNullOrWhiteSpace(dto.Card.HolderName))
             {
-                return BadRequest("Card holder name is required.");
-            }
-            
-            if (dto.Card.Cvv.Length != 3 || !int.TryParse(dto.Card.Cvv, out _))
-            {
-                return BadRequest("Invalid CVV.");
+                return this.Error(400, "Card holder name is required.");
             }
 
-            var expiryParts = dto.Card.Expiry.Split('/');
-            if (expiryParts.Length != 2 || !int.TryParse(expiryParts[0], out int month) || !int.TryParse(expiryParts[1], out int yearPart))
+            var cvv = (dto.Card.Cvv ?? "").Trim();
+            if (cvv.Length != 3 || !cvv.All(char.IsDigit))
             {
-                return BadRequest("Invalid expiry format.");
+                return this.Error(400, "Invalid CVV. It must be 3 digits.");
             }
-            
-            int year = yearPart < 100 ? 2000 + yearPart : yearPart;
-            
-            // Check if future month
-            var now = DateTime.Now;
-            var currentMonth = now.Month;
-            var currentYear = now.Year;
-            
-            if (year < currentYear || (year == currentYear && month < currentMonth))
+
+            var expiryParts = (dto.Card.Expiry ?? "").Split('/');
+            if (expiryParts.Length != 2 ||
+                !int.TryParse(expiryParts[0], out var month) ||
+                !int.TryParse(expiryParts[1], out var yearPart) ||
+                month < 1 || month > 12)
             {
-                return BadRequest("Card expired.");
+                return this.Error(400, "Invalid expiry. Use MM/YY.");
+            }
+
+            var year = yearPart < 100 ? 2000 + yearPart : yearPart;
+            var now = DateTime.Now;
+            if (year < now.Year || (year == now.Year && month < now.Month))
+            {
+                return this.Error(400, "Card expired.");
             }
 
             status = "PAID";
-            cardLast4 = "1234";
+            // Never store the full card number or CVV, only the last 4 digits.
+            cardLast4 = cleanedNumber[^4..];
         }
-        else if (dto.PaymentMethod == "COD")
+        else if (paymentMethod == "COD")
         {
             status = "CONFIRMED_COD";
         }
         else
         {
-            return BadRequest("Invalid payment method.");
+            return this.Error(400, "Invalid payment method. Use CARD or COD.");
         }
 
-        // Start Transaction
-        using var transaction = await _db.Database.BeginTransactionAsync();
+        await using var transaction = await _db.Database.BeginTransactionAsync();
 
-        var listing = await _db.Listings.FirstOrDefaultAsync(l => l.Id == dto.ListingId);
-        
+        var listing = await _db.Listings.AsNoTracking().FirstOrDefaultAsync(l => l.Id == dto.ListingId);
         if (listing == null)
         {
-            return NotFound("Listing not found.");
+            return this.Error(404, "Listing not found.");
         }
-        
+
         if (listing.SellerId == userId)
         {
-            return StatusCode(403, new { message = "You cannot buy your own listing." });
+            return this.Error(403, "You cannot buy your own listing.");
+        }
+
+        if (listing.Status == "SOLD")
+        {
+            return this.Error(409, "This item has already been sold.");
         }
 
         if (listing.Status != "LIVE")
         {
-            return StatusCode(409, "This item has just been sold");
+            return this.Error(409, "This listing is not available for purchase.");
         }
 
-        // Update listing
-        listing.Status = "SOLD";
-        listing.SoldPrice = listing.Price;
-        listing.SoldAt = DateTime.UtcNow;
+        // Atomic "LIVE -> SOLD": if two buyers click at the same time, only one UPDATE matches.
+        var soldAt = DateTime.UtcNow;
+        var updated = await _db.Listings
+            .Where(l => l.Id == listing.Id && l.Status == "LIVE")
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(l => l.Status, "SOLD")
+                .SetProperty(l => l.SoldPrice, l => l.Price)
+                .SetProperty(l => l.SoldAt, soldAt)
+                .SetProperty(l => l.UpdatedAt, soldAt));
+        if (updated == 0)
+        {
+            await transaction.RollbackAsync();
+            return this.Error(409, "This item has already been sold.");
+        }
 
         var order = new Order
         {
@@ -140,29 +158,27 @@ public class OrdersController : ControllerBase
             BuyerId = userId,
             SellerId = listing.SellerId,
             Amount = listing.Price,
-            PaymentMethod = dto.PaymentMethod,
+            PaymentMethod = paymentMethod,
             Status = status,
-            FullName = dto.FullName,
-            Phone = dto.Phone,
-            AddressLine = dto.AddressLine,
-            City = dto.City,
-            PostalCode = dto.PostalCode,
-            Notes = dto.Notes,
+            FullName = dto.FullName.Trim(),
+            Phone = dto.Phone.Trim(),
+            AddressLine = dto.AddressLine.Trim(),
+            City = dto.City.Trim(),
+            PostalCode = TextNormalizer.CleanOrNull(dto.PostalCode),
+            Notes = TextNormalizer.CleanOrNull(dto.Notes),
             CardLast4 = cardLast4,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = soldAt
         };
-
         _db.Orders.Add(order);
-        
-        // Notifications
+
         _db.Notifications.Add(new Notification
         {
             UserId = listing.SellerId,
             Type = "ITEM_SOLD",
             Title = "Item Sold",
-            Message = $"Your {listing.Title} was sold for LKR {listing.Price}.",
+            Message = $"Your {listing.Title} was sold for LKR {listing.Price:N0}.",
             ListingId = listing.Id,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = soldAt
         });
 
         _db.Notifications.Add(new Notification
@@ -170,15 +186,15 @@ public class OrdersController : ControllerBase
             UserId = userId,
             Type = "ORDER_PLACED",
             Title = "Order Placed",
-            Message = $"Your order for {listing.Title} was successful.",
+            Message = $"Your order for {listing.Title} (LKR {listing.Price:N0}) was successful.",
             ListingId = listing.Id,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = soldAt
         });
 
         await _db.SaveChangesAsync();
         await transaction.CommitAsync();
 
-        return Ok(new { message = "Order placed successfully", orderId = order.Id });
+        return Ok(new { message = "Order placed successfully", orderId = order.Id, status });
     }
 
     /// <summary>
@@ -189,74 +205,46 @@ public class OrdersController : ControllerBase
     [Authorize]
     public async Task<IActionResult> GetMyPurchases()
     {
-        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!int.TryParse(userIdStr, out var userId))
+        if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
         {
-            return Unauthorized();
+            return this.Error(401, "Please log in again.");
         }
 
-        var orders = await _db.Orders
-            .Include(o => o.Listing)
-            .ThenInclude(l => l.Images)
-            .Where(o => o.BuyerId == userId)
-            .OrderByDescending(o => o.CreatedAt)
-            .ToListAsync();
-
-        var dtos = orders.Select(o => new OrderDto
-        {
-            Id = o.Id,
-            ListingId = o.ListingId,
-            ListingTitle = o.Listing?.Title ?? "Unknown Listing",
-            ListingImage = o.Listing?.Images.FirstOrDefault()?.Url,
-            Amount = o.Amount,
-            PaymentMethod = o.PaymentMethod,
-            Status = o.Status,
-            FullName = o.FullName,
-            Phone = o.Phone,
-            AddressLine = o.AddressLine,
-            City = o.City,
-            PostalCode = o.PostalCode,
-            Notes = o.Notes,
-            CardLast4 = o.CardLast4,
-            CreatedAt = o.CreatedAt
-        });
-
-        return Ok(dtos);
+        return Ok(await LoadOrdersAsync(o => o.BuyerId == userId));
     }
 
     /// <summary>
     /// GET /api/orders/sales
-    /// Get my sales
+    /// Orders for items I sold. Buyers can sell too, so this is open to any logged-in user.
     /// </summary>
     [HttpGet("sales")]
     [Authorize]
     public async Task<IActionResult> GetMySales()
     {
-        var role = User.FindFirstValue(ClaimTypes.Role);
-        if (role != "shop")
+        if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
         {
-            return Forbid();
+            return this.Error(401, "Please log in again.");
         }
 
-        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!int.TryParse(userIdStr, out var userId))
-        {
-            return Unauthorized();
-        }
+        return Ok(await LoadOrdersAsync(o => o.SellerId == userId));
+    }
 
+    private async Task<List<OrderDto>> LoadOrdersAsync(System.Linq.Expressions.Expression<Func<Order, bool>> filter)
+    {
         var orders = await _db.Orders
-            .Include(o => o.Listing)
+            .AsNoTracking()
+            .Include(o => o.Listing!)
             .ThenInclude(l => l.Images)
-            .Where(o => o.SellerId == userId)
+            .Where(filter)
             .OrderByDescending(o => o.CreatedAt)
             .ToListAsync();
 
-        var dtos = orders.Select(o => new OrderDto
+        return orders.Select(o => new OrderDto
         {
             Id = o.Id,
             ListingId = o.ListingId,
             ListingTitle = o.Listing?.Title ?? "Unknown Listing",
-            ListingImage = o.Listing?.Images.FirstOrDefault()?.Url,
+            ListingImage = o.Listing?.Images.OrderBy(i => i.SortOrder).FirstOrDefault()?.Url,
             Amount = o.Amount,
             PaymentMethod = o.PaymentMethod,
             Status = o.Status,
@@ -268,8 +256,6 @@ public class OrdersController : ControllerBase
             Notes = o.Notes,
             CardLast4 = o.CardLast4,
             CreatedAt = o.CreatedAt
-        });
-
-        return Ok(dtos);
+        }).ToList();
     }
 }

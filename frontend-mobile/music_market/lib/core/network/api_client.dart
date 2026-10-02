@@ -1,9 +1,8 @@
-import 'package:music_market/core/utils/app_logger.dart';
 import 'package:dio/dio.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../utils/app_logger.dart';
 import 'api_exceptions.dart';
-import '../routes/app_router.dart';
 
 /// Provides a configured Dio client for network requests.
 class ApiClient {
@@ -14,15 +13,21 @@ class ApiClient {
     if (defaultTargetPlatform == TargetPlatform.android) return 'http://10.0.2.2:5036/api';
     return 'http://localhost:5036/api';
   }
+
   static final String baseUrl = _defaultBaseUrl;
   static bool _hasPrintedUrl = false;
 
+  /// Called when the API says the session is no longer valid (HTTP 401).
+  /// AuthProvider sets this so it can log out and the router sends the user to /login.
+  static Future<void> Function()? onUnauthorized;
+
+  static const storage = FlutterSecureStorage();
+
   late final Dio dio;
-  final _secureStorage = const FlutterSecureStorage();
 
   ApiClient() {
-    if (kDebugMode && !_hasPrintedUrl) {
-      debugPrint('[API] Base URL: $baseUrl');
+    if (!_hasPrintedUrl) {
+      logDebug('[API] Base URL: $baseUrl');
       _hasPrintedUrl = true;
     }
 
@@ -30,7 +35,7 @@ class ApiClient {
       BaseOptions(
         baseUrl: baseUrl,
         connectTimeout: const Duration(seconds: 15),
-        sendTimeout: const Duration(seconds: 60),
+        sendTimeout: kIsWeb ? null : const Duration(seconds: 60), // web has no send timeout without a body stream
         receiveTimeout: const Duration(seconds: 30),
       ),
     );
@@ -38,70 +43,66 @@ class ApiClient {
     dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
         if (!options.path.startsWith('/auth/login') && !options.path.startsWith('/auth/register')) {
-          final token = await _secureStorage.read(key: 'jwt_token');
-          if (token != null) {
-            options.headers['Authorization'] = 'Bearer $token';
+          try {
+            final token = await storage.read(key: 'jwt_token');
+            if (token != null) options.headers['Authorization'] = 'Bearer $token';
+          } catch (e) {
+            logDebug('Could not read the saved token', e);
           }
         }
         return handler.next(options);
       },
-      onResponse: (response, handler) {
-        return handler.next(response);
-      },
       onError: (DioException e, handler) async {
-        if (e.type == DioExceptionType.connectionTimeout || 
-            e.type == DioExceptionType.connectionError) {
-          if (kDebugMode) {
-            logDebug('Log:', "DioException: ${e.type}, ${e.message}, ${e.requestOptions.uri}, ${e.response?.statusCode}, ${e.error}");
-          }
+        logDebug('HTTP ${e.requestOptions.method} ${e.requestOptions.path} failed: ${e.type} ${e.response?.statusCode}');
+
+        if (e.type == DioExceptionType.connectionTimeout || e.type == DioExceptionType.connectionError) {
           return handler.next(DioException(
             requestOptions: e.requestOptions,
-            error: AppException("Cannot reach the server"),
+            type: e.type,
+            error: AppException('Cannot reach the server. Check that the backend is running and try again.'),
           ));
         }
 
         if (e.type == DioExceptionType.receiveTimeout || e.type == DioExceptionType.sendTimeout) {
-          if (kDebugMode) {
-            logDebug('Log:', "DioException Timeout: ${e.type}, path: ${e.requestOptions.path}");
-          }
-          String msg = "Request timed out, try again.";
+          var msg = 'Request timed out, try again.';
           if (e.requestOptions.path.endsWith('/listings') && e.requestOptions.method == 'POST') {
-            msg = "The AI is taking longer than usual. Your listing was saved and will be checked shortly.";
+            msg = 'The AI is taking longer than usual. Your listing may still be saved – check My Listings.';
           } else if (e.requestOptions.path.endsWith('/price-check')) {
-            msg = "Price check timed out, try again";
+            msg = 'Price check timed out, try again.';
           }
           return handler.next(DioException(
             requestOptions: e.requestOptions,
+            type: e.type,
             error: AppException(msg),
           ));
         }
 
-        if (e.response?.statusCode == 401) {
-          // Clear session and go to login
-          await _secureStorage.delete(key: 'jwt_token');
-          await _secureStorage.delete(key: 'user_role');
-          AppRouter.router.go('/');
+        final status = e.response?.statusCode;
+        final isLoginCall = e.requestOptions.path.startsWith('/auth/login');
+        if (status == 401 && !isLoginCall) {
+          await onUnauthorized?.call();
           return handler.next(DioException(
             requestOptions: e.requestOptions,
-            error: AppException("Session expired. Please login again.", statusCode: 401),
+            response: e.response,
+            type: e.type,
+            error: AppException('Session expired. Please log in again.', statusCode: 401),
           ));
         }
-        
-        String message = "Something went wrong";
-        if (e.response?.data != null) {
-          if (e.response?.data is Map<String, dynamic> && e.response?.data['message'] != null) {
-            message = e.response?.data['message'];
-          } else if (e.response?.data is String) {
-            message = e.response?.data;
-          }
-        } else if (e.message != null && e.message!.isNotEmpty) {
-          message = e.message!;
+
+        // The backend always answers {"message": "..."} for errors.
+        var message = 'Something went wrong (HTTP ${status ?? '?'}).';
+        final data = e.response?.data;
+        if (data is Map && data['message'] != null) {
+          message = data['message'].toString();
+        } else if (data is String && data.trim().isNotEmpty) {
+          message = data;
         }
 
         return handler.next(DioException(
           requestOptions: e.requestOptions,
-          error: AppException(message, statusCode: e.response?.statusCode),
-          response: e.response
+          response: e.response,
+          type: e.type,
+          error: AppException(message, statusCode: status),
         ));
       },
     ));

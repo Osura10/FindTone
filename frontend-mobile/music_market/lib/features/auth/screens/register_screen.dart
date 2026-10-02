@@ -5,6 +5,8 @@ import '../../../core/network/api_client.dart';
 import '../../../core/network/api_exceptions.dart';
 import '../../../core/widgets/app_text_field.dart';
 import '../../../core/widgets/primary_button.dart';
+import '../../../core/widgets/common_widgets.dart';
+import '../../../core/theme/app_theme.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -105,139 +107,164 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
   }
 
+  Widget _roleCard(String value, IconData icon, String title, String text) {
+    final selected = _role == value;
+    final c = context.colors;
+    return Expanded(
+      child: Semantics(
+        selected: selected,
+        button: true,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          onTap: () => setState(() => _role = value),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            padding: const EdgeInsets.all(AppSpacing.md),
+            decoration: BoxDecoration(
+              color: selected ? c.primarySoft : context.scheme.surface,
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+              border: Border.all(color: selected ? context.scheme.primary : context.scheme.outline, width: selected ? 2 : 1),
+            ),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Icon(icon, color: selected ? c.primaryText : c.textMuted),
+                const Spacer(),
+                Icon(selected ? Icons.radio_button_checked : Icons.radio_button_off, size: 18, color: selected ? c.primaryText : c.textMuted),
+              ]),
+              const SizedBox(height: AppSpacing.sm),
+              Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 2),
+              Text(text, style: TextStyle(fontSize: 12, color: c.textMuted, height: 1.3)),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_success) {
       return Scaffold(
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.check_circle, color: Colors.green, size: 80),
-                const SizedBox(height: 24),
-                const Text('Registration Successful!', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 16),
-                if (_role == 'shop')
-                  const Text('Your shop will be reviewed by an admin.', textAlign: TextAlign.center),
-                const SizedBox(height: 32),
-                PrimaryButton(
-                  text: 'Go to Login',
-                  onPressed: () => context.go('/login'),
-                ),
-              ],
+        body: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.xl),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 88,
+                    height: 88,
+                    decoration: BoxDecoration(color: context.colors.successSoft, shape: BoxShape.circle),
+                    child: Icon(Icons.check_rounded, color: context.colors.success, size: 48),
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
+                  Text('Registration successful!', style: context.text.headlineSmall, textAlign: TextAlign.center),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    _role == 'shop' ? 'Your shop will be reviewed by an admin before you can log in.' : 'You can now log in to your account.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: context.colors.textMuted),
+                  ),
+                  const SizedBox(height: AppSpacing.xxl),
+                  PrimaryButton(text: 'Go to Login', onPressed: () => context.go('/login')),
+                ],
+              ),
             ),
           ),
         ),
       );
     }
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Register')),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(value: 'buyer', label: Text('Buyer')),
-                    ButtonSegment(value: 'shop', label: Text('Shop')),
-                  ],
-                  selected: {_role},
-                  onSelectionChanged: (Set<String> newSelection) {
-                    setState(() {
-                      _role = newSelection.first;
-                    });
-                  },
-                ),
-                const SizedBox(height: 24),
-                
-                if (_errorMessage != null)
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    margin: const EdgeInsets.only(bottom: 20),
-                    decoration: BoxDecoration(
-                      color: Colors.red.withValues(alpha: 0.1),
-                      border: Border.all(color: Colors.redAccent),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(_errorMessage!, style: const TextStyle(color: Colors.redAccent), textAlign: TextAlign.center),
-                  ),
+    String? required(String? val) => val == null || val.isEmpty ? 'Required' : null;
 
-                AppTextField(
-                  controller: _nameController,
-                  label: _role == 'shop' ? 'Shop Name' : 'Full Name',
-                  onChanged: _onFieldChanged,
-                  validator: (val) => val == null || val.isEmpty ? 'Required' : null,
+    return Scaffold(
+      appBar: AppBar(title: const Text('Create account')),
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.sm, AppSpacing.xl, AppSpacing.xl),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 480),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text('I want to join as', style: context.text.titleSmall),
+                    const SizedBox(height: AppSpacing.sm),
+                    Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      _roleCard('buyer', Icons.shopping_bag_outlined, 'Buyer', 'Browse, save and buy – and sell your own gear.'),
+                      const SizedBox(width: AppSpacing.md),
+                      _roleCard('shop', Icons.storefront_outlined, 'Shop', 'List your inventory. Verified by an admin.'),
+                    ]),
+                    const SizedBox(height: AppSpacing.xl),
+
+                    if (_errorMessage != null) ...[
+                      InlineNotice(message: _errorMessage!, tone: NoticeTone.error),
+                      const SizedBox(height: AppSpacing.lg),
+                    ],
+
+                    AppTextField(
+                      controller: _nameController,
+                      label: _role == 'shop' ? 'Shop Name' : 'Full Name',
+                      prefixIcon: _role == 'shop' ? Icons.storefront_outlined : Icons.person_outline_rounded,
+                      onChanged: _onFieldChanged,
+                      validator: required,
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    AppTextField(
+                      controller: _emailController,
+                      label: 'Email',
+                      prefixIcon: Icons.mail_outline_rounded,
+                      keyboardType: TextInputType.emailAddress,
+                      onChanged: _onFieldChanged,
+                      validator: (val) => val == null || val.isEmpty || !val.contains('@') ? 'Enter a valid email' : null,
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    AppTextField(
+                      controller: _passwordController,
+                      label: 'Password',
+                      prefixIcon: Icons.lock_outline_rounded,
+                      obscureText: true,
+                      onChanged: _onFieldChanged,
+                      validator: (val) => val == null || val.length < 6 ? 'Minimum 6 characters required' : null,
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    AppTextField(
+                      controller: _phoneController,
+                      label: 'Phone Number',
+                      hint: '0771234567',
+                      prefixIcon: Icons.phone_outlined,
+                      keyboardType: TextInputType.phone,
+                      onChanged: _onFieldChanged,
+                      validator: required,
+                    ),
+
+                    if (_role == 'shop') ...[
+                      const SizedBox(height: AppSpacing.xl),
+                      Text('Shop details', style: context.text.titleSmall),
+                      const SizedBox(height: AppSpacing.md),
+                      AppTextField(controller: _ownerNameController, label: 'Owner Name', prefixIcon: Icons.badge_outlined, onChanged: _onFieldChanged, validator: required),
+                      const SizedBox(height: AppSpacing.lg),
+                      AppTextField(controller: _nicController, label: 'NIC Card Number', prefixIcon: Icons.credit_card_outlined, onChanged: _onFieldChanged, validator: required),
+                      const SizedBox(height: AppSpacing.lg),
+                      AppTextField(controller: _addressController, label: 'Address', prefixIcon: Icons.place_outlined, onChanged: _onFieldChanged, validator: required),
+                      const SizedBox(height: AppSpacing.lg),
+                      AppTextField(controller: _shopRegisterIdController, label: 'Shop Register ID', prefixIcon: Icons.description_outlined, onChanged: _onFieldChanged, validator: required),
+                    ],
+
+                    const SizedBox(height: AppSpacing.xl),
+                    PrimaryButton(text: 'Register', isLoading: _isLoading, onPressed: _handleRegister),
+                    const SizedBox(height: AppSpacing.md),
+                    Wrap(alignment: WrapAlignment.center, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                      Text('Already have an account?', style: TextStyle(color: context.colors.textMuted)),
+                      TextButton(onPressed: () => context.go('/login'), child: const Text('Log in')),
+                    ]),
+                  ],
                 ),
-                const SizedBox(height: 16),
-                AppTextField(
-                  controller: _emailController,
-                  label: 'Email',
-                  keyboardType: TextInputType.emailAddress,
-                  onChanged: _onFieldChanged,
-                  validator: (val) => val == null || val.isEmpty || !val.contains('@') ? 'Enter a valid email' : null,
-                ),
-                const SizedBox(height: 16),
-                AppTextField(
-                  controller: _passwordController,
-                  label: 'Password',
-                  obscureText: true,
-                  onChanged: _onFieldChanged,
-                  validator: (val) => val == null || val.length < 6 ? 'Minimum 6 characters required' : null,
-                ),
-                const SizedBox(height: 16),
-                AppTextField(
-                  controller: _phoneController,
-                  label: 'Phone Number',
-                  keyboardType: TextInputType.phone,
-                  onChanged: _onFieldChanged,
-                  validator: (val) => val == null || val.isEmpty ? 'Required' : null,
-                ),
-                
-                if (_role == 'shop') ...[
-                  const SizedBox(height: 16),
-                  AppTextField(
-                    controller: _nicController,
-                    label: 'NIC Card Number',
-                    onChanged: _onFieldChanged,
-                    validator: (val) => val == null || val.isEmpty ? 'Required' : null,
-                  ),
-                  const SizedBox(height: 16),
-                  AppTextField(
-                    controller: _ownerNameController,
-                    label: 'Owner Name',
-                    onChanged: _onFieldChanged,
-                    validator: (val) => val == null || val.isEmpty ? 'Required' : null,
-                  ),
-                  const SizedBox(height: 16),
-                  AppTextField(
-                    controller: _addressController,
-                    label: 'Address',
-                    onChanged: _onFieldChanged,
-                    validator: (val) => val == null || val.isEmpty ? 'Required' : null,
-                  ),
-                  const SizedBox(height: 16),
-                  AppTextField(
-                    controller: _shopRegisterIdController,
-                    label: 'Shop Register ID',
-                    onChanged: _onFieldChanged,
-                    validator: (val) => val == null || val.isEmpty ? 'Required' : null,
-                  ),
-                ],
-                
-                const SizedBox(height: 32),
-                PrimaryButton(
-                  text: 'Register',
-                  isLoading: _isLoading,
-                  onPressed: _handleRegister,
-                ),
-              ],
+              ),
             ),
           ),
         ),

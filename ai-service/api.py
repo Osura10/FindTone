@@ -10,7 +10,7 @@ from llm_config import message_text
 from Agent_01.agent import run_fair_price
 from Agent_02.agent import run_trust_check
 from Agent_02.tools import get_clip_model
-from Agent_03.agent import run_smart_alert, parse_alert_text
+from Agent_03.agent import run_smart_alert, parse_alert_text, run_alert_backfill
 from Agent_04.agent import run_shopping_assistant, create_shopping_assistant
 app = FastAPI(title="MusicMarket AI Service")
 
@@ -80,7 +80,7 @@ class FairPriceResponse(BaseModel):
     used_fallback: bool
 
 @app.post("/api/agents/fair-price", response_model=FairPriceResponse)
-async def api_fair_price(request: FairPriceRequest, _ = Depends(verify_internal_key)):
+def api_fair_price(request: FairPriceRequest, _ = Depends(verify_internal_key)):
     result = run_fair_price(request.model_dump() if hasattr(request, 'model_dump') else request.dict())
     return result
 
@@ -99,7 +99,7 @@ class TrustCheckResponse(BaseModel):
     used_fallback: bool
 
 @app.post("/api/agents/trust-check", response_model=TrustCheckResponse)
-async def api_trust_check(request: TrustCheckRequest, _ = Depends(verify_internal_key)):
+def api_trust_check(request: TrustCheckRequest, _ = Depends(verify_internal_key)):
     result = run_trust_check(request.listing_id)
     if "error" in result and result.get("status_code") == 404:
         raise HTTPException(status_code=404, detail=result["error"])
@@ -111,15 +111,26 @@ class SmartAlertRequest(BaseModel):
     old_price: Optional[float] = None
 
 @app.post("/api/agents/smart-alert")
-async def api_smart_alert(request: SmartAlertRequest, _ = Depends(verify_internal_key)):
+def api_smart_alert(request: SmartAlertRequest, _ = Depends(verify_internal_key)):
     result = run_smart_alert(request.listing_id, request.event, request.old_price)
+    return result
+
+class AlertBackfillRequest(BaseModel):
+    saved_search_id: int
+
+@app.post("/api/agents/smart-alert/backfill")
+def api_smart_alert_backfill(request: AlertBackfillRequest, _ = Depends(verify_internal_key)):
+    # Called when an alert is created, updated or enabled: match it against existing LIVE listings.
+    result = run_alert_backfill(request.saved_search_id)
+    if result.get("error") == "Saved search not found":
+        raise HTTPException(status_code=404, detail=result["error"])
     return result
 
 class ParseAlertRequest(BaseModel):
     text: str
 
 @app.post("/api/agents/parse-alert")
-async def api_parse_alert(request: ParseAlertRequest, _ = Depends(verify_internal_key)):
+def api_parse_alert(request: ParseAlertRequest, _ = Depends(verify_internal_key)):
     result = parse_alert_text(request.text)
     return result
 
@@ -157,7 +168,7 @@ class ShoppingAssistantResponse(BaseModel):
     used_fallback: bool
 
 @app.post("/api/agents/shopping-assistant", response_model=ShoppingAssistantResponse)
-async def api_shopping_assistant(request: ShoppingAssistantRequest, _ = Depends(verify_internal_key)):
+def api_shopping_assistant(request: ShoppingAssistantRequest, _ = Depends(verify_internal_key)):
     result = run_shopping_assistant(
         message=request.message,
         session_id=request.session_id,
@@ -186,7 +197,7 @@ class ChatResponse(BaseModel):
     session_id: str
 
 @app.post("/api/chat")
-async def chat(request: ChatRequest):
+def chat(request: ChatRequest):
     # Generate a session ID if not provided
     session_id = request.session_id if request.session_id else str(uuid.uuid4())
     config = {"configurable": {"thread_id": session_id}}

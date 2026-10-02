@@ -6,6 +6,7 @@ using MusicMarket.Api.Dtos;
 using MusicMarket.Api.Models;
 using MusicMarket.Api.Services;
 using MusicMarket.Api.Constants;
+using MusicMarket.Api.Helpers;
 
 namespace MusicMarket.Api.Controllers;
 
@@ -17,15 +18,18 @@ public class AdminController : ControllerBase
     private readonly AppDbContext _db;
     private readonly CloudinaryDotNet.Cloudinary _cloudinary;
 
-    private readonly AiServiceClient _ai;
+    private readonly ListingCheckService _checks;
     private readonly SmartAlertService _smartAlerts;
+    private readonly ILogger<AdminController> _logger;
 
-    public AdminController(AppDbContext db, CloudinaryDotNet.Cloudinary cloudinary, AiServiceClient ai, SmartAlertService smartAlerts)
+    public AdminController(AppDbContext db, CloudinaryDotNet.Cloudinary cloudinary, ListingCheckService checks,
+        SmartAlertService smartAlerts, ILogger<AdminController> logger)
     {
         _db = db;
         _cloudinary = cloudinary;
-        _ai = ai;
+        _checks = checks;
         _smartAlerts = smartAlerts;
+        _logger = logger;
     }
 
     [HttpGet("stats")]
@@ -97,7 +101,7 @@ public class AdminController : ControllerBase
         var user = await _db.Users.FindAsync(id);
         if (user is null)
         {
-            return NotFound(new { message = "User not found" });
+            return this.Error(404, "User not found.");
         }
 
         user.Approval = dto.Approval;
@@ -117,7 +121,7 @@ public class AdminController : ControllerBase
         var user = await _db.Users.FindAsync(id);
         if (user is null)
         {
-            return NotFound(new { message = "User not found" });
+            return this.Error(404, "User not found.");
         }
 
         // Delete user's Cloudinary profile image if exists
@@ -135,14 +139,14 @@ public class AdminController : ControllerBase
         if (string.IsNullOrWhiteSpace(dto.Name) || string.IsNullOrWhiteSpace(dto.Email) || 
             string.IsNullOrWhiteSpace(dto.PhoneNumber) || string.IsNullOrWhiteSpace(dto.NicCardNumber))
         {
-            return BadRequest(new { message = "Name, email, phone number, and NIC card number are all required." });
+            return this.Error(400, "Name, email, phone number, and NIC card number are all required.");
         }
 
         var normalizedEmail = dto.Email.Trim().ToLower();
         var emailTaken = await _db.Users.AnyAsync(u => u.Email.ToLower() == normalizedEmail);
         if (emailTaken)
         {
-            return Conflict(new { message = "An account with this email address already exists." });
+            return this.Error(409, "An account with this email address already exists.");
         }
 
         var admin = new User
@@ -221,10 +225,10 @@ public class AdminController : ControllerBase
     {
         var listing = await _db.Listings.FindAsync(id);
         if (listing == null)
-            return NotFound("Listing not found");
+            return this.Error(404, "Listing not found.");
 
         if (listing.Status != "FLAGGED" && listing.Status != "PENDING")
-            return BadRequest("Listing is not in FLAGGED or PENDING status.");
+            return this.Error(400, "Listing is not in FLAGGED or PENDING status.");
 
         var oldStatus = listing.Status;
         listing.Status = dto.Approve ? "LIVE" : "REJECTED";
@@ -244,154 +248,61 @@ public class AdminController : ControllerBase
         return Ok(new { message = "Listing reviewed successfully", Status = listing.Status });
     }
 
+    /// <summary>
+    /// Run Fair Price + Trust again for one listing.
+    /// </summary>
     [HttpPost("listings/{id:int}/recheck")]
     public async Task<IActionResult> RecheckListing(int id)
     {
-        var listing = await _db.Listings.Include(l => l.Images).FirstOrDefaultAsync(l => l.Id == id);
+        var listing = await _db.Listings.FirstOrDefaultAsync(l => l.Id == id);
         if (listing == null)
-            return NotFound("Listing not found");
+            return this.Error(404, "Listing not found.");
 
-        var trustResult = await _ai.GetTrustCheckAsync(listing.Id);
-        if (trustResult != null)
+        var oldStatus = listing.Status;
+        await _checks.RunFairPriceAsync(listing);
+        var trustOk = await _checks.RunTrustCheckAsync(listing);
+        if (!trustOk)
         {
-            listing.TrustScore = trustResult.TrustScore;
-            
-            var detailedReason = trustResult.Reason;
-            if (trustResult.Signals.Any())
-            {
-                detailedReason += "\n\nSignals:";
-                foreach (var s in trustResult.Signals)
-                {
-                    detailedReason += $"\n- {s.Code} ({s.Points}): {s.Detail}";
-                }
-            }
-            listing.AiReason = detailedReason;
-            
-            var oldStatus = listing.Status;
-            if (listing.Status != "REJECTED" && listing.Status != "SOLD")
-            {
-                if (trustResult.Decision == "LIVE" || trustResult.Decision == "FLAGGED")
-                {
-                    listing.Status = trustResult.Decision;
-                }
-            }
-            
-            // Update image PHashes
-            foreach (var imgHash in trustResult.ImageHashes)
-            {
-                var img = listing.Images.FirstOrDefault(i => i.Id == imgHash.ImageId);
-                if (img != null && !string.IsNullOrEmpty(imgHash.PHash))
-                {
-                    img.PHash = imgHash.PHash;
-                }
-            }
-            
-            listing.UpdatedAt = DateTime.UtcNow;
-            await _db.SaveChangesAsync();
-
-            if (oldStatus != "LIVE" && listing.Status == "LIVE")
-            {
-                await _smartAlerts.OnListingBecameLiveAsync(listing);
-            }
-
-            return Ok(new { message = "Recheck successful", trustResult });
+            return this.Error(503, "AI service failed to respond. Please try again later.");
         }
 
-        return StatusCode(503, "AI service failed to respond");
+        if (oldStatus != "LIVE" && listing.Status == "LIVE")
+        {
+            await _smartAlerts.OnListingBecameLiveAsync(listing);
+        }
+
+        return Ok(new
+        {
+            message = "Recheck successful",
+            status = listing.Status,
+            trustScore = listing.TrustScore,
+            priceVerdict = listing.PriceVerdict,
+            aiReason = listing.AiReason
+        });
     }
 
+    /// <summary>
+    /// Run Fair Price + Trust again for every PENDING listing.
+    /// </summary>
     [HttpPost("listings/recheck-pending")]
     public async Task<IActionResult> RecheckPending()
     {
-        var pendingListings = await _db.Listings.Include(l => l.Images).Where(l => l.Status == "PENDING").ToListAsync();
-        int successCount = 0;
-        
-        foreach(var listing in pendingListings)
+        var pendingListings = await _db.Listings.Where(l => l.Status == "PENDING").ToListAsync();
+        var successCount = 0;
+
+        foreach (var listing in pendingListings)
         {
-            // 1. Fair Price
-            var aiReqPriceUpdate = new FairPriceRequest
+            await _checks.RunFairPriceAsync(listing);
+            if (await _checks.RunTrustCheckAsync(listing))
             {
-                ListingId = listing.Id,
-                Brand = listing.Brand,
-                Model = listing.Model,
-                Category = listing.Category,
-                Condition = listing.Condition,
-                Year = listing.Year,
-                AskingPrice = (float)listing.Price,
-                Description = listing.Description
-            };
-            
-            var aiResultPriceUpdate = await _ai.GetFairPriceAsync(aiReqPriceUpdate);
-            if (aiResultPriceUpdate != null)
-            {
-                listing.FairPrice = (decimal)aiResultPriceUpdate.FairPrice;
-                listing.FairPriceMin = (decimal)aiResultPriceUpdate.FairRange.Min;
-                listing.FairPriceMax = (decimal)aiResultPriceUpdate.FairRange.Max;
-                listing.PriceVerdict = aiResultPriceUpdate.Verdict;
-                listing.PriceDeviationPercent = aiResultPriceUpdate.DeviationPercent;
-                listing.PriceConfidence = aiResultPriceUpdate.Confidence;
-                listing.PriceExplanation = aiResultPriceUpdate.Explanation;
-                listing.UpdatedAt = DateTime.UtcNow;
-                await _db.SaveChangesAsync();
-            }
-            
-            // 2. Trust Check
-            var trustResult = await _ai.GetTrustCheckAsync(listing.Id);
-            if (trustResult != null)
-            {
-                listing.TrustScore = trustResult.TrustScore;
-                var detailedReason = trustResult.Reason;
-                if (trustResult.Signals.Any())
-                {
-                    detailedReason += "\n\nSignals:";
-                    foreach (var s in trustResult.Signals)
-                    {
-                        detailedReason += $"\n- {s.Code} ({s.Points}): {s.Detail}";
-                    }
-                }
-                listing.AiReason = detailedReason;
-                
-                var oldStatus = listing.Status;
-                if (listing.Status != "REJECTED" && listing.Status != "SOLD")
-                {
-                    if (trustResult.Decision == "LIVE" || trustResult.Decision == "FLAGGED")
-                    {
-                        listing.Status = trustResult.Decision;
-                    }
-                }
-                
-                var imageIds = trustResult.ImageHashes.Select(h => h.ImageId).ToList();
-                if (imageIds.Any())
-                {
-                    var imagesToUpdate = await _db.ListingImages.Where(i => imageIds.Contains(i.Id)).ToListAsync();
-                    foreach (var imgHash in trustResult.ImageHashes)
-                    {
-                        var img = imagesToUpdate.FirstOrDefault(i => i.Id == imgHash.ImageId);
-                        if (img != null && !string.IsNullOrEmpty(imgHash.PHash))
-                        {
-                            img.PHash = imgHash.PHash;
-                        }
-                    }
-                }
-                
-                listing.UpdatedAt = DateTime.UtcNow;
-                await _db.SaveChangesAsync();
-                
-                if (oldStatus != "LIVE" && listing.Status == "LIVE")
+                successCount++;
+                if (listing.Status == "LIVE")
                 {
                     await _smartAlerts.OnListingBecameLiveAsync(listing);
                 }
-                
-                successCount++;
-            }
-            else
-            {
-                listing.AiReason = "AI check failed: Service unavailable or timed out. An admin can re-check this listing.";
-                listing.UpdatedAt = DateTime.UtcNow;
-                await _db.SaveChangesAsync();
             }
         }
-        
+
         return Ok(new { message = $"Rechecked {successCount} out of {pendingListings.Count} pending listings." });
     }
 
@@ -417,7 +328,7 @@ public class AdminController : ControllerBase
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Failed to delete cloudinary image: {ex.Message}");
+            _logger.LogWarning(ex, "Failed to delete Cloudinary image {Url}", imageUrl);
         }
     }
 }

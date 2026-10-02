@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import '../../../core/network/api_exceptions.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import '../providers/auth_provider.dart';
+import '../../../core/widgets/common_widgets.dart';
+import '../../../core/theme/app_theme.dart';
 
 class ProfileView extends StatefulWidget {
   final Widget extraMenuItems;
@@ -114,7 +117,7 @@ class _ProfileViewState extends State<ProfileView> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
           TextButton(
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
             onPressed: () async {
               final auth = context.read<AuthProvider>();
               Navigator.pop(context);
@@ -131,10 +134,13 @@ class _ProfileViewState extends State<ProfileView> {
   Future<void> _pickImage(BuildContext context) async {
     final picker = ImagePicker();
     final picked = await picker.pickImage(source: ImageSource.gallery);
-    if (picked != null) {
-      if (context.mounted) {
-        await context.read<AuthProvider>().uploadAvatar(picked.path);
-      }
+    if (picked == null || !context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await context.read<AuthProvider>().uploadAvatar(picked);
+      messenger.showSnackBar(const SnackBar(content: Text('Profile photo updated')));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(describeError(e))));
     }
   }
 
@@ -142,98 +148,118 @@ class _ProfileViewState extends State<ProfileView> {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final profile = auth.userProfile;
+    final c = context.colors;
 
     if (profile == null) {
-      return const Center(child: CircularProgressIndicator());
+      return const ShimmerLoader.list(count: 4, rowHeight: 120);
     }
 
-    final imageUrl = profile['profileImageUrl'];
-    final name = profile['name'] ?? 'User';
-    final email = profile['email'] ?? '';
-    final role = profile['role']?.toString().toUpperCase() ?? '';
-    final phone = profile['phoneNumber'] ?? 'No phone added';
-    final address = profile['address'] ?? 'No address added';
+    final imageUrl = profile['profileImageUrl']?.toString();
+    final name = profile['name']?.toString() ?? 'User';
+    final email = profile['email']?.toString() ?? '';
+    final role = profile['role']?.toString() ?? '';
+    final phone = profile['phoneNumber']?.toString() ?? 'No phone added';
+    final address = profile['address']?.toString() ?? 'No address added';
+
+    Widget tile(IconData icon, String title, String? subtitle, VoidCallback onTap, {IconData trailing = Icons.edit_outlined}) => ListTile(
+          leading: Icon(icon),
+          title: Text(title, style: const TextStyle(fontWeight: FontWeight.w500)),
+          subtitle: subtitle == null ? null : Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis),
+          trailing: Icon(trailing, size: 20),
+          onTap: onTap,
+        );
 
     return RefreshIndicator(
       onRefresh: () => auth.fetchProfile(),
       child: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(AppSpacing.page, AppSpacing.sm, AppSpacing.page, AppSpacing.xxl),
         children: [
-          Center(
-            child: Stack(
-              children: [
-                CircleAvatar(
-                  radius: 50,
-                  backgroundImage: imageUrl != null ? NetworkImage(imageUrl) : null,
-                  child: imageUrl == null ? const Icon(Icons.person, size: 50) : null,
-                ),
-                Positioned(
-                  bottom: 0,
-                  right: 0,
-                  child: PopupMenuButton(
-                    icon: const CircleAvatar(
-                      radius: 16,
-                      backgroundColor: Colors.blue,
-                      child: Icon(Icons.edit, size: 16, color: Colors.white),
+          // Header card
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              child: Row(children: [
+                Stack(clipBehavior: Clip.none, children: [
+                  AppAvatar(name: name, imageUrl: imageUrl, size: 68),
+                  Positioned(
+                    right: -10,
+                    bottom: -10,
+                    child: PopupMenuButton<String>(
+                      tooltip: 'Change photo',
+                      padding: EdgeInsets.zero,
+                      icon: CircleAvatar(
+                        radius: 14,
+                        backgroundColor: context.scheme.primary,
+                        child: const Icon(Icons.photo_camera_outlined, size: 16, color: Colors.white),
+                      ),
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(value: 'upload', child: Text('Upload photo')),
+                        if (imageUrl != null) PopupMenuItem(value: 'delete', child: Text('Remove photo', style: TextStyle(color: c.danger))),
+                      ],
+                      onSelected: (val) {
+                        if (val == 'upload') {
+                          _pickImage(context);
+                        } else if (val == 'delete') {
+                          auth.deleteAvatar();
+                        }
+                      },
                     ),
-                    itemBuilder: (context) => [
-                      const PopupMenuItem(value: 'upload', child: Text('Upload Image')),
-                      if (imageUrl != null) const PopupMenuItem(value: 'delete', child: Text('Remove Image', style: TextStyle(color: Colors.red))),
-                    ],
-                    onSelected: (val) {
-                      if (val == 'upload') {
-                        _pickImage(context);
-                      } else if (val == 'delete') {
-                        auth.deleteAvatar();
-                      }
-                    },
                   ),
+                ]),
+                const SizedBox(width: AppSpacing.lg),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(name, style: context.text.titleLarge, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 2),
+                    Text(email, style: context.text.bodySmall, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: AppSpacing.sm),
+                    Pill(
+                      label: role.isEmpty ? 'Member' : '${role[0].toUpperCase()}${role.substring(1)}',
+                      color: c.primaryText,
+                      background: c.primarySoft,
+                      icon: role == 'shop' ? Icons.storefront_outlined : Icons.person_outline_rounded,
+                    ),
+                  ]),
                 ),
-              ],
+              ]),
             ),
           ),
-          const SizedBox(height: 16),
-          Center(child: Text(name, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold))),
-          Center(child: Text(email, style: const TextStyle(color: Colors.grey))),
-          Center(child: Chip(label: Text(role))),
-          const SizedBox(height: 24),
+          const SizedBox(height: AppSpacing.xl),
 
-          ListTile(
-            leading: const Icon(Icons.phone),
-            title: const Text('Phone Number'),
-            subtitle: Text(phone),
-            trailing: const Icon(Icons.edit, size: 20),
-            onTap: () => _editPhone(context, profile['phoneNumber'] ?? ''),
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: AppSpacing.sm),
+            child: Text('ACCOUNT', style: TextStyle(fontSize: 11.5, letterSpacing: 0.8, fontWeight: FontWeight.w700, color: c.textMuted)),
           ),
-          ListTile(
-            leading: const Icon(Icons.location_on),
-            title: const Text('Address'),
-            subtitle: Text(address),
-            trailing: const Icon(Icons.edit, size: 20),
-            onTap: () => _editLocation(context, profile['address'] ?? ''),
+          Card(
+            child: Column(children: [
+              tile(Icons.phone_outlined, 'Phone number', phone, () => _editPhone(context, profile['phoneNumber']?.toString() ?? '')),
+              const Divider(height: 1, indent: 56),
+              tile(Icons.place_outlined, 'Address', address, () => _editLocation(context, profile['address']?.toString() ?? '')),
+              const Divider(height: 1, indent: 56),
+              tile(Icons.lock_outline_rounded, 'Change password', null, () => _changePassword(context), trailing: Icons.chevron_right_rounded),
+            ]),
           ),
-          ListTile(
-            leading: const Icon(Icons.lock),
-            title: const Text('Change Password'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => _changePassword(context),
-          ),
-          const Divider(),
+          const SizedBox(height: AppSpacing.lg),
 
           widget.extraMenuItems,
 
-          ListTile(
-            leading: const Icon(Icons.logout, color: Colors.orange),
-            title: const Text('Logout', style: TextStyle(color: Colors.orange)),
-            onTap: () {
-              auth.logout();
-              context.go('/login');
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.delete_forever, color: Colors.red),
-            title: const Text('Delete Account', style: TextStyle(color: Colors.red)),
-            onTap: () => _confirmDelete(context),
+          Card(
+            child: Column(children: [
+              ListTile(
+                leading: Icon(Icons.logout_rounded, color: c.warning),
+                title: Text('Log out', style: TextStyle(color: c.warning, fontWeight: FontWeight.w600)),
+                onTap: () {
+                  auth.logout();
+                  context.go('/login');
+                },
+              ),
+              const Divider(height: 1, indent: 56),
+              ListTile(
+                leading: Icon(Icons.delete_forever_outlined, color: c.danger),
+                title: Text('Delete account', style: TextStyle(color: c.danger, fontWeight: FontWeight.w600)),
+                onTap: () => _confirmDelete(context),
+              ),
+            ]),
           ),
         ],
       ),

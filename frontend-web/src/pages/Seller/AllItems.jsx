@@ -1,544 +1,481 @@
-import React, { useState, useEffect } from 'react';
-import { Search, Package, PlusCircle, AlertCircle, RefreshCw, ShoppingBag, Store, Heart, Edit2, XCircle, MapPin } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useCallback, useEffect, useState } from 'react';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import toast from 'react-hot-toast';
+import { Search, Package, PlusCircle, RefreshCw, ShoppingBag, Store, Heart, Edit2, MapPin, Trash2, AlertTriangle, SlidersHorizontal, Tag } from 'lucide-react';
 import { apiCall } from '../../services/api';
-import { MapContainer, TileLayer, Marker } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import { useDashboard, isAdminUser } from '../../hooks/useDashboard';
+import {
+  Button, Card, EmptyState, ErrorState, Input, Modal, PageHeader, PriceTag, Select, Skeleton,
+  StatusBadge, Tabs, TrustBadge, VerdictBadge, formatLKR, verdictInfo
+} from '../../components/ui';
 
-import icon from 'leaflet/dist/images/marker-icon.png';
-import iconShadow from 'leaflet/dist/images/marker-shadow.png';
-
-let DefaultIcon = L.icon({
-    iconUrl: icon,
-    shadowUrl: iconShadow,
-    iconSize: [25, 41],
-    iconAnchor: [12, 41]
-});
-L.Marker.prototype.options.icon = DefaultIcon;
+const PAGE_SIZE = 12;
+const CONDITIONS = ['new', 'like_new', 'excellent', 'good', 'fair', 'poor', 'for_parts'];
+const EMPTY_FILTERS = { q: '', category: '', brand: '', condition: '', minPrice: '', maxPrice: '' };
+const PLACEHOLDER = 'https://placehold.co/400x300?text=No+Photo';
+const prettyCondition = (c) => (c ? c.replace('_', ' ') : '');
 
 const AllItems = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { currentUser } = useDashboard();
+  const isAdmin = isAdminUser(currentUser);
+  const activeTab = !isAdmin && searchParams.get('tab') === 'mine' ? 'mine' : 'marketplace';
+  const urlQuery = searchParams.get('q') || '';
+
   const [items, setItems] = useState([]);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [role, setRole] = useState(null);
-  const [activeTab, setActiveTab] = useState('marketplace'); // 'marketplace' or 'mine'
+  const [filters, setFilters] = useState({ ...EMPTY_FILTERS, q: urlQuery });
+  const [appliedFilters, setAppliedFilters] = useState({ ...EMPTY_FILTERS, q: urlQuery });
+  const [showFilters, setShowFilters] = useState(false); // only matters on small screens
+  const [mineSearch, setMineSearch] = useState('');
   const [wishlist, setWishlist] = useState([]);
-  const [priceModal, setPriceModal] = useState({ isOpen: false, listingId: null, currentPrice: 0, newPrice: 0 });
+  const [priceModal, setPriceModal] = useState(null);   // { listingId, currentPrice, newPrice, saving }
+  const [deleteTarget, setDeleteTarget] = useState(null); // listing to delete
+  const [deleting, setDeleting] = useState(false);
 
-  const initialize = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const user = await apiCall('/auth/me');
-      if (user && user.role) {
-        const userRole = user.role.toLowerCase();
-        setRole(userRole);
-        localStorage.setItem('role', userRole);
-        
-        if (userRole === 'buyer') {
-          setActiveTab('marketplace');
-          fetchMarketplace();
-          fetchWishlist();
-        } else if (userRole === 'shop') {
-          if (activeTab === 'mine') {
-            fetchMyListings();
-          } else {
-            fetchMarketplace();
-          }
-          fetchWishlist();
-        } else {
-          setActiveTab('marketplace');
-          fetchMarketplace();
-        }
-      } else {
-        setError('Unable to verify your account.');
-        setLoading(false);
-      }
-    } catch (err) {
-      console.error(err);
-      setError('Session expired or unauthorized. Please log in again.');
-      setLoading(false);
-    }
-  };
+  // ── Loading ────────────────────────────────────────────────────────────────
 
-  const fetchMarketplace = async () => {
-    setLoading(true);
+  const loadMarketplace = useCallback(async (pageToLoad, f) => {
+    const params = new URLSearchParams({ page: String(pageToLoad), pageSize: String(PAGE_SIZE) });
+    Object.entries(f).forEach(([k, v]) => { if (String(v).trim() !== '') params.set(k, String(v).trim()); });
     try {
-      const data = await apiCall('/listings?status=LIVE');
-      setItems(Array.isArray(data) ? data : (data.items || []));
+      const data = await apiCall(`/listings?${params.toString()}`);
+      setItems((prev) => (pageToLoad === 1 ? data.items : [...prev, ...data.items]));
+      setPage(pageToLoad);
+      setTotalPages(data.totalPages || 1);
+      setTotalCount(data.totalCount ?? null);
+      setError('');
     } catch (err) {
-      console.error(err);
-      setError('Unable to load marketplace listings.');
+      setError(err.message || 'Unable to load marketplace listings.');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const fetchWishlist = async () => {
-    try {
-      const data = await apiCall('/wishlist');
-      setWishlist((data || []).map(w => w.listingId));
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const toggleWishlist = async (id, e) => {
-    e.stopPropagation();
-    try {
-      if (wishlist.includes(id)) {
-        await apiCall(`/wishlist/${id}`, { method: 'DELETE' });
-        setWishlist(wishlist.filter(w => w !== id));
-      } else {
-        await apiCall(`/wishlist/${id}`, { method: 'POST' });
-        setWishlist([...wishlist, id]);
-      }
-    } catch (err) {
-      alert(err.message || 'Failed to update wishlist');
-    }
-  };
-
-  const handleUpdatePrice = async () => {
-    setPriceModal(prev => ({ ...prev, isSaving: true }));
-    try {
-      await apiCall(`/listings/${priceModal.listingId}/price`, {
-        method: 'PUT',
-        body: JSON.stringify({ newPrice: Number(priceModal.newPrice) })
-      });
-      setPriceModal({ isOpen: false, listingId: null, currentPrice: 0, newPrice: 0, isSaving: false });
-      if (activeTab === 'mine') fetchMyListings();
-      else fetchMarketplace();
-    } catch (err) {
-      alert(err.message || 'Failed to update price');
-      setPriceModal(prev => ({ ...prev, isSaving: false }));
-    }
-  };
-
-  const fetchMyListings = async () => {
-    setLoading(true);
+  const loadMine = useCallback(async () => {
     try {
       const data = await apiCall('/listings/mine');
-      setItems(Array.isArray(data) ? data : (data.items || []));
+      setItems(Array.isArray(data) ? data : []);
+      setTotalPages(1);
+      setError('');
     } catch (err) {
-      console.error(err);
-      setError('Unable to load your listings.');
+      setError(err.message || 'Unable to load your listings.');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  const loadWishlist = useCallback(async () => {
+    try {
+      const data = await apiCall('/wishlist');
+      setWishlist((data || []).map((w) => w.listingId));
+    } catch (err) {
+      toast.error(`Could not load your wishlist: ${err.message}`);
+    }
+  }, []);
+
+  const reload = useCallback(() => {
+    setLoading(true);
+    if (activeTab === 'mine') loadMine();
+    else loadMarketplace(1, appliedFilters);
+  }, [activeTab, appliedFilters, loadMine, loadMarketplace]);
+
+  // Reload when the tab or filters change, and when coming back from create/edit (location.key).
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    reload();
+  }, [reload, location.key]);
+
+  // The navbar search sends "?q=..." – copy it into the search box and run the search.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setFilters((f) => (f.q === urlQuery ? f : { ...f, q: urlQuery }));
+    setAppliedFilters((f) => (f.q === urlQuery ? f : { ...f, q: urlQuery }));
+  }, [urlQuery]);
 
   useEffect(() => {
-    initialize();
-  }, [activeTab]);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (currentUser && !isAdmin) loadWishlist();
+  }, [currentUser, isAdmin, loadWishlist]);
 
-  const filteredItems = items.filter(item => {
-    const term = searchTerm.toLowerCase();
+  const setTab = (tab) => setSearchParams(tab === 'mine' ? { tab: 'mine' } : {});
+
+  // ── Actions ────────────────────────────────────────────────────────────────
+
+  const applyFilters = (e) => {
+    e?.preventDefault();
+    if (filters.minPrice && filters.maxPrice && Number(filters.maxPrice) < Number(filters.minPrice)) {
+      toast.error('Max price must be greater than min price.');
+      return;
+    }
+    setAppliedFilters({ ...filters });
+    setShowFilters(false);
+  };
+
+  const clearFilters = () => {
+    setFilters(EMPTY_FILTERS);
+    setAppliedFilters(EMPTY_FILTERS);
+    if (urlQuery) setSearchParams({});
+  };
+
+  const toggleWishlist = async (listingId, e) => {
+    e.stopPropagation();
+    const saved = wishlist.includes(listingId);
+    try {
+      await apiCall(`/wishlist/${listingId}`, { method: saved ? 'DELETE' : 'POST' });
+      setWishlist((prev) => (saved ? prev.filter((w) => w !== listingId) : [...prev, listingId]));
+      toast.success(saved ? 'Removed from wishlist' : 'Added to wishlist – you will be told about price drops');
+    } catch (err) {
+      toast.error(err.message || 'Failed to update wishlist');
+    }
+  };
+
+  const savePrice = async () => {
+    const newPrice = Number(priceModal.newPrice);
+    if (!newPrice || newPrice <= 0) {
+      setPriceModal((p) => ({ ...p, error: 'Price must be greater than 0.' }));
+      return;
+    }
+    setPriceModal((p) => ({ ...p, saving: true, error: '' }));
+    try {
+      const dto = await apiCall(`/listings/${priceModal.listingId}/price`, { method: 'PUT', body: JSON.stringify({ newPrice }) });
+      toast.success(`Price updated to ${formatLKR(dto.price)}. Status: ${dto.status}${dto.priceVerdict ? ` · ${verdictInfo(dto.priceVerdict).label}` : ''}`, { duration: 6000 });
+      setPriceModal(null);
+      reload();
+    } catch (err) {
+      setPriceModal((p) => ({ ...p, saving: false, error: err.message || 'Failed to update price.' }));
+    }
+  };
+
+  const confirmDelete = async () => {
+    setDeleting(true);
+    try {
+      await apiCall(`/listings/${deleteTarget.id}`, { method: 'DELETE' });
+      toast.success('Listing deleted');
+      setItems((prev) => prev.filter((i) => i.id !== deleteTarget.id));
+      setDeleteTarget(null);
+    } catch (err) {
+      toast.error(err.message || 'Failed to delete the listing.');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  // My Listings is small, so it is searched in the browser; the marketplace is searched by the API.
+  const visibleItems = activeTab === 'mine' && mineSearch.trim()
+    ? items.filter((i) => [i.title, i.brand, i.model, i.category].some((v) => v?.toLowerCase().includes(mineSearch.trim().toLowerCase())))
+    : items;
+
+  const activeFilterCount = Object.entries(appliedFilters).filter(([k, v]) => k !== 'q' && String(v).trim() !== '').length;
+  const setFilter = (key) => (e) => setFilters({ ...filters, [key]: e.target.value });
+
+  // ── Pieces ─────────────────────────────────────────────────────────────────
+
+  const listingCard = (item) => {
+    const isOwn = currentUser && item.sellerId === currentUser.id;
+    const sold = item.status === 'SOLD';
+    const saved = wishlist.includes(item.id);
     return (
-      (item.title && item.title.toLowerCase().includes(term)) ||
-      (item.brand && item.brand.toLowerCase().includes(term)) ||
-      (item.model && item.model.toLowerCase().includes(term)) ||
-      (item.category && item.category.toLowerCase().includes(term))
-    );
-  });
-
-  const getStatusBadge = (status) => {
-    switch (status?.toUpperCase()) {
-      case 'LIVE':
-        return { bg: 'rgba(81, 207, 102, 0.2)', color: '#51cf66', border: 'rgba(81, 207, 102, 0.4)', label: 'LIVE' };
-      case 'PENDING':
-        return { bg: 'rgba(245, 158, 11, 0.2)', color: '#f59e0b', border: 'rgba(245, 158, 11, 0.4)', label: 'PENDING' };
-      case 'FLAGGED':
-        return { bg: 'rgba(255, 146, 43, 0.2)', color: '#ff922b', border: 'rgba(255, 146, 43, 0.4)', label: 'Under Review' };
-      case 'REJECTED':
-        return { bg: 'rgba(255, 107, 107, 0.2)', color: '#ff6b6b', border: 'rgba(255, 107, 107, 0.4)', label: 'REJECTED' };
-      case 'SOLD':
-        return { bg: 'rgba(134, 142, 150, 0.2)', color: '#adb5bd', border: 'rgba(134, 142, 150, 0.4)', label: 'SOLD' };
-      default:
-        return { bg: 'rgba(255, 255, 255, 0.1)', color: '#fff', border: 'rgba(255, 255, 255, 0.2)', label: status || 'UNKNOWN' };
-    }
-  };
-
-  const getVerdictBadge = (verdict) => {
-    switch (verdict?.toUpperCase()) {
-      case 'SUSPICIOUSLY_LOW': return { bg: 'rgba(255,107,107,0.2)', color: '#ff6b6b', border: 'rgba(255,107,107,0.4)', label: 'Suspicious' };
-      case 'GREAT_DEAL':       return { bg: 'rgba(81,207,102,0.2)',  color: '#51cf66', border: 'rgba(81,207,102,0.4)',  label: 'Great Deal' };
-      case 'FAIR':             return { bg: 'rgba(81,207,102,0.2)',  color: '#51cf66', border: 'rgba(81,207,102,0.4)',  label: 'Fair' };
-      case 'SLIGHTLY_HIGH':    return { bg: 'rgba(255,212,59,0.2)',  color: '#ffd43b', border: 'rgba(255,212,59,0.4)',  label: 'Slightly High' };
-      case 'OVERPRICED':       return { bg: 'rgba(255,107,107,0.2)', color: '#ff6b6b', border: 'rgba(255,107,107,0.4)', label: 'Overpriced' };
-      default:                 return { bg: 'rgba(134,142,150,0.2)', color: '#adb5bd', border: 'rgba(134,142,150,0.4)', label: verdict || 'UNKNOWN' };
-    }
-  };
-
-  const getTrustBadge = (score) => {
-    if (score == null) {
-      return { bg: 'rgba(134, 142, 150, 0.2)', color: '#adb5bd', border: 'rgba(134, 142, 150, 0.4)', label: 'Not checked' };
-    }
-    if (score < 40) {
-      return { bg: 'rgba(239, 68, 68, 0.2)', color: '#ef4444', border: 'rgba(239, 68, 68, 0.4)', label: `Trust ${score}/100` };
-    }
-    if (score < 70) {
-      return { bg: 'rgba(245, 158, 11, 0.2)', color: '#f59e0b', border: 'rgba(245, 158, 11, 0.4)', label: `Trust ${score}/100` };
-    }
-    return { bg: 'rgba(16, 185, 129, 0.2)', color: '#10b981', border: 'rgba(16, 185, 129, 0.4)', label: `Trust ${score}/100` };
-  };
-
-  const fmtLkr = (n) => n != null ? `LKR ${Math.round(n).toLocaleString()}` : null;
-
-  return (
-    <div className="animate-fade-in-up" style={{ padding: '1rem 0', maxWidth: '1200px', margin: '0 auto' }}>
-      
-      {/* Header and Tabs */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '2.5rem', gap: '1.25rem' }}>
-        <h1 className="text-gradient" style={{ fontSize: '2.5rem', margin: 0, fontWeight: '800' }}>
-          {activeTab === 'mine' ? 'Your Items' : 'Marketplace Items'}
-        </h1>
-        <p style={{ color: 'var(--text-secondary)', margin: 0, maxWidth: '600px', textAlign: 'center' }}>
-          {activeTab === 'mine' 
-            ? 'Manage your listed instruments and check evaluation status'
-            : 'Browse verified instruments from trusted sellers'
-          }
-        </p>
-        
-        {role === 'shop' && (
-          <div style={{ display: 'flex', gap: '0.5rem', background: 'rgba(0,0,0,0.3)', padding: '0.4rem', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.1)' }}>
-            <button 
-              onClick={() => setActiveTab('marketplace')}
-              className={`btn ${activeTab === 'marketplace' ? 'btn-primary' : ''}`}
-              style={activeTab === 'marketplace' ? {} : { background: 'transparent', color: 'var(--text-secondary)' }}
-            >
-              <ShoppingBag size={16} /> Marketplace
-            </button>
-            <button 
-              onClick={() => setActiveTab('mine')}
-              className={`btn ${activeTab === 'mine' ? 'btn-primary' : ''}`}
-              style={activeTab === 'mine' ? {} : { background: 'transparent', color: 'var(--text-secondary)' }}
-            >
-              <Store size={16} /> My Listings
-            </button>
-          </div>
-        )}
-        
-        {/* Search Bar & Refresh */}
-        <div style={{ display: 'flex', gap: '12px', width: '100%', maxWidth: '600px', marginTop: '1rem' }}>
-          <div className="glass-panel" style={{ display: 'flex', alignItems: 'center', padding: '0.75rem 1.5rem', flex: 1, borderRadius: '30px', boxShadow: '0 8px 32px rgba(0,0,0,0.15)' }}>
-            <Search size={22} style={{ color: 'var(--text-secondary)', marginRight: '1rem' }} />
-            <input
-              type="text"
-              placeholder="Search instruments..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              style={{ 
-                background: 'transparent', 
-                border: 'none', 
-                color: 'white', 
-                outline: 'none', 
-                width: '100%',
-                fontSize: '1rem'
-              }}
-            />
-          </div>
-          <button
-            onClick={() => { activeTab === 'mine' ? fetchMyListings() : fetchMarketplace(); }}
-            title="Refresh listings"
-            style={{
-              background: 'rgba(255, 255, 255, 0.1)',
-              border: '1px solid rgba(255, 255, 255, 0.2)',
-              borderRadius: '50%',
-              width: '48px',
-              height: '48px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#fff',
-              cursor: 'pointer'
-            }}
-          >
-            <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
-          </button>
-        </div>
-      </div>
-
-      {error && (
-        <div style={{ color: '#ff6b6b', background: 'rgba(255, 107, 107, 0.15)', border: '1px solid rgba(255, 107, 107, 0.3)', padding: '12px 16px', borderRadius: '8px', marginBottom: '1.5rem', textAlign: 'center' }}>
-          {error}
-        </div>
-      )}
-
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: '4rem 0', color: 'var(--text-secondary)' }}>
-          <div className="spinner" style={{ margin: '0 auto 1rem auto' }}></div>
-          <p>Loading instruments...</p>
-        </div>
-      ) : (
-        /* Items Grid */
-        <div style={{ 
-          display: 'grid', 
-          gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', 
-          gap: '1.5rem' 
-        }}>
-          {filteredItems.map(item => {
-            const trustBadge = getTrustBadge(item.trustScore);
-            const statusBadge = getStatusBadge(item.status);
-            const displayImage = item.firstImageUrl || item.image || 'https://placehold.co/400x300?text=No+Photo';
-            const vb = item.priceVerdict ? getVerdictBadge(item.priceVerdict) : null;
-            
-            return (
-              <div 
-                key={item.id} 
-                className="glass-panel" 
-                style={{ 
-                  overflow: 'hidden', 
-                  display: 'flex', 
-                  flexDirection: 'column', 
-                  transition: 'transform 0.3s ease, box-shadow 0.3s ease', 
-                  borderRadius: '14px',
-                  border: '1px solid rgba(255, 255, 255, 0.15)',
-                  cursor: 'pointer'
-                }} 
-                onClick={() => navigate(`/dashboard/listings/${item.id}`)}
-                onMouseOver={(e) => e.currentTarget.style.transform = 'translateY(-4px)'} 
-                onMouseOut={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+      <article
+        key={item.id}
+        data-testid={`listing-card-${item.id}`}
+        className={`card card-hover listing-card ${sold ? 'is-sold' : ''}`}
+        onClick={() => navigate(`/dashboard/listings/${item.id}`)}
+      >
+        <div className="listing-media">
+          <img src={item.firstImageUrl || PLACEHOLDER} alt={item.title} loading="lazy" />
+          {sold && <span className="sold-ribbon">SOLD OUT</span>}
+          <div className="overlay-top">
+            <div className="row" style={{ gap: 6 }}>
+              {item.condition && <span className="badge badge-neutral media-badge">{prettyCondition(item.condition)}</span>}
+              {isOwn && <span className="badge badge-primary media-badge">Your listing</span>}
+            </div>
+            {/* Wishlist heart: not for admins, not on your own listing */}
+            {currentUser && !isAdmin && !isOwn && item.status === 'LIVE' && (
+              <button
+                type="button"
+                className={`heart-btn ${saved ? 'on' : ''}`}
+                aria-label={saved ? 'Remove from wishlist' : 'Add to wishlist'}
+                aria-pressed={saved}
+                data-testid={`wishlist-${item.id}`}
+                onClick={(e) => toggleWishlist(item.id, e)}
               >
-                <div style={{ height: '180px', width: '100%', overflow: 'hidden', position: 'relative', background: '#111' }}>
-                  <img 
-                    src={displayImage} 
-                    alt={item.title || item.name} 
-                    style={{ 
-                      width: '100%', height: '100%', objectFit: 'cover', 
-                      filter: item.status === 'SOLD' ? 'grayscale(100%)' : 'none' 
-                    }} 
-                  />
-                  {item.status === 'SOLD' && (
-                    <div style={{
-                      position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%) rotate(-15deg)',
-                      background: 'rgba(239, 68, 68, 0.9)', color: '#fff', padding: '6px 20px', fontSize: '1.2rem',
-                      fontWeight: '900', border: '2px solid #fff', borderRadius: '6px', zIndex: 10,
-                      boxShadow: '0 4px 10px rgba(0,0,0,0.5)', textTransform: 'uppercase', letterSpacing: '2px'
-                    }}>
-                      SOLD OUT
-                    </div>
-                  )}
-
-                  {/* Heart button */}
-                  {role !== 'admin' && activeTab === 'marketplace' && item.status === 'LIVE' && (
-                    <button
-                      onClick={(e) => toggleWishlist(item.id, e)}
-                      style={{
-                        position: 'absolute', top: '10px', left: '10px',
-                        background: 'rgba(0,0,0,0.5)', border: 'none', borderRadius: '50%',
-                        width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        color: wishlist.includes(item.id) ? '#ff006e' : '#fff',
-                        cursor: 'pointer', transition: 'transform 0.2s'
-                      }}
-                    >
-                      <Heart size={18} fill={wishlist.includes(item.id) ? '#ff006e' : 'none'} />
-                    </button>
-                  )}
-                  
-                  {/* Status & Trust Badges */}
-                  <div style={{ 
-                    position: 'absolute', 
-                    top: '10px', 
-                    right: '10px', 
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'flex-end',
-                    gap: '4px'
-                  }}>
-                    {activeTab === 'mine' && (
-                      <div style={{
-                        background: statusBadge.bg,
-                        color: statusBadge.color,
-                        border: `1px solid ${statusBadge.border}`,
-                        padding: '0.25rem 0.75rem',
-                        borderRadius: '20px',
-                        fontSize: '0.75rem',
-                        fontWeight: '700',
-                        letterSpacing: '0.5px'
-                      }}>
-                        {statusBadge.label}
-                      </div>
-                    )}
-                    
-                    <div style={{
-                      background: trustBadge.bg,
-                      color: trustBadge.color,
-                      border: `1px solid ${trustBadge.border}`,
-                      padding: '0.25rem 0.75rem',
-                      borderRadius: '20px',
-                      fontSize: '0.75rem',
-                      fontWeight: '700',
-                      letterSpacing: '0.5px'
-                    }}>
-                      {trustBadge.label}
-                    </div>
-
-                    {item.priceVerdict && vb && (
-                      <div style={{
-                        background: vb.bg,
-                        color: vb.color,
-                        border: `1px solid ${vb.border}`,
-                        padding: '0.25rem 0.75rem',
-                        borderRadius: '20px',
-                        fontSize: '0.75rem',
-                        fontWeight: '700'
-                      }}>
-                        {vb.label}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Condition Tag */}
-                  {item.condition && (
-                    <div style={{ 
-                      position: 'absolute', 
-                      bottom: '10px', 
-                      left: '10px', 
-                      background: 'rgba(0,0,0,0.75)',
-                      color: '#fff',
-                      padding: '0.2rem 0.6rem',
-                      borderRadius: '6px',
-                      fontSize: '0.75rem'
-                    }}>
-                      {item.condition}
-                    </div>
-                  )}
-                </div>
-
-                <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: 1 }}>
-                  <div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                    {item.category} • {item.brand}
-                  </div>
-                  <h3 style={{ fontSize: '1.1rem', margin: 0, fontWeight: '600', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.title || item.name}>
-                    {item.title || item.name}
-                  </h3>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 'auto', paddingTop: '0.5rem' }}>
-                    <p style={{ color: 'var(--primary-hover, #a855f7)', fontSize: '1.2rem', fontWeight: '800', margin: 0 }}>
-                      LKR {Number(item.price).toLocaleString()}
-                    </p>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                      {item.listingType || 'Sell'}
-                    </span>
-                  </div>
-                  {item.fairPriceMin != null && item.fairPriceMax != null && (
-                    <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                      Fair: {fmtLkr(item.fairPriceMin)} – {fmtLkr(item.fairPriceMax)}
-                    </div>
-                  )}
-                  {item.location && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                      <MapPin size={12} /> {item.location}
-                    </div>
-                  )}
-                  
-                  {item.latitude != null && item.longitude != null && (
-                    <div style={{ height: '100px', width: '100%', borderRadius: '6px', overflow: 'hidden', marginTop: '0.5rem', border: '1px solid rgba(255,255,255,0.1)' }}>
-                      <MapContainer center={[item.latitude, item.longitude]} zoom={13} style={{ height: '100%', width: '100%', zIndex: 1 }} zoomControl={false} dragging={false} scrollWheelZoom={false} doubleClickZoom={false}>
-                        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap' />
-                        <Marker position={[item.latitude, item.longitude]} />
-                      </MapContainer>
-                    </div>
-                  )}
-                  
-                  {activeTab === 'mine' && item.status !== 'SOLD' && (
-                    <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
-                      <button 
-                        className="btn btn-outline"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigate(`/dashboard/edit/${item.id}`);
-                        }}
-                        style={{ flex: 1, padding: '0.4rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
-                      >
-                        <Edit2 size={14} /> Edit
-                      </button>
-                      {item.status === 'LIVE' && (
-                        <button 
-                          className="btn btn-outline"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setPriceModal({ isOpen: true, listingId: item.id, currentPrice: item.price, newPrice: item.price });
-                          }}
-                          style={{ flex: 1, padding: '0.4rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
-                        >
-                          <Edit2 size={14} /> Price
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-
-          {filteredItems.length === 0 && !loading && (
-            <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '4rem 1rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
-              <Package size={48} style={{ color: 'var(--text-secondary)', opacity: 0.6 }} />
-              <h3 style={{ margin: 0, color: '#eaeaea' }}>
-                {searchTerm
-                  ? `No listings match "${searchTerm}"`
-                  : activeTab === 'mine' ? "You haven't posted any instruments yet" : "No instruments available right now."}
-              </h3>
-              
-              {role === 'shop' && activeTab === 'mine' && (
-                <>
-                  <p style={{ color: 'var(--text-secondary)', margin: 0, maxWidth: '400px' }}>
-                    Start selling by creating your first post. Upload photos and provide instrument details.
-                  </p>
-                  <Link to="/dashboard/create" className="btn btn-primary" style={{ marginTop: '0.5rem', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-                    <PlusCircle size={18} /> Create a Post
-                  </Link>
-                </>
-              )}
+                <Heart size={17} fill={saved ? 'currentColor' : 'none'} />
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="listing-body">
+          <span className="text-xs muted truncate" style={{ textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            {[item.category, item.brand].filter(Boolean).join(' · ')}
+          </span>
+          <h3 className="listing-title" title={item.title}>{item.title}</h3>
+          <div className="row-between" style={{ marginTop: 'auto', paddingTop: 6, alignItems: 'baseline' }}>
+            <PriceTag amount={item.price} size="md" />
+            {item.listingType && item.listingType !== 'Sell' && <span className="text-xs muted">{item.listingType}</span>}
+          </div>
+          {item.location && (
+            <span className="listing-meta"><MapPin size={12} aria-hidden="true" /><span className="truncate">{item.location}</span></span>
+          )}
+          {isAdmin && (
+            <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+              <StatusBadge status={item.status} />
+              <TrustBadge score={item.trustScore} />
+              {item.priceVerdict && <VerdictBadge verdict={item.priceVerdict} />}
             </div>
           )}
         </div>
-      )}
+      </article>
+    );
+  };
 
-      {/* Price Edit Modal */}
-      {priceModal.isOpen && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(8, 6, 15, 0.8)', backdropFilter: 'blur(8px)',
-          display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 999999, padding: '1rem'
-        }}>
-          <div className="glass-panel" style={{
-            width: '100%', maxWidth: '400px', padding: '2rem', borderRadius: '24px',
-            background: 'linear-gradient(145deg, rgba(30, 24, 45, 0.98), rgba(18, 14, 28, 0.99))'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <h3 style={{ margin: 0 }}>Update Price</h3>
-              <button onClick={() => setPriceModal({ isOpen: false, listingId: null, currentPrice: 0, newPrice: 0 })} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>
-                <XCircle size={20} />
-              </button>
-            </div>
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Current Price</label>
-              <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{fmtLkr(priceModal.currentPrice)}</div>
-            </div>
-            <div style={{ marginBottom: '1.5rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>New Price (LKR)</label>
-              <input 
-                type="number" 
-                min="0"
-                className="input-field" 
-                value={priceModal.newPrice}
-                onChange={e => setPriceModal({ ...priceModal, newPrice: e.target.value })}
-                style={{ width: '100%' }}
-              />
-            </div>
-            <div style={{ display: 'flex', gap: '1rem' }}>
-              <button className="btn btn-outline" onClick={() => setPriceModal({ isOpen: false, listingId: null, currentPrice: 0, newPrice: 0, isSaving: false })} style={{ flex: 1 }} disabled={priceModal.isSaving}>Cancel</button>
-              <button className="btn btn-primary" onClick={handleUpdatePrice} style={{ flex: 1 }} disabled={priceModal.isSaving}>
-                {priceModal.isSaving ? 'Saving...' : 'Save Price'}
-              </button>
-            </div>
+  // Owner row: status, trust, verdict and actions – only the seller (and admins) see these.
+  const ownerRow = (item) => {
+    const sold = item.status === 'SOLD';
+    return (
+      <article key={item.id} data-testid={`listing-card-${item.id}`} className="card owner-item" onClick={() => navigate(`/dashboard/listings/${item.id}`)}>
+        <div className="owner-thumb">
+          <img src={item.firstImageUrl || PLACEHOLDER} alt="" loading="lazy" />
+        </div>
+        <div className="owner-info">
+          <h3 className="listing-title" title={item.title}>{item.title}</h3>
+          <span className="text-xs muted truncate">{[item.category, item.brand, item.model].filter(Boolean).join(' · ')}</span>
+          <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+            <StatusBadge status={item.status} />
+            <TrustBadge score={item.trustScore} />
+            {item.priceVerdict && <VerdictBadge verdict={item.priceVerdict} />}
+          </div>
+          {item.trustScore != null && item.trustScore >= 40 && item.trustScore < 70 && (
+            <span className="text-xs row" style={{ gap: 4, color: 'var(--warning)' }}><AlertTriangle size={12} aria-hidden="true" /> Live with a low-trust warning</span>
+          )}
+        </div>
+        <div className="owner-price">
+          <PriceTag amount={item.price} size="md" />
+          {item.fairPriceMin != null && item.fairPriceMax != null && (
+            <span className="text-xs muted">Fair: {formatLKR(item.fairPriceMin)} – {formatLKR(item.fairPriceMax)}</span>
+          )}
+        </div>
+        <div className="owner-actions" onClick={(e) => e.stopPropagation()}>
+          {sold ? (
+            <span className="text-sm muted">Sold items cannot be edited.</span>
+          ) : (
+            <>
+              <Button variant="secondary" size="sm" icon={Edit2} data-testid={`edit-${item.id}`} onClick={() => navigate(`/dashboard/edit/${item.id}`)}>Edit</Button>
+              <Button variant="secondary" size="sm" icon={Tag} onClick={() => setPriceModal({ listingId: item.id, currentPrice: item.price, newPrice: String(item.price), saving: false, error: '' })}>Price</Button>
+              <Button variant="danger-outline" size="sm" icon={Trash2} iconOnly aria-label="Delete listing" onClick={() => setDeleteTarget(item)} />
+            </>
+          )}
+        </div>
+      </article>
+    );
+  };
+
+  const filterPanel = (
+    <aside className={`filter-panel ${showFilters ? '' : 'closed'}`} aria-label="Filters">
+      <Card as="form" onSubmit={applyFilters} className="stack">
+        <div className="row-between">
+          <h2 className="section-title" style={{ fontSize: 'var(--text-base)' }}>Filters</h2>
+          {activeFilterCount > 0 && <Button variant="ghost" size="sm" onClick={clearFilters}>Clear all</Button>}
+        </div>
+        <Input label="Category" placeholder="e.g. Acoustic Guitar" value={filters.category} onChange={setFilter('category')} />
+        <Input label="Brand" placeholder="e.g. Yamaha" value={filters.brand} onChange={setFilter('brand')} />
+        <Select
+          label="Condition"
+          value={filters.condition}
+          onChange={setFilter('condition')}
+          placeholder="Any condition"
+          options={CONDITIONS.map((c) => ({ value: c, label: prettyCondition(c) }))}
+        />
+        <div className="field">
+          <span className="field-label">Price (LKR)</span>
+          <div className="range-row">
+            <input className="input" type="number" min="0" placeholder="Min" value={filters.minPrice} onChange={setFilter('minPrice')} aria-label="Minimum price" />
+            <span className="muted" aria-hidden="true">–</span>
+            <input className="input" type="number" min="0" placeholder="Max" value={filters.maxPrice} onChange={setFilter('maxPrice')} aria-label="Maximum price" />
           </div>
         </div>
+        <div className="row" style={{ gap: 8 }}>
+          <Button type="submit" block>Apply filters</Button>
+          <Button variant="secondary" onClick={clearFilters}>Clear</Button>
+        </div>
+      </Card>
+    </aside>
+  );
+
+  const skeletonGrid = (
+    <div className="listing-grid" aria-busy="true" aria-label="Loading listings">
+      {Array.from({ length: 8 }).map((_, i) => (
+        <div key={i} className="card listing-card">
+          <Skeleton height="auto" style={{ aspectRatio: '4 / 3' }} radius="0" />
+          <div className="listing-body"><Skeleton width="50%" height="10px" /><Skeleton width="90%" /><Skeleton width="40%" height="20px" /></div>
+        </div>
+      ))}
+    </div>
+  );
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+
+  return (
+    <div className="page">
+      <PageHeader
+        title={activeTab === 'mine' ? 'My Listings' : isAdmin ? 'All listings' : 'Marketplace'}
+        subtitle={activeTab === 'mine'
+          ? 'Status, trust score and fair-price verdict of your listings – only you can see these.'
+          : 'Browse instruments from sellers across Sri Lanka'}
+        actions={
+          <>
+            <Button variant="secondary" icon={RefreshCw} onClick={reload} loading={loading} aria-label="Refresh listings">
+              <span className="hide-sm">Refresh</span>
+            </Button>
+            {!isAdmin && <Button icon={PlusCircle} onClick={() => navigate('/dashboard/create')}>Sell an instrument</Button>}
+          </>
+        }
+      />
+
+      {!isAdmin && (
+        <Tabs
+          ariaLabel="Listing views"
+          value={activeTab}
+          onChange={setTab}
+          tabs={[
+            { id: 'marketplace', label: 'Marketplace', icon: ShoppingBag },
+            { id: 'mine', label: 'My Listings', icon: Store, count: activeTab === 'mine' && !loading ? items.length : undefined }
+          ]}
+        />
       )}
+
+      {activeTab === 'marketplace' ? (
+        <div className="market-layout">
+          {filterPanel}
+          <section className="stack" aria-label="Listings">
+            <form onSubmit={applyFilters} className="row" style={{ gap: 8 }} role="search">
+              <div className="input-icon-wrap grow">
+                <Search size={16} aria-hidden="true" />
+                <input className="input" type="search" placeholder="Search title, brand, model or category…" value={filters.q} onChange={setFilter('q')} aria-label="Search marketplace" />
+              </div>
+              <Button type="submit">Search</Button>
+              <Button
+                variant="secondary"
+                className="only-mobile"
+                icon={SlidersHorizontal}
+                aria-label="Filters"
+                aria-expanded={showFilters}
+                onClick={() => setShowFilters((v) => !v)}
+              >
+                {activeFilterCount > 0 ? activeFilterCount : null}
+              </Button>
+            </form>
+
+            {!loading && !error && (
+              <p className="text-sm muted" aria-live="polite">
+                {totalCount != null ? `${totalCount} instrument${totalCount === 1 ? '' : 's'}` : `${items.length} shown`}
+                {appliedFilters.q && <> for “<strong style={{ color: 'var(--text)' }}>{appliedFilters.q}</strong>”</>}
+              </p>
+            )}
+
+            {error && <ErrorState compact message={error} onRetry={reload} />}
+
+            {loading && items.length === 0 ? skeletonGrid : visibleItems.length > 0 ? (
+              <div className="listing-grid">{visibleItems.map(listingCard)}</div>
+            ) : !error && (
+              <Card>
+                <EmptyState
+                  icon={Package}
+                  title="No instruments match your search"
+                  description="Try a different keyword or clear the filters."
+                  action={<Button variant="secondary" onClick={clearFilters}>Clear filters</Button>}
+                />
+              </Card>
+            )}
+
+            {page < totalPages && !error && (
+              <div className="text-center" style={{ marginTop: 'var(--space-2)' }}>
+                <Button variant="secondary" loading={loading} onClick={() => { setLoading(true); loadMarketplace(page + 1, appliedFilters); }}>
+                  Load more
+                </Button>
+              </div>
+            )}
+          </section>
+        </div>
+      ) : (
+        <section className="stack" aria-label="My listings">
+          <div className="input-icon-wrap" style={{ maxWidth: 420 }}>
+            <Search size={16} aria-hidden="true" />
+            <input className="input" type="search" placeholder="Search my listings…" value={mineSearch} onChange={(e) => setMineSearch(e.target.value)} aria-label="Search my listings" />
+          </div>
+
+          {error && <ErrorState compact message={error} onRetry={reload} />}
+
+          {loading && items.length === 0 ? (
+            <div className="stack-sm">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} height="104px" radius="var(--radius-lg)" />)}</div>
+          ) : visibleItems.length > 0 ? (
+            <div className="stack-sm">{visibleItems.map(ownerRow)}</div>
+          ) : !error && (
+            <Card>
+              <EmptyState
+                icon={Package}
+                title={mineSearch ? 'No listings match your search' : "You haven't posted any instruments yet"}
+                description={mineSearch ? 'Try another keyword.' : 'Post your first instrument – our AI checks it and it goes live in seconds.'}
+                action={!mineSearch && <Button icon={PlusCircle} onClick={() => navigate('/dashboard/create')}>Create your first post</Button>}
+              />
+            </Card>
+          )}
+        </section>
+      )}
+
+      {/* Price modal */}
+      <Modal
+        isOpen={!!priceModal}
+        onClose={() => !priceModal?.saving && setPriceModal(null)}
+        title="Change price"
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setPriceModal(null)} disabled={priceModal?.saving}>Cancel</Button>
+            <Button onClick={savePrice} loading={priceModal?.saving} disabled={Number(priceModal?.newPrice) === Number(priceModal?.currentPrice)}>
+              {priceModal?.saving ? 'Saving…' : 'Save price'}
+            </Button>
+          </>
+        }
+      >
+        {priceModal && (
+          <div className="stack">
+            <Input
+              id="new-price"
+              type="number"
+              min="1"
+              label="New price (LKR)"
+              hint={`Now ${formatLKR(priceModal.currentPrice)}. Buyers who saved it are told about price drops.`}
+              value={priceModal.newPrice}
+              onChange={(e) => setPriceModal((p) => ({ ...p, newPrice: e.target.value }))}
+            />
+            {priceModal.error && <ErrorState compact message={priceModal.error} />}
+            {priceModal.saving && <p className="text-sm muted">Saving and re-checking the price with AI…</p>}
+          </div>
+        )}
+      </Modal>
+
+      {/* Delete confirm */}
+      <Modal
+        isOpen={!!deleteTarget}
+        onClose={() => !deleting && setDeleteTarget(null)}
+        title="Delete listing?"
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setDeleteTarget(null)} disabled={deleting}>Cancel</Button>
+            <Button variant="danger" onClick={confirmDelete} loading={deleting}>{deleting ? 'Deleting…' : 'Delete'}</Button>
+          </>
+        }
+      >
+        <p>“<strong>{deleteTarget?.title}</strong>” will be removed from the marketplace. This cannot be undone.</p>
+      </Modal>
     </div>
   );
 };

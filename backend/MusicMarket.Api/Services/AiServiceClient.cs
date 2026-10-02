@@ -219,6 +219,10 @@ public class ShoppingAssistantResult
 
 public class AiServiceClient
 {
+    // A local LLM can be slow, so each agent call gets a long timeout. Callers do not pass the
+    // request's CancellationToken on purpose: the check must finish even if the user closes the page.
+    private static readonly TimeSpan AiCallTimeout = TimeSpan.FromSeconds(240);
+
     private readonly HttpClient _http;
     private readonly ILogger<AiServiceClient> _logger;
 
@@ -237,7 +241,7 @@ public class AiServiceClient
     {
         try
         {
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(120));
+            using var cts = new CancellationTokenSource(AiCallTimeout);
             var response = await _http.PostAsJsonAsync("/api/agents/fair-price", request, cts.Token);
 
             if (!response.IsSuccessStatusCode)
@@ -280,7 +284,7 @@ public class AiServiceClient
         try
         {
             var request = new { listing_id = listingId };
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(180));
+            using var cts = new CancellationTokenSource(AiCallTimeout);
             var response = await _http.PostAsJsonAsync("/api/agents/trust-check", request, cts.Token);
 
             if (!response.IsSuccessStatusCode)
@@ -328,7 +332,7 @@ public class AiServiceClient
         try
         {
             var request = new { listing_id = listingId, @event = eventType, old_price = oldPrice };
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(90));
+            using var cts = new CancellationTokenSource(AiCallTimeout);
             var response = await _http.PostAsJsonAsync("/api/agents/smart-alert", request, cts.Token);
 
             if (!response.IsSuccessStatusCode)
@@ -438,4 +442,32 @@ public class AiServiceClient
         }
     }
 
+    /// <summary>
+    /// Calls POST /api/agents/smart-alert/backfill: matches one saved alert against the
+    /// existing LIVE listings. Returns null if the AI service fails. Never throws; errors are logged.
+    /// </summary>
+    public async Task<MusicMarket.Api.Dtos.AlertBackfillResult?> GetAlertBackfillAsync(int savedSearchId)
+    {
+        try
+        {
+            var request = new { saved_search_id = savedSearchId };
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+            var response = await _http.PostAsJsonAsync("/api/agents/smart-alert/backfill", request, cts.Token);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                _logger.LogWarning("AI service returned {Status} for smart-alert backfill: {Body}", response.StatusCode, body);
+                return null;
+            }
+
+            return await response.Content.ReadFromJsonAsync<MusicMarket.Api.Dtos.AlertBackfillResult>(
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }, cts.Token);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error calling AI service (smart-alert backfill).");
+            return null;
+        }
+    }
 }

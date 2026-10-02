@@ -6,6 +6,7 @@ import imagehash
 from PIL import Image
 from io import BytesIO
 import datetime
+import re
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from db import fetch_one, fetch_all
@@ -18,6 +19,40 @@ def get_clip_model():
         from sentence_transformers import SentenceTransformer
         clip_model = SentenceTransformer("clip-ViT-B-32")
     return clip_model
+
+CLIP_LABELS = [
+    "acoustic guitar", "electric guitar", "bass guitar", "keyboard",
+    "drum kit", "microphone", "guitar amplifier", "a screenshot or text image"
+]
+
+# Keyword in the listing category -> CLIP label. Order matters ("bass guitar" before "guitar").
+CATEGORY_TO_CLIP_LABEL = [
+    ("electric guitar", "electric guitar"),
+    ("acoustic guitar", "acoustic guitar"),
+    ("bass", "bass guitar"),
+    ("keyboard", "keyboard"),
+    ("piano", "keyboard"),
+    ("synth", "keyboard"),
+    ("drum", "drum kit"),
+    ("microphone", "microphone"),
+    ("mic", "microphone"),
+    ("amplifier", "guitar amplifier"),
+    ("amp", "guitar amplifier"),
+    ("ukulele", "acoustic guitar"),
+]
+
+
+def map_category_to_clip_label(category) -> str | None:
+    """Map a free-text category to one of the CLIP labels, or None when it is unknown."""
+    text = " ".join(str(category or "").lower().split())
+    if not text:
+        return None
+    for keyword, label in CATEGORY_TO_CLIP_LABEL:
+        # Match at the start of a word, so "amp" finds "amplifier" but not "sampler".
+        if re.search(rf"\b{re.escape(keyword)}", text):
+            return label
+    return None
+
 
 @tool
 def verify_images(listing_id: int) -> dict:
@@ -91,17 +126,21 @@ def verify_images(listing_id: int) -> dict:
                         if my_hash_val - other_hash_val <= 8:
                             duplicate_found = True
                             duplicate_listing_ids.add(other_img["ListingId"])
-                    except:
-                        pass
-            except:
-                pass
+                    except ValueError as e:
+                        errors.append({"image_id": my_h["image_id"], "error": f"Bad phash: {e}"})
+            except ValueError as e:
+                errors.append({"image_id": other_img["ImageId"], "error": f"Bad phash: {e}"})
                     
     category_check = "skipped"
     detected_label = None
     
     enable_clip = os.getenv("ENABLE_CLIP", "true").lower() == "true"
-    
-    if enable_clip and image_hashes and len(image_hashes) > len(errors):
+
+    # Free-text categories (e.g. "Sitar", "Harmonium") have no CLIP label, so we skip
+    # the photo/category check for them instead of punishing the seller.
+    if enable_clip and map_category_to_clip_label(category) is None:
+        category_check = "skipped_unknown_category"
+    elif enable_clip and image_hashes and len(image_hashes) > len(errors):
         try:
             model = get_clip_model()
             im_to_check = None
@@ -111,38 +150,14 @@ def verify_images(listing_id: int) -> dict:
                     resp.raise_for_status()
                     im_to_check = Image.open(BytesIO(resp.content))
                     break
-                except:
+                except Exception as e:
+                    errors.append({"image_id": img["Id"], "error": f"CLIP image download failed: {e}"})
                     continue
             
             if im_to_check:
-                labels = [
-                    "acoustic guitar", "electric guitar", "bass guitar", "keyboard", 
-                    "drum kit", "microphone", "guitar amplifier", "a screenshot or text image"
-                ]
-                
-                expected = category.lower()
-                expected_label = expected
-                cat_map = {
-                    "electric guitar": "electric guitar",
-                    "acoustic guitar": "acoustic guitar",
-                    "bass guitar": "bass guitar",
-                    "keyboard": "keyboard",
-                    "drum": "drum kit",
-                    "microphone": "microphone",
-                    "amplifier": "guitar amplifier",
-                    "amp": "guitar amplifier",
-                    "ukulele": "acoustic guitar",
-                    "pedal": "guitar amplifier"
-                }
-                
-                for k, v in cat_map.items():
-                    if k in expected:
-                        expected_label = v
-                        break
-                        
-                if expected_label not in labels:
-                    labels.append(expected_label)
-                    
+                labels = list(CLIP_LABELS)
+                expected_label = map_category_to_clip_label(category)
+
                 import numpy as np
                 image_emb = model.encode(im_to_check)
                 text_emb = model.encode(labels)

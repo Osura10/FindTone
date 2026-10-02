@@ -33,6 +33,7 @@ const AdminBuyers = () => {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchBuyers();
   }, []);
 
@@ -76,17 +77,17 @@ const AdminBuyers = () => {
           zIndex: 99999,
           background: feedback.type === 'error'
             ? 'linear-gradient(135deg, rgba(220, 38, 38, 0.9), rgba(185, 28, 28, 0.95))'
-            : 'linear-gradient(135deg, rgba(16, 185, 129, 0.9), rgba(5, 150, 105, 0.95))',
+            : 'linear-gradient(135deg, var(--success), rgba(5, 150, 105, 0.95))',
           color: '#ffffff',
           padding: '1rem 1.5rem',
           borderRadius: '12px',
-          boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
+          boxShadow: 'var(--shadow-lg)',
           backdropFilter: 'blur(10px)',
           display: 'flex',
           alignItems: 'center',
           gap: '0.75rem',
           fontWeight: '500',
-          border: '1px solid rgba(255,255,255,0.2)'
+          border: '1px solid var(--border-strong)'
         }}>
           {feedback.type === 'error' ? <AlertTriangle size={20} /> : <Check size={20} />}
           <span>{feedback.text}</span>
@@ -97,13 +98,13 @@ const AdminBuyers = () => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
-            <div style={{ padding: '0.5rem', background: 'rgba(0, 245, 212, 0.15)', borderRadius: '10px', color: '#00f5d4' }}>
+            <div style={{ padding: '0.5rem', background: 'var(--success-soft)', borderRadius: '10px', color: 'var(--success)' }}>
               <Users size={24} />
             </div>
             <h1 className="text-gradient" style={{ fontSize: '2.2rem', margin: 0, fontWeight: '800' }}>Registered Buyers</h1>
           </div>
           <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '0.95rem' }}>
-            Total registered buyer accounts: <strong style={{ color: '#fff' }}>{buyers.length}</strong>
+            Total registered buyer accounts: <strong style={{ color: 'var(--text)' }}>{buyers.length}</strong>
           </p>
         </div>
 
@@ -123,7 +124,7 @@ const AdminBuyers = () => {
         padding: '0.85rem 1.5rem',
         borderRadius: '16px',
         marginBottom: '2rem',
-        border: '1px solid rgba(255, 255, 255, 0.12)'
+        border: '1px solid var(--border-strong)'
       }}>
         <Search size={20} style={{ color: 'var(--text-secondary)', marginRight: '1rem' }} />
         <input 
@@ -134,7 +135,7 @@ const AdminBuyers = () => {
           style={{
             background: 'transparent',
             border: 'none',
-            color: '#fff',
+            color: 'var(--text)',
             outline: 'none',
             width: '100%',
             fontSize: '1rem'
@@ -152,7 +153,7 @@ const AdminBuyers = () => {
         <div className="glass-panel" style={{ padding: '4rem 2rem', textAlign: 'center', borderRadius: '20px' }}>
           <Users size={48} style={{ color: 'var(--text-secondary)', margin: '0 auto 1rem', opacity: 0.5 }} />
           <h3 style={{ margin: 0, fontSize: '1.25rem', color: 'var(--text-secondary)' }}>No buyers found</h3>
-          <p style={{ color: 'rgba(255, 255, 255, 0.4)', marginTop: '0.5rem', fontSize: '0.9rem' }}>
+          <p style={{ color: 'var(--text-3)', marginTop: '0.5rem', fontSize: '0.9rem' }}>
             {searchTerm ? 'Try adjusting your search criteria.' : 'No registered buyer accounts on the platform yet.'}
           </p>
         </div>
@@ -165,7 +166,7 @@ const AdminBuyers = () => {
               style={{
                 padding: '1.75rem',
                 borderRadius: '20px',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
+                border: '1px solid var(--surface-2)',
                 display: 'flex',
                 flexDirection: 'column',
                 justifyContent: 'space-between',
@@ -174,11 +175,11 @@ const AdminBuyers = () => {
               }}
               onMouseOver={(e) => {
                 e.currentTarget.style.transform = 'translateY(-4px)';
-                e.currentTarget.style.borderColor = 'rgba(0, 245, 212, 0.3)';
+                e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--success) 40%, transparent)';
               }}
               onMouseOut={(e) => {
                 e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)';
+                e.currentTarget.style.borderColor = 'var(--surface-2)';
               }}
             >
               <div>
@@ -190,8 +191,8 @@ const AdminBuyers = () => {
                       height: '60px',
                       borderRadius: '50%',
                       overflow: 'hidden',
-                      border: '2px solid rgba(0, 245, 212, 0.4)',
-                      background: 'rgba(255, 255, 255, 0.05)',
+                      border: '2px solid color-mix(in srgb, var(--success) 50%, transparent)',
+                      background: 'var(--surface-2)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -209,8 +210,8 @@ const AdminBuyers = () => {
                         fontSize: '0.75rem',
                         textTransform: 'uppercase',
                         fontWeight: '700',
-                        color: '#00f5d4',
-                        background: 'rgba(0, 245, 212, 0.1)',
+                        color: 'var(--success)',
+                        background: 'var(--success-soft)',
                         padding: '0.2rem 0.6rem',
                         borderRadius: '12px',
                         display: 'inline-block',
@@ -225,9 +226,9 @@ const AdminBuyers = () => {
                     onClick={() => setDeleteTarget(buyer)}
                     title="Delete User"
                     style={{
-                      background: 'rgba(239, 68, 68, 0.1)',
-                      border: '1px solid rgba(239, 68, 68, 0.3)',
-                      color: '#f87171',
+                      background: 'var(--danger-soft)',
+                      border: '1px solid color-mix(in srgb, var(--danger) 40%, transparent)',
+                      color: 'var(--danger)',
                       width: '38px',
                       height: '38px',
                       borderRadius: '12px',
@@ -238,12 +239,12 @@ const AdminBuyers = () => {
                       transition: 'all 0.2s ease'
                     }}
                     onMouseOver={(e) => {
-                      e.currentTarget.style.background = 'rgba(239, 68, 68, 0.25)';
+                      e.currentTarget.style.background = 'color-mix(in srgb, var(--danger) 35%, transparent)';
                       e.currentTarget.style.color = '#fff';
                     }}
                     onMouseOut={(e) => {
-                      e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
-                      e.currentTarget.style.color = '#f87171';
+                      e.currentTarget.style.background = 'var(--danger-soft)';
+                      e.currentTarget.style.color = 'var(--danger)';
                     }}
                   >
                     <Trash2 size={18} />
@@ -252,26 +253,26 @@ const AdminBuyers = () => {
 
                 {/* Details List */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '0.9rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', color: 'rgba(255,255,255,0.85)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', color: 'var(--text-2)' }}>
                     <Mail size={16} color="var(--accent-color)" />
                     <span style={{ wordBreak: 'break-all' }}>{buyer.email}</span>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', color: 'rgba(255,255,255,0.85)' }}>
-                    <Phone size={16} color="#00f5d4" />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', color: 'var(--text-2)' }}>
+                    <Phone size={16} color="var(--success)" />
                     <span>{buyer.phoneNumber || 'No phone provided'}</span>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', color: 'rgba(255,255,255,0.85)' }}>
-                    <CreditCard size={16} color="#fee440" />
-                    <span>NIC: <strong style={{ color: '#fff' }}>{buyer.nicCardNumber || 'Not provided'}</strong></span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', color: 'var(--text-2)' }}>
+                    <CreditCard size={16} color="var(--warning)" />
+                    <span>NIC: <strong style={{ color: 'var(--text)' }}>{buyer.nicCardNumber || 'Not provided'}</strong></span>
                   </div>
                 </div>
               </div>
 
               <div style={{
                 paddingTop: '0.85rem',
-                borderTop: '1px solid rgba(255, 255, 255, 0.06)',
+                borderTop: '1px solid var(--surface-2)',
                 fontSize: '0.78rem',
                 color: 'var(--text-secondary)'
               }}>
@@ -287,7 +288,7 @@ const AdminBuyers = () => {
         <div style={{
           position: 'fixed',
           top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(8, 6, 15, 0.75)',
+          background: 'var(--overlay)',
           backdropFilter: 'blur(8px)',
           display: 'flex',
           justifyContent: 'center',
@@ -304,9 +305,9 @@ const AdminBuyers = () => {
               maxWidth: '440px',
               padding: '2.5rem',
               borderRadius: '24px',
-              border: '1px solid rgba(239, 68, 68, 0.4)',
-              background: 'linear-gradient(145deg, rgba(30, 24, 45, 0.98), rgba(18, 14, 28, 0.99))',
-              boxShadow: '0 25px 60px rgba(0, 0, 0, 0.7)'
+              border: '1px solid color-mix(in srgb, var(--danger) 50%, transparent)',
+              background: 'var(--surface)',
+              boxShadow: 'var(--shadow-lg)'
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -315,8 +316,8 @@ const AdminBuyers = () => {
                 width: '64px',
                 height: '64px',
                 borderRadius: '50%',
-                background: 'rgba(239, 68, 68, 0.15)',
-                color: '#ef4444',
+                background: 'var(--danger-soft)',
+                color: 'var(--danger)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -326,7 +327,7 @@ const AdminBuyers = () => {
               </div>
               <h3 style={{ fontSize: '1.4rem', margin: '0 0 0.5rem 0', fontWeight: '700' }}>Delete Buyer Account</h3>
               <p style={{ color: 'var(--text-secondary)', fontSize: '0.92rem', margin: 0 }}>
-                Are you sure you want to permanently delete <strong style={{ color: '#fff' }}>"{deleteTarget.name}"</strong>? This action cannot be undone.
+                Are you sure you want to permanently delete <strong style={{ color: 'var(--text)' }}>"{deleteTarget.name}"</strong>? This action cannot be undone.
               </p>
             </div>
 
@@ -348,7 +349,7 @@ const AdminBuyers = () => {
                 style={{
                   flex: 1,
                   borderRadius: '12px',
-                  background: '#ef4444',
+                  background: 'var(--danger)',
                   color: '#fff',
                   display: 'flex',
                   alignItems: 'center',

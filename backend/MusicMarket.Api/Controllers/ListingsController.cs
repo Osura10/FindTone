@@ -4,8 +4,10 @@ using CloudinaryDotNet.Actions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using MusicMarket.Api.Constants;
 using MusicMarket.Api.Data;
 using MusicMarket.Api.Dtos;
+using MusicMarket.Api.Helpers;
 using MusicMarket.Api.Models;
 using MusicMarket.Api.Services;
 
@@ -15,10 +17,16 @@ namespace MusicMarket.Api.Controllers;
 [Route("api/[controller]")]
 public class ListingsController : ControllerBase
 {
+    private const int MaxImages = 6;
+    private const long MaxImageBytes = 5 * 1024 * 1024;
+
     private readonly AppDbContext _db;
     private readonly Cloudinary? _cloudinary;
     private readonly AiServiceClient _ai;
+    private readonly ListingCheckService _checks;
     private readonly SmartAlertService _smartAlerts;
+    private readonly ILogger<ListingsController> _logger;
+
     private static readonly HashSet<string> AllowedConditions = new(StringComparer.OrdinalIgnoreCase)
     {
         "new", "like_new", "excellent", "good", "fair", "poor", "for_parts"
@@ -28,13 +36,21 @@ public class ListingsController : ControllerBase
         ".jpg", ".jpeg", ".png", ".webp"
     };
 
-    public ListingsController(AppDbContext db, IServiceProvider serviceProvider, AiServiceClient ai, SmartAlertService smartAlerts)
+    public ListingsController(AppDbContext db, IServiceProvider serviceProvider, AiServiceClient ai,
+        ListingCheckService checks, SmartAlertService smartAlerts, ILogger<ListingsController> logger)
     {
         _db = db;
         _cloudinary = serviceProvider.GetService<Cloudinary>();
         _ai = ai;
+        _checks = checks;
         _smartAlerts = smartAlerts;
+        _logger = logger;
     }
+
+    private int? CurrentUserId =>
+        int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : null;
+
+    private bool IsAdmin => User.FindFirstValue(ClaimTypes.Role) == Roles.Admin;
 
     /// <summary>
     /// 1. Create a new listing with 1 to 6 photos uploaded to Cloudinary.
@@ -44,77 +60,47 @@ public class ListingsController : ControllerBase
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> CreateListing([FromForm] CreateListingDto dto)
     {
-        var sellerIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!int.TryParse(sellerIdStr, out var sellerId))
-        {
-            return Unauthorized("Invalid user token");
-        }
+        var sellerId = CurrentUserId;
+        if (sellerId == null) return this.Error(401, "Invalid user token.");
+        if (IsAdmin) return this.Error(403, "Admin accounts cannot create listings.");
 
-        // Validate Price
-        if (dto.Price <= 0)
-        {
-            return BadRequest("Price must be greater than 0");
-        }
+        if (string.IsNullOrWhiteSpace(dto.Title)) return this.Error(400, "Title is required.");
+        if (string.IsNullOrWhiteSpace(dto.Category)) return this.Error(400, "Category is required.");
+        if (string.IsNullOrWhiteSpace(dto.Brand)) return this.Error(400, "Brand is required.");
+        if (string.IsNullOrWhiteSpace(dto.Model)) return this.Error(400, "Model is required.");
+        if (string.IsNullOrWhiteSpace(dto.Location)) return this.Error(400, "Location is required.");
+        if (dto.Price <= 0) return this.Error(400, "Price must be greater than 0.");
 
-        // Validate Coordinates
-        if (dto.Latitude.HasValue != dto.Longitude.HasValue)
-        {
-            return BadRequest("Latitude and Longitude must both be provided or both be null");
-        }
-        if (dto.Latitude.HasValue && (dto.Latitude < -90 || dto.Latitude > 90))
-        {
-            return BadRequest("Latitude must be between -90 and 90");
-        }
-        if (dto.Longitude.HasValue && (dto.Longitude < -180 || dto.Longitude > 180))
-        {
-            return BadRequest("Longitude must be between -180 and 180");
-        }
+        var coordError = ValidateCoordinates(dto.Latitude, dto.Longitude);
+        if (coordError != null) return this.Error(400, coordError);
 
-        // Validate Condition
         var condition = dto.Condition?.Trim().ToLowerInvariant() ?? "";
         if (!AllowedConditions.Contains(condition))
         {
-            return BadRequest($"Invalid condition '{dto.Condition}'. Allowed values: new, like_new, excellent, good, fair, poor, for_parts.");
+            return this.Error(400, $"Invalid condition '{dto.Condition}'. Allowed values: new, like_new, excellent, good, fair, poor, for_parts.");
         }
 
-        // Validate Images count
-        if (dto.Images == null || dto.Images.Count == 0)
-        {
-            return BadRequest("At least 1 image is required");
-        }
+        var yearError = ValidateYear(dto.Year);
+        if (yearError != null) return this.Error(400, yearError);
 
-        if (dto.Images.Count > 6)
-        {
-            return BadRequest("Maximum of 6 images allowed per listing");
-        }
+        if (dto.Images == null || dto.Images.Count == 0) return this.Error(400, "At least 1 image is required.");
+        if (dto.Images.Count > MaxImages) return this.Error(400, $"Maximum of {MaxImages} images allowed per listing.");
+        var imageError = ValidateImageFiles(dto.Images);
+        if (imageError != null) return this.Error(400, imageError);
 
-        // Validate each image size and extension
-        foreach (var file in dto.Images)
-        {
-            if (file.Length > 5 * 1024 * 1024)
-            {
-                return BadRequest($"Image '{file.FileName}' exceeds maximum size of 5 MB");
-            }
-
-            var ext = Path.GetExtension(file.FileName);
-            if (string.IsNullOrEmpty(ext) || !AllowedExtensions.Contains(ext))
-            {
-                return BadRequest($"Image '{file.FileName}' has an unsupported format. Only jpg, jpeg, png, webp allowed.");
-            }
-        }
-
+        var (knownCategories, knownBrands) = await LoadKnownNamesAsync();
         var listing = new Listing
         {
-            SellerId = sellerId,
-            Title = dto.Title.Trim(),
-            Category = dto.Category.Trim(),
-            Brand = dto.Brand.Trim(),
-            Model = dto.Model.Trim(),
+            SellerId = sellerId.Value,
+            Title = TextNormalizer.CleanOrNull(dto.Title)!,
+            Category = TextNormalizer.NormalizeName(dto.Category, knownCategories),
+            Brand = TextNormalizer.NormalizeName(dto.Brand, knownBrands),
+            Model = TextNormalizer.CleanOrNull(dto.Model)!,
             Condition = condition,
             Year = dto.Year,
             ListingType = string.IsNullOrWhiteSpace(dto.ListingType) ? "Sell" : dto.ListingType.Trim(),
             Price = dto.Price,
-            Location = dto.Location.Trim(),
+            Location = TextNormalizer.CleanOrNull(dto.Location)!,
             Latitude = dto.Latitude,
             Longitude = dto.Longitude,
             Description = dto.Description?.Trim() ?? "",
@@ -126,181 +112,31 @@ public class ListingsController : ControllerBase
         _db.Listings.Add(listing);
         await _db.SaveChangesAsync();
 
-        // Upload images to Cloudinary (folder: "musicmarket/listings")
-        var sortOrder = 0;
-        foreach (var file in dto.Images)
+        var (uploaded, uploadError) = await UploadImagesAsync(listing.Id, dto.Images, 0);
+        if (uploadError != null)
         {
-            string imageUrl = "";
-            string publicId = "";
-
-            if (_cloudinary != null)
-            {
-                using var stream = file.OpenReadStream();
-                var uploadParams = new ImageUploadParams
-                {
-                    File = new FileDescription(file.FileName, stream),
-                    Folder = "musicmarket/listings",
-                    Transformation = new Transformation().Quality("auto").FetchFormat("auto")
-                };
-
-                var uploadResult = await _cloudinary.UploadAsync(uploadParams);
-                if (uploadResult.Error != null)
-                {
-                    return StatusCode(500, $"Image upload failed: {uploadResult.Error.Message}");
-                }
-
-                imageUrl = uploadResult.SecureUrl?.ToString() ?? uploadResult.Url?.ToString() ?? "";
-                publicId = uploadResult.PublicId;
-            }
-            else
-            {
-                // Fallback placeholder when Cloudinary URL is not configured
-                imageUrl = $"https://placehold.co/600x400?text={Uri.EscapeDataString(file.FileName)}";
-                publicId = $"local_{Guid.NewGuid()}";
-            }
-
-            var listingImage = new ListingImage
-            {
-                ListingId = listing.Id,
-                Url = imageUrl,
-                PublicId = publicId,
-                SortOrder = sortOrder++
-            };
-
-            _db.ListingImages.Add(listingImage);
+            // Do not leave a listing without photos behind.
+            _db.Listings.Remove(listing);
+            await _db.SaveChangesAsync();
+            return this.Error(502, uploadError);
         }
-
+        _db.ListingImages.AddRange(uploaded);
         await _db.SaveChangesAsync();
 
-        // Call Fair Price Agent (fire-and-forget on failure)
-        var aiReq = new FairPriceRequest
-        {
-            ListingId = listing.Id,
-            Brand = listing.Brand,
-            Model = listing.Model,
-            Category = listing.Category,
-            Condition = listing.Condition,
-            Year = listing.Year,
-            AskingPrice = (float)listing.Price,
-            Description = listing.Description
-        };
-        var aiResult = await _ai.GetFairPriceAsync(aiReq);
-        if (aiResult != null)
-        {
-            listing.FairPrice = (decimal)aiResult.FairPrice;
-            listing.FairPriceMin = (decimal)aiResult.FairRange.Min;
-            listing.FairPriceMax = (decimal)aiResult.FairRange.Max;
-            listing.PriceVerdict = aiResult.Verdict;
-            listing.PriceDeviationPercent = aiResult.DeviationPercent;
-            listing.PriceConfidence = aiResult.Confidence;
-            listing.PriceExplanation = aiResult.Explanation;
-            listing.UpdatedAt = DateTime.UtcNow;
-            await _db.SaveChangesAsync();
-        }
+        // Agent 01 + Agent 02 decide LIVE / FLAGGED / PENDING, then alerts run if it went LIVE.
+        await RunChecksAndAlertsAsync(listing, runFairPrice: true, runTrust: true, wasLive: false, oldPrice: listing.Price);
 
-        // Call Trust Check Agent
-        var trustResult = await _ai.GetTrustCheckAsync(listing.Id);
-        if (trustResult != null)
-        {
-            listing.TrustScore = trustResult.TrustScore;
-            
-            var detailedReason = trustResult.Reason;
-            if (trustResult.Signals.Any())
-            {
-                detailedReason += "\n\nSignals:";
-                foreach (var s in trustResult.Signals)
-                {
-                    detailedReason += $"\n- {s.Code} ({s.Points}): {s.Detail}";
-                }
-            }
-            listing.AiReason = detailedReason;
-            
-            var becameLive = (listing.Status != "LIVE" && trustResult.Decision == "LIVE");
-            if (trustResult.Decision == "LIVE" || trustResult.Decision == "FLAGGED")
-            {
-                listing.Status = trustResult.Decision;
-            }
-            
-            // Update image PHashes for ALL returned images (even from other listings)
-            var imageIds = trustResult.ImageHashes.Select(h => h.ImageId).ToList();
-            if (imageIds.Any())
-            {
-                var imagesToUpdate = await _db.ListingImages.Where(i => imageIds.Contains(i.Id)).ToListAsync();
-                foreach (var imgHash in trustResult.ImageHashes)
-                {
-                    var img = imagesToUpdate.FirstOrDefault(i => i.Id == imgHash.ImageId);
-                    if (img != null && !string.IsNullOrEmpty(imgHash.PHash))
-                    {
-                        img.PHash = imgHash.PHash;
-                    }
-                }
-            }
-            
-            listing.UpdatedAt = DateTime.UtcNow;
-            await _db.SaveChangesAsync();
-
-            if (becameLive)
-            {
-                await _smartAlerts.OnListingBecameLiveAsync(listing);
-            }
-        }
-        else
-        {
-            listing.Status = "PENDING";
-            listing.AiReason = "AI check failed: Service unavailable or timed out. An admin can re-check this listing.";
-            listing.UpdatedAt = DateTime.UtcNow;
-            await _db.SaveChangesAsync();
-        }
-
-        // Load seller info for response
-        await _db.Entry(listing).ReloadAsync();
-        var sellerName = await _db.Users.Where(u => u.Id == sellerId).Select(u => u.Name).FirstOrDefaultAsync() ?? "";
-
-        var responseDto = new ListingDetailDto
-        {
-            Id = listing.Id,
-            SellerId = listing.SellerId,
-            SellerName = sellerName,
-            Title = listing.Title,
-            Category = listing.Category,
-            Brand = listing.Brand,
-            Model = listing.Model,
-            Condition = listing.Condition,
-            Year = listing.Year,
-            ListingType = listing.ListingType,
-            Price = listing.Price,
-            Location = listing.Location,
-            Latitude = listing.Latitude,
-            Longitude = listing.Longitude,
-            Description = listing.Description,
-            Status = listing.Status,
-            FairPrice = listing.FairPrice,
-            FairPriceMin = listing.FairPriceMin,
-            FairPriceMax = listing.FairPriceMax,
-            PriceVerdict = listing.PriceVerdict,
-            PriceDeviationPercent = listing.PriceDeviationPercent,
-            PriceConfidence = listing.PriceConfidence,
-            PriceExplanation = listing.PriceExplanation,
-            CreatedAt = listing.CreatedAt,
-            UpdatedAt = listing.UpdatedAt,
-            Images = listing.Images.Select(img => new ListingImageDto
-            {
-                Id = img.Id,
-                Url = img.Url,
-                PublicId = img.PublicId,
-                PHash = img.PHash,
-                SortOrder = img.SortOrder
-            }).ToList()
-        };
-
-        return CreatedAtAction(nameof(GetListingById), new { id = listing.Id }, responseDto);
+        var result = await LoadDetailAsync(listing.Id, includeInternals: true);
+        return CreatedAtAction(nameof(GetListingById), new { id = listing.Id }, result);
     }
 
     /// <summary>
-    /// 2. Public search/filtering with first image and AI pricing fields.
+    /// 2. Marketplace search. The public only sees LIVE and SOLD listings, without AI internals.
+    /// Admins may filter by any status and also get the AI fields.
     /// </summary>
     [HttpGet]
     public async Task<IActionResult> GetListings(
+        [FromQuery] string? q,
         [FromQuery] string? category,
         [FromQuery] string? brand,
         [FromQuery] decimal? minPrice,
@@ -314,93 +150,67 @@ public class ListingsController : ControllerBase
         if (pageSize < 1) pageSize = 12;
         if (pageSize > 50) pageSize = 50;
 
+        var isAdmin = IsAdmin;
         var query = _db.Listings.AsNoTracking().AsQueryable();
 
-        // Status filter (default LIVE)
-        if (string.IsNullOrEmpty(status) || status.Equals("LIVE", StringComparison.OrdinalIgnoreCase))
+        // Only admins can look at PENDING / FLAGGED / REJECTED listings here.
+        if (isAdmin && !string.IsNullOrWhiteSpace(status) && !status.Equals("LIVE", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!status.Equals("all", StringComparison.OrdinalIgnoreCase))
+            {
+                var wanted = status.Trim().ToUpperInvariant();
+                query = query.Where(l => l.Status == wanted);
+            }
+        }
+        else
         {
             query = query.Where(l => l.Status == "LIVE" || l.Status == "SOLD");
         }
-        else if (!status.Equals("all", StringComparison.OrdinalIgnoreCase))
+
+        var term = TextNormalizer.CleanOrNull(q)?.ToLower();
+        if (term != null)
         {
-            query = query.Where(l => l.Status == status);
+            query = query.Where(l =>
+                l.Title.ToLower().Contains(term) ||
+                l.Brand.ToLower().Contains(term) ||
+                l.Model.ToLower().Contains(term) ||
+                l.Category.ToLower().Contains(term));
         }
 
-        if (!string.IsNullOrEmpty(category))
-        {
-            query = query.Where(l => l.Category.ToLower() == category.ToLower());
-        }
+        var categoryFilter = TextNormalizer.CleanOrNull(category)?.ToLower();
+        if (categoryFilter != null) query = query.Where(l => l.Category.ToLower() == categoryFilter);
 
-        if (!string.IsNullOrEmpty(brand))
-        {
-            query = query.Where(l => l.Brand.ToLower() == brand.ToLower());
-        }
+        var brandFilter = TextNormalizer.CleanOrNull(brand)?.ToLower();
+        if (brandFilter != null) query = query.Where(l => l.Brand.ToLower() == brandFilter);
 
-        if (minPrice.HasValue)
-        {
-            query = query.Where(l => l.Price >= minPrice.Value);
-        }
+        if (minPrice.HasValue) query = query.Where(l => l.Price >= minPrice.Value);
+        if (maxPrice.HasValue) query = query.Where(l => l.Price <= maxPrice.Value);
 
-        if (maxPrice.HasValue)
-        {
-            query = query.Where(l => l.Price <= maxPrice.Value);
-        }
-
-        if (!string.IsNullOrEmpty(condition))
-        {
-            query = query.Where(l => l.Condition.ToLower() == condition.ToLower());
-        }
+        var conditionFilter = TextNormalizer.CleanOrNull(condition)?.ToLower();
+        if (conditionFilter != null) query = query.Where(l => l.Condition.ToLower() == conditionFilter);
 
         var totalCount = await query.CountAsync();
 
-        var items = await query
-            .OrderBy(l => l.Status) // "LIVE" comes before "SOLD" alphabetically
+        // "LIVE" sorts before "SOLD", so available items come first.
+        var ordered = query
+            .OrderBy(l => l.Status)
             .ThenByDescending(l => l.CreatedAt)
             .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .Select(l => new ListingSummaryDto
-            {
-                Id = l.Id,
-                SellerId = l.SellerId,
-                SellerName = l.Seller != null ? l.Seller.Name : "",
-                Title = l.Title,
-                Category = l.Category,
-                Brand = l.Brand,
-                Model = l.Model,
-                Condition = l.Condition,
-                Year = l.Year,
-                ListingType = l.ListingType,
-                Price = l.Price,
-                Location = l.Location,
-                Latitude = l.Latitude,
-                Longitude = l.Longitude,
-                Status = l.Status,
-                FirstImageUrl = l.Images.OrderBy(i => i.SortOrder).Select(i => i.Url).FirstOrDefault(),
-                FairPrice = l.FairPrice,
-                FairPriceMin = l.FairPriceMin,
-                FairPriceMax = l.FairPriceMax,
-                PriceVerdict = l.PriceVerdict,
-                PriceDeviationPercent = l.PriceDeviationPercent,
-                PriceConfidence = l.PriceConfidence,
-                PriceExplanation = l.PriceExplanation,
-                TrustScore = l.TrustScore,
-                AiReason = l.AiReason,
-                CreatedAt = l.CreatedAt,
-                UpdatedAt = l.UpdatedAt
-            })
-            .ToListAsync();
+            .Take(pageSize);
 
-        return Ok(new PagedResult<ListingSummaryDto>
+        if (isAdmin)
         {
-            Items = items,
-            TotalCount = totalCount,
-            Page = page,
-            PageSize = pageSize
-        });
+            var adminItems = await ordered.Select(ListingMapper.ToOwnerSummary).ToListAsync();
+            return Ok(new PagedResult<ListingSummaryDto> { Items = adminItems, TotalCount = totalCount, Page = page, PageSize = pageSize });
+        }
+
+        var items = await ordered.Select(ListingMapper.ToPublicSummary).ToListAsync();
+        return Ok(new PagedResult<PublicListingSummaryDto> { Items = items, TotalCount = totalCount, Page = page, PageSize = pageSize });
     }
 
     /// <summary>
-    /// 3. Get full details of a listing by ID (public).
+    /// 3. Listing details. The owner and admins get the AI fields (trust score, fair price, reason);
+    /// everyone else gets the public view, and only for LIVE or SOLD listings.
     /// </summary>
     [HttpGet("{id:int}")]
     public async Task<IActionResult> GetListingById(int id)
@@ -408,362 +218,113 @@ public class ListingsController : ControllerBase
         var listing = await _db.Listings
             .AsNoTracking()
             .Include(l => l.Seller)
-            .Include(l => l.Images.OrderBy(i => i.SortOrder))
-            .Include(l => l.PriceHistories.OrderByDescending(ph => ph.ChangedAt))
+            .Include(l => l.Images)
+            .Include(l => l.PriceHistories)
             .FirstOrDefaultAsync(l => l.Id == id);
 
-        if (listing == null)
+        if (listing == null) return this.Error(404, $"Listing #{id} not found.");
+
+        var userId = CurrentUserId;
+        var privileged = IsAdmin || (userId != null && userId == listing.SellerId);
+        if (!privileged && listing.Status is not ("LIVE" or "SOLD"))
         {
-            return NotFound($"Listing #{id} not found");
+            return this.Error(404, $"Listing #{id} not found.");
         }
 
-        var showPhone = User.Identity?.IsAuthenticated == true;
-
-        var dto = new ListingDetailDto
-        {
-            Id = listing.Id,
-            SellerId = listing.SellerId,
-            SellerName = listing.Seller?.Name ?? "",
-            SellerPhone = showPhone ? listing.Seller?.PhoneNumber : null,
-            SellerRole = listing.Seller?.Role ?? "",
-            SellerMemberSince = listing.Seller?.CreatedAt,
-            Title = listing.Title,
-            Category = listing.Category,
-            Brand = listing.Brand,
-            Model = listing.Model,
-            Condition = listing.Condition,
-            Year = listing.Year,
-            ListingType = listing.ListingType,
-            Price = listing.Price,
-            Location = listing.Location,
-            Latitude = listing.Latitude,
-            Longitude = listing.Longitude,
-            Description = listing.Description,
-            Status = listing.Status,
-            SoldPrice = listing.SoldPrice,
-            SoldAt = listing.SoldAt,
-            FairPrice = listing.FairPrice,
-            FairPriceMin = listing.FairPriceMin,
-            FairPriceMax = listing.FairPriceMax,
-            PriceVerdict = listing.PriceVerdict,
-            PriceDeviationPercent = listing.PriceDeviationPercent,
-            PriceConfidence = listing.PriceConfidence,
-            PriceExplanation = listing.PriceExplanation,
-            TrustScore = listing.TrustScore,
-            AiReason = listing.AiReason,
-            CreatedAt = listing.CreatedAt,
-            UpdatedAt = listing.UpdatedAt,
-            Images = listing.Images.Select(img => new ListingImageDto
-            {
-                Id = img.Id,
-                Url = img.Url,
-                PublicId = img.PublicId,
-                PHash = img.PHash,
-                SortOrder = img.SortOrder
-            }).ToList(),
-            PriceHistories = listing.PriceHistories.Select(ph => new PriceHistoryDto
-            {
-                Id = ph.Id,
-                OldPrice = ph.OldPrice,
-                NewPrice = ph.NewPrice,
-                ChangedAt = ph.ChangedAt
-            }).ToList()
-        };
-
-        return Ok(dto);
+        // The seller's phone is only shown to logged-in users.
+        return Ok(ListingMapper.ToDetail(listing, privileged, showPhone: userId != null));
     }
 
     /// <summary>
-    /// 3b. Delete a listing (owner or admin only).
+    /// 3b. Delete a listing (owner or admin). Listings with an order cannot be deleted.
     /// </summary>
     [HttpDelete("{id:int}")]
     [Authorize]
     public async Task<IActionResult> DeleteListing(int id, [FromQuery] string? reason = null)
     {
-        var listing = await _db.Listings
-            .Include(l => l.Images)
-            .FirstOrDefaultAsync(l => l.Id == id);
+        var userId = CurrentUserId;
+        if (userId == null) return this.Error(401, "Invalid user token.");
 
-        if (listing == null)
+        var listing = await _db.Listings.Include(l => l.Images).FirstOrDefaultAsync(l => l.Id == id);
+        if (listing == null) return this.Error(404, $"Listing #{id} not found.");
+
+        var isAdmin = IsAdmin;
+        if (listing.SellerId != userId && !isAdmin) return this.Error(403, "You can only delete your own listings.");
+
+        if (await _db.Orders.AnyAsync(o => o.ListingId == id))
         {
-            return StatusCode(404, new { message = $"Listing #{id} not found" });
+            return this.Error(409, "This listing has an order and cannot be deleted.");
         }
 
-        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var role = User.FindFirstValue(ClaimTypes.Role);
-        
-        if (string.IsNullOrEmpty(userIdStr) || !int.TryParse(userIdStr, out var userId))
-        {
-            return StatusCode(401, new { message = "Unauthorized" });
-        }
-
-        if (listing.SellerId != userId && role != Constants.Roles.Admin)
-        {
-            return StatusCode(403, new { message = "Forbidden" });
-        }
-
-        var hasOrder = await _db.Orders.AnyAsync(o => o.ListingId == id);
-        if (hasOrder)
-        {
-            return StatusCode(409, new { message = "This listing has an order and cannot be deleted." });
-        }
-
-        // Delete from Cloudinary
-        if (_cloudinary != null)
-        {
-            foreach (var img in listing.Images)
-            {
-                if (!string.IsNullOrEmpty(img.PublicId) && !img.PublicId.StartsWith("local_"))
-                {
-                    try
-                    {
-                        await _cloudinary.DestroyAsync(new CloudinaryDotNet.Actions.DeletionParams(img.PublicId));
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"Failed to delete image {img.PublicId} from Cloudinary: {ex.Message}");
-                    }
-                }
-            }
-        }
-
+        // Clean up rows that point at this listing.
         var wishlistItems = await _db.WishlistItems.Where(w => w.ListingId == id).ToListAsync();
-        if (wishlistItems.Any()) _db.WishlistItems.RemoveRange(wishlistItems);
+        _db.WishlistItems.RemoveRange(wishlistItems);
 
         var notifications = await _db.Notifications.Where(n => n.ListingId == id).ToListAsync();
-        foreach (var notif in notifications)
-        {
-            notif.ListingId = null;
-        }
+        _db.Notifications.RemoveRange(notifications);
 
-        // If admin deletes someone else's listing, create a notification
-        if (role == Constants.Roles.Admin && listing.SellerId != userId)
+        // Tell the seller when an admin removes their listing.
+        if (isAdmin && listing.SellerId != userId)
         {
+            var why = TextNormalizer.CleanOrNull(reason) ?? "No reason provided.";
             _db.Notifications.Add(new Notification
             {
                 UserId = listing.SellerId,
+                ListingId = null,
                 Type = "LISTING_REMOVED",
-                Message = $"Your listing '{listing.Title}' was removed by an admin. Reason: {reason ?? "No reason provided."}",
+                Title = "Listing removed",
+                Message = $"Your listing '{listing.Title}' was removed by an admin. Reason: {why}",
                 CreatedAt = DateTime.UtcNow,
                 IsRead = false
             });
         }
 
+        var images = listing.Images.ToList();
         _db.Listings.Remove(listing);
         await _db.SaveChangesAsync();
+
+        // Remove photos from Cloudinary only after the database delete worked.
+        await DeleteFromCloudinaryAsync(images);
 
         return Ok(new { message = "Listing deleted successfully" });
     }
 
     /// <summary>
-    /// 4. Get the current user's listings (any status).
+    /// 4. The current user's listings (any status) with the AI fields.
     /// </summary>
     [HttpGet("mine")]
     [Authorize]
     public async Task<IActionResult> GetMyListings()
     {
-        var sellerIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!int.TryParse(sellerIdStr, out var sellerId))
-        {
-            return Unauthorized("Invalid user token");
-        }
+        var sellerId = CurrentUserId;
+        if (sellerId == null) return this.Error(401, "Invalid user token.");
 
         var items = await _db.Listings
             .AsNoTracking()
             .Where(l => l.SellerId == sellerId)
             .OrderByDescending(l => l.CreatedAt)
-            .Select(l => new ListingSummaryDto
-            {
-                Id = l.Id,
-                SellerId = l.SellerId,
-                SellerName = l.Seller != null ? l.Seller.Name : "",
-                Title = l.Title,
-                Category = l.Category,
-                Brand = l.Brand,
-                Model = l.Model,
-                Condition = l.Condition,
-                Year = l.Year,
-                ListingType = l.ListingType,
-                Price = l.Price,
-                Location = l.Location,
-                Latitude = l.Latitude,
-                Longitude = l.Longitude,
-                Status = l.Status,
-                FirstImageUrl = l.Images.OrderBy(i => i.SortOrder).Select(i => i.Url).FirstOrDefault(),
-                FairPrice = l.FairPrice,
-                FairPriceMin = l.FairPriceMin,
-                FairPriceMax = l.FairPriceMax,
-                PriceVerdict = l.PriceVerdict,
-                PriceDeviationPercent = l.PriceDeviationPercent,
-                PriceConfidence = l.PriceConfidence,
-                PriceExplanation = l.PriceExplanation,
-                TrustScore = l.TrustScore,
-                AiReason = l.AiReason,
-                CreatedAt = l.CreatedAt,
-                UpdatedAt = l.UpdatedAt
-            })
+            .Select(ListingMapper.ToOwnerSummary)
             .ToListAsync();
 
         return Ok(items);
     }
 
     /// <summary>
-    /// 5. Update listing price and log price history (owner only).
+    /// 5. Edit a listing (owner or admin). Multipart form; every field is optional and only the
+    /// fields that are sent are changed. SOLD listings cannot be edited.
+    /// </summary>
+    [HttpPatch("{id:int}")]
+    [HttpPut("{id:int}")]
+    [Authorize]
+    public Task<IActionResult> UpdateListing(int id, [FromForm] UpdateListingDto dto) => ApplyUpdateAsync(id, dto);
+
+    /// <summary>
+    /// 5b. Change only the price (JSON {"newPrice": 123}). Same rules as the edit endpoint.
     /// </summary>
     [HttpPut("{id:int}/price")]
     [Authorize]
-    public async Task<IActionResult> UpdatePrice(int id, [FromBody] UpdatePriceDto dto)
-    {
-        if (dto.NewPrice <= 0)
-        {
-            return BadRequest("New price must be greater than 0");
-        }
-
-        var sellerIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!int.TryParse(sellerIdStr, out var sellerId))
-        {
-            return Unauthorized("Invalid user token");
-        }
-
-        var listing = await _db.Listings.FirstOrDefaultAsync(l => l.Id == id);
-        if (listing == null)
-        {
-            return NotFound($"Listing #{id} not found");
-        }
-
-        var role = User.FindFirstValue(ClaimTypes.Role);
-        if (listing.SellerId != sellerId && role != "admin")
-        {
-            return Forbid();
-        }
-
-        if (listing.Status == "SOLD")
-        {
-            return BadRequest("Sold items cannot be edited.");
-        }
-
-        var oldPrice = listing.Price;
-        if (oldPrice != dto.NewPrice)
-        {
-            var history = new PriceHistory
-            {
-                ListingId = listing.Id,
-                OldPrice = oldPrice,
-                NewPrice = dto.NewPrice,
-                ChangedAt = DateTime.UtcNow
-            };
-
-            _db.PriceHistories.Add(history);
-            listing.Price = dto.NewPrice;
-            listing.UpdatedAt = DateTime.UtcNow;
-
-            await _db.SaveChangesAsync();
-        }
-
-        // Call Fair Price Agent after price update
-        var aiReqPriceUpdate = new FairPriceRequest
-        {
-            ListingId = listing.Id,
-            Brand = listing.Brand,
-            Model = listing.Model,
-            Category = listing.Category,
-            Condition = listing.Condition,
-            Year = listing.Year,
-            AskingPrice = (float)listing.Price,
-            Description = listing.Description
-        };
-        var aiResultPriceUpdate = await _ai.GetFairPriceAsync(aiReqPriceUpdate);
-        if (aiResultPriceUpdate != null)
-        {
-            listing.FairPrice = (decimal)aiResultPriceUpdate.FairPrice;
-            listing.FairPriceMin = (decimal)aiResultPriceUpdate.FairRange.Min;
-            listing.FairPriceMax = (decimal)aiResultPriceUpdate.FairRange.Max;
-            listing.PriceVerdict = aiResultPriceUpdate.Verdict;
-            listing.PriceDeviationPercent = aiResultPriceUpdate.DeviationPercent;
-            listing.PriceConfidence = aiResultPriceUpdate.Confidence;
-            listing.PriceExplanation = aiResultPriceUpdate.Explanation;
-            listing.UpdatedAt = DateTime.UtcNow;
-            await _db.SaveChangesAsync();
-        }
-
-        // Call Trust Check Agent after price update
-        var trustResult = await _ai.GetTrustCheckAsync(listing.Id);
-        if (trustResult != null)
-        {
-            listing.TrustScore = trustResult.TrustScore;
-            
-            var detailedReason = trustResult.Reason;
-            if (trustResult.Signals.Any())
-            {
-                detailedReason += "\n\nSignals:";
-                foreach (var s in trustResult.Signals)
-                {
-                    detailedReason += $"\n- {s.Code} ({s.Points}): {s.Detail}";
-                }
-            }
-            listing.AiReason = detailedReason;
-            
-            var wasLive = listing.Status == "LIVE";
-            if (listing.Status != "REJECTED" && listing.Status != "SOLD")
-            {
-                if (trustResult.Decision == "LIVE" || trustResult.Decision == "FLAGGED")
-                {
-                    listing.Status = trustResult.Decision;
-                }
-            }
-            
-            // Update image PHashes for ALL returned images
-            var imageIds = trustResult.ImageHashes.Select(h => h.ImageId).ToList();
-            if (imageIds.Any())
-            {
-                var imagesToUpdate = await _db.ListingImages.Where(i => imageIds.Contains(i.Id)).ToListAsync();
-                foreach (var imgHash in trustResult.ImageHashes)
-                {
-                    var img = imagesToUpdate.FirstOrDefault(i => i.Id == imgHash.ImageId);
-                    if (img != null && !string.IsNullOrEmpty(imgHash.PHash))
-                    {
-                        img.PHash = imgHash.PHash;
-                    }
-                }
-            }
-            
-            listing.UpdatedAt = DateTime.UtcNow;
-            await _db.SaveChangesAsync();
-
-            if (!wasLive && listing.Status == "LIVE")
-            {
-                await _smartAlerts.OnListingBecameLiveAsync(listing);
-            }
-            else if (wasLive && listing.Status == "LIVE" && listing.Price < oldPrice)
-            {
-                await _smartAlerts.OnPriceChangedAsync(listing, oldPrice);
-            }
-        }
-        else
-        {
-            var wasLiveTimeout = listing.Status == "LIVE";
-            if (listing.Status != "REJECTED" && listing.Status != "SOLD" && listing.Status != "LIVE")
-            {
-                listing.Status = "PENDING";
-            }
-            listing.AiReason = "AI check failed: Service unavailable or timed out. An admin can re-check this listing.";
-            listing.UpdatedAt = DateTime.UtcNow;
-            await _db.SaveChangesAsync();
-            
-            if (wasLiveTimeout && listing.Status == "LIVE" && listing.Price < oldPrice)
-            {
-                await _smartAlerts.OnPriceChangedAsync(listing, oldPrice);
-            }
-        }
-
-        return Ok(new
-        {
-            ListingId = listing.Id,
-            OldPrice = oldPrice,
-            NewPrice = listing.Price,
-            UpdatedAt = listing.UpdatedAt
-        });
-    }
+    public Task<IActionResult> UpdatePrice(int id, [FromBody] UpdatePriceDto dto) =>
+        ApplyUpdateAsync(id, new UpdateListingDto { Price = dto.NewPrice });
 
     /// <summary>
     /// 6. Price-check without saving — calls AI and returns result immediately.
@@ -774,35 +335,36 @@ public class ListingsController : ControllerBase
     {
         var aiReq = new FairPriceRequest
         {
-            Brand = dto.Brand,
-            Model = dto.Model,
-            Category = dto.Category,
-            Condition = dto.Condition,
+            Brand = dto.Brand ?? "",
+            Model = dto.Model ?? "",
+            Category = dto.Category ?? "",
+            Condition = dto.Condition ?? "",
             Year = dto.Year,
             AskingPrice = (float)dto.Price,
-            Description = dto.Description
+            Description = dto.Description ?? ""
         };
 
         var result = await _ai.GetFairPriceAsync(aiReq);
         if (result == null)
         {
-            return StatusCode(503, new { message = "Price check is unavailable right now. Please try again later." });
+            return this.Error(503, "Price check is unavailable right now. Please try again later.");
         }
 
         return Ok(result);
     }
 
     /// <summary>
-    /// 7. List CatalogModels with optional category filter.
+    /// 7. List CatalogModels with optional category filter (used for suggestions).
     /// </summary>
     [HttpGet("/api/catalog")]
     public async Task<IActionResult> GetCatalog([FromQuery] string? category)
     {
         var query = _db.CatalogModels.AsNoTracking().AsQueryable();
 
-        if (!string.IsNullOrEmpty(category))
+        var categoryFilter = TextNormalizer.CleanOrNull(category)?.ToLower();
+        if (categoryFilter != null)
         {
-            query = query.Where(c => c.Category.ToLower() == category.ToLower());
+            query = query.Where(c => c.Category.ToLower() == categoryFilter);
         }
 
         var items = await query
@@ -823,5 +385,284 @@ public class ListingsController : ControllerBase
             .ToListAsync();
 
         return Ok(items);
+    }
+
+    // ── Edit logic shared by PATCH/PUT /{id} and PUT /{id}/price ─────────────────────────
+
+    private async Task<IActionResult> ApplyUpdateAsync(int id, UpdateListingDto dto)
+    {
+        var userId = CurrentUserId;
+        if (userId == null) return this.Error(401, "Invalid user token.");
+
+        var listing = await _db.Listings.Include(l => l.Images).FirstOrDefaultAsync(l => l.Id == id);
+        if (listing == null) return this.Error(404, $"Listing #{id} not found.");
+        if (listing.SellerId != userId && !IsAdmin) return this.Error(403, "You can only edit your own listings.");
+        if (listing.Status == "SOLD") return this.Error(400, "Sold items cannot be edited.");
+
+        // 1. Validate only the fields that were sent.
+        if (dto.Title != null && string.IsNullOrWhiteSpace(dto.Title)) return this.Error(400, "Title cannot be empty.");
+        if (dto.Category != null && string.IsNullOrWhiteSpace(dto.Category)) return this.Error(400, "Category cannot be empty.");
+        if (dto.Brand != null && string.IsNullOrWhiteSpace(dto.Brand)) return this.Error(400, "Brand cannot be empty.");
+        if (dto.Model != null && string.IsNullOrWhiteSpace(dto.Model)) return this.Error(400, "Model cannot be empty.");
+        if (dto.Location != null && string.IsNullOrWhiteSpace(dto.Location)) return this.Error(400, "Location cannot be empty.");
+        if (dto.Price.HasValue && dto.Price.Value <= 0) return this.Error(400, "Price must be greater than 0.");
+
+        string? condition = null;
+        if (dto.Condition != null)
+        {
+            condition = dto.Condition.Trim().ToLowerInvariant();
+            if (!AllowedConditions.Contains(condition))
+            {
+                return this.Error(400, $"Invalid condition '{dto.Condition}'. Allowed values: new, like_new, excellent, good, fair, poor, for_parts.");
+            }
+        }
+
+        var yearError = ValidateYear(dto.Year);
+        if (yearError != null) return this.Error(400, yearError);
+
+        if (dto.Latitude.HasValue || dto.Longitude.HasValue)
+        {
+            var coordError = ValidateCoordinates(dto.Latitude, dto.Longitude);
+            if (coordError != null) return this.Error(400, coordError);
+        }
+
+        // 2. Work out which photos are removed and check the final photo count.
+        var removeIds = new HashSet<int>(dto.RemoveImageIds ?? []);
+        if (dto.ExistingImageIds is { Count: > 0 })
+        {
+            foreach (var img in listing.Images.Where(i => !dto.ExistingImageIds.Contains(i.Id)))
+            {
+                removeIds.Add(img.Id);
+            }
+        }
+        var unknownId = removeIds.FirstOrDefault(rid => listing.Images.All(i => i.Id != rid));
+        if (unknownId != 0) return this.Error(400, $"Image #{unknownId} does not belong to this listing.");
+
+        var newFiles = dto.NewImages ?? [];
+        var imageError = ValidateImageFiles(newFiles);
+        if (imageError != null) return this.Error(400, imageError);
+
+        var finalCount = listing.Images.Count(i => !removeIds.Contains(i.Id)) + newFiles.Count;
+        if (finalCount < 1) return this.Error(400, "A listing must keep at least 1 photo.");
+        if (finalCount > MaxImages) return this.Error(400, $"Maximum of {MaxImages} images allowed per listing.");
+
+        // 3. Apply the changes and remember what changed, to decide which AI checks to run.
+        var wasLive = listing.Status == "LIVE";
+        var oldPrice = listing.Price;
+        var priceInputsChanged = false;
+        var imagesChanged = removeIds.Count > 0 || newFiles.Count > 0;
+
+        if (dto.Title != null) listing.Title = TextNormalizer.CleanOrNull(dto.Title)!;
+        if (dto.Description != null) listing.Description = dto.Description.Trim();
+
+        if (dto.Category != null || dto.Brand != null)
+        {
+            var (knownCategories, knownBrands) = await LoadKnownNamesAsync();
+            if (dto.Category != null)
+            {
+                var category = TextNormalizer.NormalizeName(dto.Category, knownCategories);
+                priceInputsChanged |= !string.Equals(category, listing.Category, StringComparison.OrdinalIgnoreCase);
+                listing.Category = category;
+            }
+            if (dto.Brand != null)
+            {
+                var brand = TextNormalizer.NormalizeName(dto.Brand, knownBrands);
+                priceInputsChanged |= !string.Equals(brand, listing.Brand, StringComparison.OrdinalIgnoreCase);
+                listing.Brand = brand;
+            }
+        }
+        if (dto.Model != null)
+        {
+            var model = TextNormalizer.CleanOrNull(dto.Model)!;
+            priceInputsChanged |= !string.Equals(model, listing.Model, StringComparison.OrdinalIgnoreCase);
+            listing.Model = model;
+        }
+        if (condition != null && condition != listing.Condition)
+        {
+            listing.Condition = condition;
+            priceInputsChanged = true;
+        }
+        if (dto.Year.HasValue && dto.Year != listing.Year)
+        {
+            listing.Year = dto.Year;
+            priceInputsChanged = true;
+        }
+        if (dto.Price.HasValue && dto.Price.Value != listing.Price)
+        {
+            _db.PriceHistories.Add(new PriceHistory
+            {
+                ListingId = listing.Id,
+                OldPrice = listing.Price,
+                NewPrice = dto.Price.Value,
+                ChangedAt = DateTime.UtcNow
+            });
+            listing.Price = dto.Price.Value;
+            priceInputsChanged = true;
+        }
+        if (dto.Location != null) listing.Location = TextNormalizer.CleanOrNull(dto.Location)!;
+        if (dto.Latitude.HasValue && dto.Longitude.HasValue)
+        {
+            listing.Latitude = dto.Latitude;
+            listing.Longitude = dto.Longitude;
+        }
+        if (!string.IsNullOrWhiteSpace(dto.ListingType)) listing.ListingType = dto.ListingType.Trim();
+
+        // 4. Photos: upload new ones first, so a failed upload changes nothing.
+        var removedImages = listing.Images.Where(i => removeIds.Contains(i.Id)).ToList();
+        if (newFiles.Count > 0)
+        {
+            var nextSort = listing.Images.Where(i => !removeIds.Contains(i.Id)).Select(i => i.SortOrder).DefaultIfEmpty(-1).Max() + 1;
+            var (uploaded, uploadError) = await UploadImagesAsync(listing.Id, newFiles, nextSort);
+            if (uploadError != null) return this.Error(502, uploadError);
+            _db.ListingImages.AddRange(uploaded);
+        }
+        _db.ListingImages.RemoveRange(removedImages);
+
+        listing.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+        await DeleteFromCloudinaryAsync(removedImages);
+
+        // 5. AI only when needed: price/category/brand/model/condition/year -> Fair Price + Trust,
+        //    photos -> Trust, description/location/title only -> no AI.
+        await RunChecksAndAlertsAsync(listing, runFairPrice: priceInputsChanged, runTrust: priceInputsChanged || imagesChanged,
+            wasLive: wasLive, oldPrice: oldPrice);
+
+        return Ok(await LoadDetailAsync(listing.Id, includeInternals: true));
+    }
+
+    /// <summary>
+    /// Run the needed AI checks, then fire the matching alerts:
+    /// became LIVE -> NEW_MATCH, stayed LIVE with a lower price -> PRICE_DROP.
+    /// </summary>
+    private async Task RunChecksAndAlertsAsync(Listing listing, bool runFairPrice, bool runTrust, bool wasLive, decimal oldPrice)
+    {
+        if (runFairPrice) await _checks.RunFairPriceAsync(listing);
+        if (runTrust) await _checks.RunTrustCheckAsync(listing);
+
+        if (!wasLive && listing.Status == "LIVE")
+        {
+            await _smartAlerts.OnListingBecameLiveAsync(listing);
+        }
+        else if (wasLive && listing.Status == "LIVE" && listing.Price < oldPrice)
+        {
+            await _smartAlerts.OnPriceChangedAsync(listing, oldPrice);
+        }
+    }
+
+    private async Task<PublicListingDetailDto?> LoadDetailAsync(int id, bool includeInternals)
+    {
+        var listing = await _db.Listings
+            .AsNoTracking()
+            .Include(l => l.Seller)
+            .Include(l => l.Images)
+            .Include(l => l.PriceHistories)
+            .FirstOrDefaultAsync(l => l.Id == id);
+        return listing == null ? null : ListingMapper.ToDetail(listing, includeInternals, showPhone: true);
+    }
+
+    // ── Small helpers ───────────────────────────────────────────────────────────────────
+
+    private async Task<(List<string> categories, List<string> brands)> LoadKnownNamesAsync()
+    {
+        var categories = await _db.CatalogModels.Select(c => c.Category).Distinct().ToListAsync();
+        var brands = await _db.CatalogModels.Select(c => c.Brand).Distinct().ToListAsync();
+        return (categories, brands);
+    }
+
+    private static string? ValidateCoordinates(double? latitude, double? longitude)
+    {
+        if (latitude.HasValue != longitude.HasValue) return "Latitude and Longitude must both be provided or both be empty.";
+        if (latitude is < -90 or > 90) return "Latitude must be between -90 and 90.";
+        if (longitude is < -180 or > 180) return "Longitude must be between -180 and 180.";
+        return null;
+    }
+
+    private static string? ValidateYear(int? year)
+    {
+        if (year.HasValue && (year < 1900 || year > DateTime.UtcNow.Year + 1))
+        {
+            return $"Year must be between 1900 and {DateTime.UtcNow.Year + 1}.";
+        }
+        return null;
+    }
+
+    private static string? ValidateImageFiles(IEnumerable<IFormFile> files)
+    {
+        foreach (var file in files)
+        {
+            if (file.Length > MaxImageBytes) return $"Image '{file.FileName}' exceeds maximum size of 5 MB.";
+            var ext = Path.GetExtension(file.FileName);
+            if (string.IsNullOrEmpty(ext) || !AllowedExtensions.Contains(ext))
+            {
+                return $"Image '{file.FileName}' has an unsupported format. Only jpg, jpeg, png, webp allowed.";
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Upload photos to Cloudinary (folder "musicmarket/listings"). On any failure the photos
+    /// uploaded so far are deleted again and an error message is returned.
+    /// </summary>
+    private async Task<(List<ListingImage> images, string? error)> UploadImagesAsync(int listingId, IEnumerable<IFormFile> files, int firstSortOrder)
+    {
+        var images = new List<ListingImage>();
+        var sortOrder = firstSortOrder;
+        foreach (var file in files)
+        {
+            if (_cloudinary == null)
+            {
+                // Fallback placeholder when Cloudinary is not configured (tests / local runs).
+                images.Add(new ListingImage
+                {
+                    ListingId = listingId,
+                    Url = $"https://placehold.co/600x400?text={Uri.EscapeDataString(file.FileName)}",
+                    PublicId = $"local_{Guid.NewGuid()}",
+                    SortOrder = sortOrder++
+                });
+                continue;
+            }
+
+            using var stream = file.OpenReadStream();
+            var uploadResult = await _cloudinary.UploadAsync(new ImageUploadParams
+            {
+                File = new FileDescription(file.FileName, stream),
+                Folder = "musicmarket/listings",
+                Transformation = new Transformation().Quality("auto").FetchFormat("auto")
+            });
+            if (uploadResult.Error != null)
+            {
+                _logger.LogError("Cloudinary upload failed for listing {ListingId}: {Error}", listingId, uploadResult.Error.Message);
+                await DeleteFromCloudinaryAsync(images);
+                return ([], $"Image upload failed: {uploadResult.Error.Message}");
+            }
+
+            images.Add(new ListingImage
+            {
+                ListingId = listingId,
+                Url = uploadResult.SecureUrl?.ToString() ?? uploadResult.Url?.ToString() ?? "",
+                PublicId = uploadResult.PublicId,
+                SortOrder = sortOrder++
+            });
+        }
+        return (images, null);
+    }
+
+    private async Task DeleteFromCloudinaryAsync(IEnumerable<ListingImage> images)
+    {
+        if (_cloudinary == null) return;
+        foreach (var img in images)
+        {
+            if (string.IsNullOrEmpty(img.PublicId) || img.PublicId.StartsWith("local_")) continue;
+            try
+            {
+                await _cloudinary.DestroyAsync(new DeletionParams(img.PublicId));
+            }
+            catch (Exception ex)
+            {
+                // The database is already correct; a leftover file in Cloudinary is only logged.
+                _logger.LogWarning(ex, "Failed to delete image {PublicId} from Cloudinary", img.PublicId);
+            }
+        }
     }
 }

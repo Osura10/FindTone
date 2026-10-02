@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { X, Send, Bot } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
-import './ChatBot.css';
 
 const ChatBot = ({ onClose }) => {
   const [messages, setMessages] = useState([
@@ -41,12 +40,12 @@ const ChatBot = ({ onClose }) => {
         },
         body: JSON.stringify(payload),
       });
-      
+
       const data = await response.json();
       if (data.session_id) {
         window.chatSessionId = data.session_id;
       }
-      
+
       setMessages([...newMessages, { text: data.response, isBot: true }]);
     } catch (error) {
       console.error("Chat error:", error);
@@ -62,61 +61,57 @@ const ChatBot = ({ onClose }) => {
     onClose();
   };
 
+  // Escape closes the panel
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') handleClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  });
+
   return (
-    <div className="chat-modal-overlay">
-      <div className="chat-modal glass-panel animate-fade-in-up">
-        <div className="chat-header">
-          <div className="chat-header-info">
-            <div className="bot-avatar">
-              <Bot size={24} />
-            </div>
-            <div>
-              <h3>MusicMarket Assistant</h3>
-              <span className="online-status">Online</span>
+    <div className="chat-panel" role="dialog" aria-label="MusicMarket assistant">
+      <div className="chat-panel-header">
+        <span className="chat-bot-avatar"><Bot size={20} aria-hidden="true" /></span>
+        <div className="grow">
+          <h2 style={{ fontSize: 'var(--text-base)' }}>MusicMarket Assistant</h2>
+          <span className="text-xs" style={{ color: 'var(--success)' }}>● Online</span>
+        </div>
+        <button type="button" className="btn btn-ghost btn-icon btn-sm" onClick={handleClose} aria-label="Close chat">
+          <X size={18} />
+        </button>
+      </div>
+
+      <div className="chat-panel-body" aria-live="polite">
+        {messages.map((msg, index) => (
+          <div key={index} className={`chat-msg ${msg.isBot ? '' : 'me'}`}>
+            <div className="bubble">
+              {msg.isBot ? <ReactMarkdown>{msg.text}</ReactMarkdown> : msg.text}
             </div>
           </div>
-          <button className="close-btn" onClick={handleClose}>
-            <X size={24} />
-          </button>
-        </div>
-        
-        <div className="chat-messages">
-          {messages.map((msg, index) => (
-            <div key={index} className={`message-wrapper ${msg.isBot ? 'bot' : 'user'}`}>
-              <div className="message-bubble">
-                {msg.isBot ? (
-                  <ReactMarkdown>{msg.text}</ReactMarkdown>
-                ) : (
-                  msg.text
-                )}
-              </div>
-            </div>
-          ))}
-          {isLoading && (
-            <div className="message-wrapper bot">
-              <div className="message-bubble typing-indicator">
-                <span></span>
-                <span></span>
-                <span></span>
-              </div>
-            </div>
-          )}
-          <div ref={messagesEndRef} />
-        </div>
-
-        <form className="chat-input-area" onSubmit={handleSend}>
-          <input
-            type="text"
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            placeholder="Ask me anything..."
-            className="chat-input"
-          />
-          <button type="submit" className="send-btn" disabled={!inputValue.trim()}>
-            <Send size={20} />
-          </button>
-        </form>
+        ))}
+        {isLoading && (
+          <div className="chat-msg">
+            <div className="bubble typing" aria-label="Assistant is typing"><span /><span /><span /></div>
+          </div>
+        )}
+        <div ref={messagesEndRef} />
       </div>
+
+      <form className="chat-panel-input" onSubmit={handleSend}>
+        <label htmlFor="landing-chat-input" className="sr-only">Message</label>
+        <input
+          id="landing-chat-input"
+          type="text"
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+          placeholder="Ask me anything…"
+          className="input"
+          autoFocus
+        />
+        <button type="submit" className="btn btn-primary btn-icon" disabled={!inputValue.trim()} aria-label="Send">
+          <Send size={18} />
+        </button>
+      </form>
     </div>
   );
 };

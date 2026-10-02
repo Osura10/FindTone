@@ -13,7 +13,12 @@ def search_catalog(brand: str, model: str, category: str) -> dict:
     Search the music gear catalog for a specific brand and model to find its original price, tier, and collectibility.
     If an exact match is not found, it tries to match just the model name.
     If no match is found, it provides a fallback average price based on the category.
+    Unknown free-text categories return match_type "none" (the price check then says UNKNOWN).
     """
+    brand = (brand or "").strip()
+    model = (model or "").strip()
+    category = (category or "").strip()
+
     sql_exact = """
         SELECT "Id", "Brand", "Model", "Category", "Tier", "NewPriceLkr", "IsCollectible"
         FROM "CatalogModels"
@@ -38,7 +43,8 @@ def search_catalog(brand: str, model: str, category: str) -> dict:
         WHERE LOWER("Model") LIKE %s
         LIMIT 1
     """
-    row_partial = fetch_one(sql_partial, (f"%{model.lower()}%",))
+    # A very short or empty model would match almost any catalog row, so skip it.
+    row_partial = fetch_one(sql_partial, (f"%{model.lower()}%",)) if len(model) >= 3 else None
     if row_partial:
         return {
             "model_id": row_partial["Id"],

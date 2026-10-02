@@ -1,41 +1,42 @@
-import 'package:music_market/core/utils/app_logger.dart';
-import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/network/api_exceptions.dart';
 import '../../marketplace/models/listing_model.dart';
 import '../models/order_model.dart';
 import '../models/price_check_model.dart';
-import '../../../core/network/exceptions.dart';
 
+/// Selling side for BOTH buyers and shops: my listings, create/edit, price, delete, sales.
 class ShopProvider with ChangeNotifier {
+  /// Creating/editing can run the AI checks (Fair Price + Trust + alerts), which can take minutes.
+  static const aiTimeout = Duration(seconds: 300);
+
   final ApiClient _apiClient = ApiClient();
-  
+
   List<ListingSummary> _myListings = [];
   List<OrderModel> _sales = [];
-
   bool _isLoadingListings = false;
-  String? _errorMessage;
-  String? get errorMessage => _errorMessage;
   bool _isLoadingSales = false;
+  String? _listingsError;
+  String? _salesError;
 
   List<ListingSummary> get myListings => _myListings;
   List<OrderModel> get sales => _sales;
   bool get isLoadingListings => _isLoadingListings;
   bool get isLoadingSales => _isLoadingSales;
+  String? get listingsError => _listingsError;
+  String? get salesError => _salesError;
 
   Future<void> fetchMyListings() async {
     _isLoadingListings = true;
+    _listingsError = null;
     notifyListeners();
     try {
       final response = await _apiClient.dio.get('/listings/mine');
-      if (response.statusCode == 200) {
-        _myListings = (response.data as List).map((e) => ListingSummary.fromJson(e)).toList();
-      }
+      _myListings = (response.data as List).map((e) => ListingSummary.fromJson(Map<String, dynamic>.from(e))).toList();
     } catch (e) {
-logDebug('Caught error:', e);
-      _errorMessage = 'An error occurred. Pull to refresh or try again.';
-      notifyListeners();
+      _listingsError = describeError(e, 'Could not load your listings.');
     } finally {
       _isLoadingListings = false;
       notifyListeners();
@@ -44,138 +45,102 @@ logDebug('Caught error:', e);
 
   Future<void> fetchSales() async {
     _isLoadingSales = true;
+    _salesError = null;
     notifyListeners();
     try {
       final response = await _apiClient.dio.get('/orders/sales');
-      if (response.statusCode == 200) {
-        _sales = (response.data as List).map((e) => OrderModel.fromJson(e)).toList();
-      }
+      _sales = (response.data as List).map((e) => OrderModel.fromJson(Map<String, dynamic>.from(e))).toList();
     } catch (e) {
-logDebug('Caught error:', e);
-      _errorMessage = 'An error occurred. Pull to refresh or try again.';
-      notifyListeners();
+      _salesError = describeError(e, 'Could not load your sales.');
     } finally {
       _isLoadingSales = false;
       notifyListeners();
     }
   }
 
-  Future<bool> deleteListing(int id) async {
+  /// The owner view of a listing (includes trust score and fair-price fields). Throws AppException.
+  Future<ListingDetail> getOwnerListing(int id) async {
     try {
-      final response = await _apiClient.dio.delete('/listings/$id');
-      if (response.statusCode == 200) {
-        _myListings.removeWhere((l) => l.id == id);
-        notifyListeners();
-        return true;
-      }
+      final response = await _apiClient.dio.get('/listings/$id');
+      return ListingDetail.fromJson(Map<String, dynamic>.from(response.data));
     } catch (e) {
-logDebug('Caught error:', e);
-      _errorMessage = 'An error occurred. Pull to refresh or try again.';
-      notifyListeners();
+      throw AppException(describeError(e, 'Could not load the listing.'), statusCode: statusOf(e));
     }
-    return false;
   }
 
-  Future<bool> updatePrice(int id, double newPrice) async {
+  /// Deletes a listing. Throws AppException with the backend message (e.g. 409 "has an order").
+  Future<void> deleteListing(int id) async {
+    try {
+      await _apiClient.dio.delete('/listings/$id');
+      _myListings.removeWhere((l) => l.id == id);
+      notifyListeners();
+    } catch (e) {
+      throw AppException(describeError(e, 'Could not delete the listing.'), statusCode: statusOf(e));
+    }
+  }
+
+  /// PUT /listings/{id}/price. Returns the updated owner listing (new AI result).
+  Future<ListingDetail> updatePrice(int id, double newPrice) async {
     try {
       final response = await _apiClient.dio.put(
         '/listings/$id/price',
         data: {'newPrice': newPrice},
-        options: Options(receiveTimeout: const Duration(seconds: 300)),
+        options: Options(receiveTimeout: aiTimeout),
       );
-      if (response.statusCode == 200) {
-        await fetchMyListings();
-        return true;
-      }
-      throw AppException('Failed to update price');
-    } on DioException catch (e) {
-      throw AppException(e.message ?? 'Unknown error');
+      await fetchMyListings();
+      return ListingDetail.fromJson(Map<String, dynamic>.from(response.data));
     } catch (e) {
-      throw AppException(e.toString());
+      throw AppException(describeError(e, 'Could not update the price.'), statusCode: statusOf(e));
     }
   }
 
   Future<FairPriceResult> checkPrice(Map<String, dynamic> data) async {
     try {
       final response = await _apiClient.dio.post(
-        '/listings/price-check', 
+        '/listings/price-check',
         data: data,
         options: Options(receiveTimeout: const Duration(seconds: 150)),
       );
-      return FairPriceResult.fromJson(response.data);
-    } on DioException catch (e) {
-      if (e.response?.statusCode == 503) {
-        throw AppException('Price check is unavailable right now (503).');
-      }
-      throw AppException(e.message ?? 'Unknown error checking price');
+      return FairPriceResult.fromJson(Map<String, dynamic>.from(response.data));
     } catch (e) {
-      throw AppException('Error parsing price check result: $e');
+      throw AppException(describeError(e, 'Price check failed. Please try again.'), statusCode: statusOf(e));
     }
   }
 
+  Future<List<MultipartFile>> _files(List<XFile> images) async => [
+        for (final image in images) MultipartFile.fromBytes(await image.readAsBytes(), filename: image.name),
+      ];
 
-  Future<bool> updateListing(int id, Map<String, dynamic> data, List<XFile> newImages, List<dynamic> existingImages) async {
+  /// POST /listings (multipart). Returns the created owner listing.
+  Future<ListingDetail> createListing(Map<String, String> fields, List<XFile> images) async {
     try {
-      final formData = FormData.fromMap(data);
-      for (var image in newImages) {
-        final bytes = await image.readAsBytes();
-        formData.files.add(MapEntry(
-          'NewImages',
-          MultipartFile.fromBytes(bytes, filename: image.name),
-        ));
+      final formData = FormData.fromMap(fields);
+      for (final file in await _files(images)) {
+        formData.files.add(MapEntry('Images', file));
       }
-      for (var img in existingImages) {
-        formData.fields.add(MapEntry('ExistingImageIds', img.id.toString()));
-      }
-
-      final response = await _apiClient.dio.put(
-        '/listings/$id',
-        data: formData,
-        options: Options(
-          receiveTimeout: const Duration(seconds: 300),
-        ),
-      );
-      
-      if (response.statusCode == 200) {
-        await fetchMyListings();
-        return true;
-      }
-      throw AppException('Failed to update listing');
-    } on DioException catch (e) {
-      throw AppException(e.error is AppException ? (e.error as AppException).message : e.message ?? 'Unknown error');
+      final response = await _apiClient.dio.post('/listings', data: formData, options: Options(receiveTimeout: aiTimeout));
+      await fetchMyListings();
+      return ListingDetail.fromJson(Map<String, dynamic>.from(response.data));
     } catch (e) {
-      throw AppException(e.toString());
+      throw AppException(describeError(e, 'Could not create the listing.'), statusCode: statusOf(e));
     }
   }
 
-  Future<bool> createListing(Map<String, dynamic> data, List<XFile> images) async {
+  /// PATCH /listings/{id} (multipart) with ONLY the changed fields, removed photo ids and new photos.
+  Future<ListingDetail> updateListing(int id, Map<String, String> changedFields, List<int> removeImageIds, List<XFile> newImages) async {
     try {
-      final formData = FormData.fromMap(data);
-      for (var image in images) {
-        final bytes = await image.readAsBytes();
-        formData.files.add(MapEntry(
-          'Images',
-          MultipartFile.fromBytes(bytes, filename: image.name),
-        ));
+      final formData = FormData.fromMap(changedFields);
+      for (final imageId in removeImageIds) {
+        formData.fields.add(MapEntry('RemoveImageIds', imageId.toString()));
       }
-
-      final response = await _apiClient.dio.post(
-        '/listings',
-        data: formData,
-        options: Options(
-          receiveTimeout: const Duration(seconds: 300),
-        ),
-      );
-      
-      if (response.statusCode == 201) {
-        await fetchMyListings();
-        return true;
+      for (final file in await _files(newImages)) {
+        formData.files.add(MapEntry('NewImages', file));
       }
-      throw AppException('Failed to create listing');
-    } on DioException catch (e) {
-      throw AppException(e.error is AppException ? (e.error as AppException).message : e.message ?? 'Unknown error');
+      final response = await _apiClient.dio.patch('/listings/$id', data: formData, options: Options(receiveTimeout: aiTimeout));
+      await fetchMyListings();
+      return ListingDetail.fromJson(Map<String, dynamic>.from(response.data));
     } catch (e) {
-      throw AppException(e.toString());
+      throw AppException(describeError(e, 'Could not save the changes.'), statusCode: statusOf(e));
     }
   }
 }

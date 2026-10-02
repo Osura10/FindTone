@@ -12,7 +12,9 @@ namespace MusicMarket.Api.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            return;
+            // The shared DB already got these tables from an older migration
+            // (20260924160322_AddSmartAlerts) and has this migration recorded, so it never
+            // runs there. On a fresh database it must create them, so no early return here.
             migrationBuilder.CreateTable(
                 name: "SavedSearches",
                 columns: table => new

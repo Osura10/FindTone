@@ -4,7 +4,11 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.WebUtilities;
 using MusicMarket.Api.Data;
+using MusicMarket.Api.Helpers;
 using MusicMarket.Api.Services;
 using DotNetEnv;
 
@@ -21,7 +25,30 @@ cloudinary.Api.Secure = true;
 builder.Services.AddSingleton(cloudinary);
 
 // Add services to the container.
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .ConfigureApiBehaviorOptions(options =>
+    {
+        // Model validation errors use the same {"message": "..."} body as every other error.
+        options.InvalidModelStateResponseFactory = context =>
+        {
+            var errors = context.ModelState.Where(e => e.Value?.Errors.Count > 0).ToList();
+
+            // A bad JSON value (e.g. "price": "abc") is reported under "$.price": name that field.
+            var badJson = errors.FirstOrDefault(e => e.Key.StartsWith("$."));
+            string message;
+            if (badJson.Key != null)
+            {
+                message = $"Invalid value for '{badJson.Key[2..]}'.";
+            }
+            else
+            {
+                message = errors
+                    .Select(e => $"{e.Key}: {e.Value!.Errors[0].ErrorMessage}".TrimStart(':', ' '))
+                    .FirstOrDefault() ?? "The request is not valid.";
+            }
+            return new BadRequestObjectResult(new ErrorResponse(message));
+        };
+    });
 builder.Services.AddEndpointsApiExplorer();
 
 // Database
@@ -66,6 +93,7 @@ builder.Services.AddHttpClient<AiServiceClient>(client =>
 });
 
 builder.Services.AddScoped<SmartAlertService>();
+builder.Services.AddScoped<ListingCheckService>();
 
 // CORS for Frontend
 builder.Services.AddCors(options =>
@@ -115,6 +143,32 @@ using (var scope = app.Services.CreateScope())
     var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     dbContext.Database.Migrate();
 }
+
+// Any unhandled exception -> 500 with {"message": "..."} (details go to the log, not the client).
+app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
+{
+    var error = context.Features.Get<IExceptionHandlerFeature>()?.Error;
+    var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+    logger.LogError(error, "Unhandled exception for {Method} {Path}", context.Request.Method, context.Request.Path);
+    context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+    await context.Response.WriteAsJsonAsync(new ErrorResponse("Something went wrong on the server. Please try again."));
+}));
+
+// Errors without a body (401 from JWT, 403 from roles, 404 unknown route, 405, 415) -> {"message": "..."}.
+app.UseStatusCodePages(async statusContext =>
+{
+    var response = statusContext.HttpContext.Response;
+    var message = response.StatusCode switch
+    {
+        401 => "Please log in to continue.",
+        403 => "You do not have permission to do this.",
+        404 => "The requested resource was not found.",
+        405 => "This HTTP method is not allowed here.",
+        415 => "Unsupported content type.",
+        _ => ReasonPhrases.GetReasonPhrase(response.StatusCode)
+    };
+    await response.WriteAsJsonAsync(new ErrorResponse(message));
+});
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

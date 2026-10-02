@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ShieldCheck, User, Mail, Phone, CreditCard, X, Loader2, KeyRound, Check } from 'lucide-react';
+import { ShieldCheck, User, Mail, Phone, CreditCard, X, Loader2, KeyRound } from 'lucide-react';
 import { apiCall } from '../services/api';
 
 const AddAdminModal = ({ isOpen, onClose, onAdminCreated }) => {
@@ -67,7 +67,7 @@ const AddAdminModal = ({ isOpen, onClose, onAdminCreated }) => {
         left: 0,
         right: 0,
         bottom: 0,
-        background: 'rgba(8, 6, 15, 0.75)',
+        background: 'var(--overlay)',
         backdropFilter: 'blur(8px)',
         WebkitBackdropFilter: 'blur(8px)',
         display: 'flex',
@@ -87,9 +87,9 @@ const AddAdminModal = ({ isOpen, onClose, onAdminCreated }) => {
           padding: '2.5rem',
           position: 'relative',
           borderRadius: '24px',
-          border: '1px solid rgba(123, 44, 191, 0.35)',
-          background: 'linear-gradient(145deg, rgba(30, 24, 48, 0.98), rgba(18, 14, 28, 0.99))',
-          boxShadow: '0 25px 60px rgba(0, 0, 0, 0.7), 0 0 30px rgba(123, 44, 191, 0.25)',
+          border: '1px solid color-mix(in srgb, var(--primary) 45%, transparent)',
+          background: 'var(--surface)',
+          boxShadow: 'var(--shadow-lg)',
           maxHeight: '90vh',
           overflowY: 'auto'
         }}
@@ -113,8 +113,8 @@ const AddAdminModal = ({ isOpen, onClose, onAdminCreated }) => {
             position: 'absolute',
             top: '1.25rem',
             right: '1.25rem',
-            background: 'rgba(255, 255, 255, 0.06)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
+            background: 'var(--surface-2)',
+            border: '1px solid var(--border-strong)',
             color: 'var(--text-secondary)',
             borderRadius: '50%',
             width: '36px',
@@ -126,11 +126,11 @@ const AddAdminModal = ({ isOpen, onClose, onAdminCreated }) => {
             transition: 'all 0.2s ease'
           }}
           onMouseOver={(e) => {
-            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)';
+            e.currentTarget.style.background = 'var(--border-strong)';
             e.currentTarget.style.color = '#fff';
           }}
           onMouseOut={(e) => {
-            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+            e.currentTarget.style.background = 'var(--surface-2)';
             e.currentTarget.style.color = 'var(--text-secondary)';
           }}
         >
@@ -142,9 +142,9 @@ const AddAdminModal = ({ isOpen, onClose, onAdminCreated }) => {
           <div style={{
             padding: '0.75rem',
             borderRadius: '14px',
-            background: 'linear-gradient(135deg, rgba(123, 44, 191, 0.3), rgba(255, 0, 110, 0.2))',
+            background: 'var(--primary-soft)',
             color: 'var(--primary-hover)',
-            border: '1px solid rgba(123, 44, 191, 0.4)'
+            border: '1px solid color-mix(in srgb, var(--primary) 50%, transparent)'
           }}>
             <ShieldCheck size={26} />
           </div>
@@ -158,8 +158,8 @@ const AddAdminModal = ({ isOpen, onClose, onAdminCreated }) => {
 
         {/* Informative notice about default password */}
         <div style={{
-          background: 'rgba(123, 44, 191, 0.12)',
-          border: '1px solid rgba(123, 44, 191, 0.35)',
+          background: 'var(--primary-soft)',
+          border: '1px solid color-mix(in srgb, var(--primary) 45%, transparent)',
           borderRadius: '12px',
           padding: '0.85rem 1rem',
           marginBottom: '1.5rem',
@@ -167,7 +167,7 @@ const AddAdminModal = ({ isOpen, onClose, onAdminCreated }) => {
           alignItems: 'flex-start',
           gap: '0.75rem',
           fontSize: '0.86rem',
-          color: 'rgba(255, 255, 255, 0.9)'
+          color: 'var(--text-2)'
         }}>
           <KeyRound size={18} color="var(--primary-hover)" style={{ flexShrink: 0, marginTop: '2px' }} />
           <div>
@@ -180,12 +180,12 @@ const AddAdminModal = ({ isOpen, onClose, onAdminCreated }) => {
 
         {globalError && (
           <div style={{
-            backgroundColor: 'rgba(255, 77, 79, 0.15)',
-            color: '#ff4d4f',
+            backgroundColor: 'var(--danger-soft)',
+            color: 'var(--danger)',
             padding: '0.85rem 1rem',
             borderRadius: '10px',
             marginBottom: '1.25rem',
-            border: '1px solid rgba(255, 77, 79, 0.35)',
+            border: '1px solid color-mix(in srgb, var(--danger) 45%, transparent)',
             fontSize: '0.88rem'
           }}>
             {globalError}
@@ -211,13 +211,13 @@ const AddAdminModal = ({ isOpen, onClose, onAdminCreated }) => {
               style={{
                 padding: '0.8rem 1rem',
                 borderRadius: '12px',
-                background: 'rgba(255, 255, 255, 0.05)',
-                border: errors.name ? '1px solid #ff4d4f' : '1px solid rgba(255, 255, 255, 0.15)',
-                color: '#fff',
+                background: 'var(--surface-2)',
+                border: errors.name ? '1px solid var(--danger)' : '1px solid var(--border-strong)',
+                color: 'var(--text)',
                 fontSize: '0.95rem'
               }}
             />
-            {errors.name && <small style={{ color: '#ff4d4f', marginTop: '0.3rem', display: 'block' }}>{errors.name}</small>}
+            {errors.name && <small style={{ color: 'var(--danger)', marginTop: '0.3rem', display: 'block' }}>{errors.name}</small>}
           </div>
 
           {/* Email Address */}
@@ -237,19 +237,19 @@ const AddAdminModal = ({ isOpen, onClose, onAdminCreated }) => {
               style={{
                 padding: '0.8rem 1rem',
                 borderRadius: '12px',
-                background: 'rgba(255, 255, 255, 0.05)',
-                border: errors.email ? '1px solid #ff4d4f' : '1px solid rgba(255, 255, 255, 0.15)',
-                color: '#fff',
+                background: 'var(--surface-2)',
+                border: errors.email ? '1px solid var(--danger)' : '1px solid var(--border-strong)',
+                color: 'var(--text)',
                 fontSize: '0.95rem'
               }}
             />
-            {errors.email && <small style={{ color: '#ff4d4f', marginTop: '0.3rem', display: 'block' }}>{errors.email}</small>}
+            {errors.email && <small style={{ color: 'var(--danger)', marginTop: '0.3rem', display: 'block' }}>{errors.email}</small>}
           </div>
 
           {/* Phone Number */}
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <Phone size={14} color="#00f5d4" /> Phone Number
+              <Phone size={14} color="var(--success)" /> Phone Number
             </label>
             <input 
               type="tel"
@@ -263,19 +263,19 @@ const AddAdminModal = ({ isOpen, onClose, onAdminCreated }) => {
               style={{
                 padding: '0.8rem 1rem',
                 borderRadius: '12px',
-                background: 'rgba(255, 255, 255, 0.05)',
-                border: errors.phoneNumber ? '1px solid #ff4d4f' : '1px solid rgba(255, 255, 255, 0.15)',
-                color: '#fff',
+                background: 'var(--surface-2)',
+                border: errors.phoneNumber ? '1px solid var(--danger)' : '1px solid var(--border-strong)',
+                color: 'var(--text)',
                 fontSize: '0.95rem'
               }}
             />
-            {errors.phoneNumber && <small style={{ color: '#ff4d4f', marginTop: '0.3rem', display: 'block' }}>{errors.phoneNumber}</small>}
+            {errors.phoneNumber && <small style={{ color: 'var(--danger)', marginTop: '0.3rem', display: 'block' }}>{errors.phoneNumber}</small>}
           </div>
 
           {/* NIC Card Number */}
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <CreditCard size={14} color="#fee440" /> NIC Card Number (Acts as Default Password)
+              <CreditCard size={14} color="var(--warning)" /> NIC Card Number (Acts as Default Password)
             </label>
             <input 
               type="text"
@@ -289,13 +289,13 @@ const AddAdminModal = ({ isOpen, onClose, onAdminCreated }) => {
               style={{
                 padding: '0.8rem 1rem',
                 borderRadius: '12px',
-                background: 'rgba(255, 255, 255, 0.05)',
-                border: errors.nicCardNumber ? '1px solid #ff4d4f' : '1px solid rgba(255, 255, 255, 0.15)',
-                color: '#fff',
+                background: 'var(--surface-2)',
+                border: errors.nicCardNumber ? '1px solid var(--danger)' : '1px solid var(--border-strong)',
+                color: 'var(--text)',
                 fontSize: '0.95rem'
               }}
             />
-            {errors.nicCardNumber && <small style={{ color: '#ff4d4f', marginTop: '0.3rem', display: 'block' }}>{errors.nicCardNumber}</small>}
+            {errors.nicCardNumber && <small style={{ color: 'var(--danger)', marginTop: '0.3rem', display: 'block' }}>{errors.nicCardNumber}</small>}
           </div>
 
           {/* Modal Actions */}

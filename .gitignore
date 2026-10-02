@@ -37,3 +37,9 @@ obj/
 **/.dart_tool/
 build/
 **/build/
+
+# Test output dumps
+test_out*.txt
+
+# Local-only .NET settings
+appsettings.Development.json

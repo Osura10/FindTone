@@ -1,5 +1,5 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { Toaster } from 'react-hot-toast';
+import { createBrowserRouter, createRoutesFromElements, RouterProvider, Route, Navigate } from 'react-router-dom';
+import { AppToaster } from './components/ui';
 import Landing from './pages/Landing/Landing';
 import Login from './pages/Login/Login';
 import RegisterSelection from './pages/Register/RegisterSelection';
@@ -23,48 +23,49 @@ import Checkout from './pages/Checkout/Checkout';
 import MyOrders from './pages/Buyer/MyOrders';
 import Sales from './pages/Seller/Sales';
 
+// A data router (createBrowserRouter) is needed for useBlocker (unsaved-changes prompt).
+const router = createBrowserRouter(
+  createRoutesFromElements(
+    <>
+      <Route path="/" element={<Landing />} />
+      <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<RegisterSelection />} />
+      <Route path="/register/buyer" element={<BuyerRegistration />} />
+      <Route path="/register/shop" element={<ShopRegistration />} />
+
+      {/* Universal Dashboard Routes */}
+      <Route path="/dashboard" element={<ErrorBoundary><DashboardLayout /></ErrorBoundary>}>
+        <Route index element={<Navigate to="items" replace />} />
+        <Route path="items" element={<AllItems />} />
+        <Route path="create" element={<CreatePost />} />
+        <Route path="edit/:id" element={<CreatePost />} />
+        <Route path="profile" element={<Profile />} />
+        <Route path="alerts" element={<MyAlerts />} />
+        <Route path="wishlist" element={<Wishlist />} />
+        <Route path="notifications" element={<Notifications />} />
+        <Route path="listings/:id" element={<ListingDetails />} />
+        <Route path="checkout/:listingId" element={<Checkout />} />
+        <Route path="orders" element={<MyOrders />} />
+        <Route path="sales" element={<Sales />} />
+
+        {/* Admin Routes */}
+        <Route path="admin" element={<AdminDashboard />} />
+        <Route path="admin/admins" element={<AdminAdmins />} />
+        <Route path="admin/shops" element={<AdminShops />} />
+        <Route path="admin/buyers" element={<AdminBuyers />} />
+        <Route path="admin/listings" element={<AdminFlaggedListings />} />
+      </Route>
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </>
+  )
+);
+
 function App() {
   return (
-    <Router>
-      <Toaster 
-        position="top-right" 
-        toastOptions={{ 
-          style: { background: 'var(--color-bg-surface)', color: '#fff', border: '1px solid var(--color-border-glass)' },
-          success: { iconTheme: { primary: 'var(--color-success)', secondary: '#fff' } },
-          error: { iconTheme: { primary: 'var(--color-danger)', secondary: '#fff' } }
-        }} 
-      />
-      <Routes>
-        <Route path="/" element={<Landing />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<RegisterSelection />} />
-        <Route path="/register/buyer" element={<BuyerRegistration />} />
-        <Route path="/register/shop" element={<ShopRegistration />} />
-        
-        {/* Universal Dashboard Routes */}
-        <Route path="/dashboard" element={<ErrorBoundary><DashboardLayout /></ErrorBoundary>}>
-          <Route index element={<Navigate to="items" replace />} />
-          <Route path="items" element={<AllItems />} />
-          <Route path="create" element={<CreatePost />} />
-          <Route path="edit/:id" element={<CreatePost />} />
-          <Route path="profile" element={<Profile />} />
-          <Route path="alerts" element={<MyAlerts />} />
-          <Route path="wishlist" element={<Wishlist />} />
-          <Route path="notifications" element={<Notifications />} />
-          <Route path="listings/:id" element={<ListingDetails />} />
-          <Route path="checkout/:listingId" element={<Checkout />} />
-          <Route path="orders" element={<MyOrders />} />
-          <Route path="sales" element={<Sales />} />
-
-          {/* Admin Routes */}
-          <Route path="admin" element={<AdminDashboard />} />
-          <Route path="admin/admins" element={<AdminAdmins />} />
-          <Route path="admin/shops" element={<AdminShops />} />
-          <Route path="admin/buyers" element={<AdminBuyers />} />
-          <Route path="admin/listings" element={<AdminFlaggedListings />} />
-        </Route>
-      </Routes>
-    </Router>
+    <>
+      <AppToaster />
+      <RouterProvider router={router} />
+    </>
   );
 }
 

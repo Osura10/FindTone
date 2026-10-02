@@ -2,7 +2,6 @@ import os
 from Agent_03.agent import parse_alert_text
 import pytest
 
-@pytest.mark.skipif(os.getenv("LLM_PROVIDER") == "ollama", reason="Skip in CI without LLM")
 def test_parse_alert_fallback(monkeypatch):
     # Mock llm to fail so it uses fallback
     def mock_get_chat_llm(*args, **kwargs):
