@@ -17,8 +17,7 @@ from langchain_core.messages import HumanMessage
 
 load_dotenv()
 
-PROVIDER = os.getenv("LLM_PROVIDER", "ollama").lower()
-
+PROVIDER_ENV = os.getenv("LLM_PROVIDER", "ollama").lower()
 
 def message_text(message) -> str:
     """
@@ -44,15 +43,19 @@ def message_text(message) -> str:
         return " ".join(parts)
     return str(content)
 
-# Ollama (local) models
-OLLAMA_CHAT_MODEL = os.getenv("OLLAMA_CHAT_MODEL", "llama3.1:8b")
-OLLAMA_VISION_MODEL = os.getenv("OLLAMA_VISION_MODEL", "gemma3:4b")
-OLLAMA_EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text")
-
-# Gemini (hosted) models
-GEMINI_CHAT_MODEL = os.getenv("GEMINI_CHAT_MODEL", "gemini-3.6-flash")
-GEMINI_VISION_MODEL = os.getenv("GEMINI_VISION_MODEL", "gemini-3.6-flash")
-GEMINI_EMBED_MODEL = os.getenv("GEMINI_EMBED_MODEL", "models/gemini-embedding-001")
+if "gemini" in PROVIDER_ENV:
+    PROVIDER = "gemini"
+    default_gemini = PROVIDER_ENV if PROVIDER_ENV != "gemini" else "gemini-1.5-flash"
+    GEMINI_CHAT_MODEL = os.getenv("GEMINI_CHAT_MODEL", default_gemini)
+    GEMINI_VISION_MODEL = os.getenv("GEMINI_VISION_MODEL", default_gemini)
+    GEMINI_EMBED_MODEL = os.getenv("GEMINI_EMBED_MODEL", "models/gemini-embedding-001")
+else:
+    PROVIDER = "ollama"
+    default_ollama = PROVIDER_ENV if PROVIDER_ENV != "ollama" else "llama3.1:8b"
+    default_vision = PROVIDER_ENV if PROVIDER_ENV != "ollama" else "llama3.2-vision"
+    OLLAMA_CHAT_MODEL = os.getenv("OLLAMA_CHAT_MODEL", default_ollama)
+    OLLAMA_VISION_MODEL = os.getenv("OLLAMA_VISION_MODEL", default_vision)
+    OLLAMA_EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text")
 
 
 
