@@ -9,7 +9,7 @@ import {
   StatusBadge, Tabs, TrustBadge, VerdictBadge, formatLKR, verdictInfo
 } from '../../components/ui';
 
-const PAGE_SIZE = 12;
+const PAGE_SIZE = 1000;
 const CONDITIONS = ['new', 'like_new', 'excellent', 'good', 'fair', 'poor', 'for_parts'];
 const EMPTY_FILTERS = { q: '', category: '', brand: '', condition: '', minPrice: '', maxPrice: '' };
 const PLACEHOLDER = 'https://placehold.co/400x300?text=No+Photo';
@@ -394,13 +394,7 @@ const AllItems = () => {
               </Card>
             )}
 
-            {page < totalPages && !error && (
-              <div className="text-center" style={{ marginTop: 'var(--space-2)' }}>
-                <Button variant="secondary" loading={loading} onClick={() => { setLoading(true); loadMarketplace(page + 1, appliedFilters); }}>
-                  Load more
-                </Button>
-              </div>
-            )}
+
           </section>
         </div>
       ) : (
