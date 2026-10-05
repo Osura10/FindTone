@@ -4,7 +4,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from llm_config import get_chat_llm, get_embeddings, vector_db_dir
 from langchain_chroma import Chroma
 from langchain_core.tools import create_retriever_tool, tool
-from langchain.agents import create_agent
+from langgraph.prebuilt import create_react_agent
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.messages import HumanMessage
 from duckduckgo_search import DDGS
@@ -96,10 +96,10 @@ CRITICAL RULES:
 
     # 7. Create and return the agent using LangGraph's create_agent function
     # Passing the checkpointer allows the agent to remember past messages if given a thread_id
-    agent_executor = create_agent(
+    agent_executor = create_react_agent(
         llm, 
         tools=tools, 
-        system_prompt=system_prompt,
+        prompt=system_prompt,
         checkpointer=memory
     )
     
