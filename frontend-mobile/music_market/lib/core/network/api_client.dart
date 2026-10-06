@@ -9,9 +9,9 @@ class ApiClient {
   static String get _defaultBaseUrl {
     const String envUrl = String.fromEnvironment('API_BASE_URL', defaultValue: '');
     if (envUrl.isNotEmpty) return envUrl;
-    if (kIsWeb) return 'http://localhost:5036/api';
-    if (defaultTargetPlatform == TargetPlatform.android) return 'http://10.0.2.2:5036/api';
-    return 'http://localhost:5036/api';
+    if (kIsWeb) return 'https://findtone-02.onrender.com/api';
+    if (defaultTargetPlatform == TargetPlatform.android) return 'https://findtone-02.onrender.com/api';
+    return 'https://findtone-02.onrender.com/api';
   }
 
   static final String baseUrl = _defaultBaseUrl;
