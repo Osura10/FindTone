@@ -33,7 +33,8 @@ const ChatBot = ({ onClose }) => {
         payload.session_id = window.chatSessionId;
       }
 
-      const response = await fetch("http://localhost:8000/api/chat", {
+      const aiServiceUrl = import.meta.env.VITE_AI_SERVICE_URL || "http://localhost:8000";
+      const response = await fetch(`${aiServiceUrl}/api/chat`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
